@@ -55,6 +55,8 @@ A Spark connector built for today's platforms, the one we would design if we sta
   2026-11-21 that means Spark 4.1, 4.2 and 4.3 (with 4.4 at RC and the 4.5 LTS coming) and Redis 8.2
   through 8.10 (with 8.12 at RC). Spark now releases quarterly, so lines are added and dropped as upstream
   moves. The exact matrix and policy are in `spec.md` §1.
+- **RESP3 only.** The connector speaks RESP3 and nothing else, so there is no RESP2 mode to build, test
+  or support. Every supported Redis line has spoken RESP3 since Redis 6.0.
 - Keep the **BSD-3-Clause** license. Redis 8's AGPLv3/RSAL/SSPL server licensing does not change the client
   licence, but this needs confirming with legal.
 - Do not silently corrupt or orphan data written by 3.x: the `_spark:<table>:schema` keys and the binary

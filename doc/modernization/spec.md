@@ -49,6 +49,9 @@ second minor and the last minor of each major) get 5 years
 - **Redis Software 8.2** (bundling database versions 6.2 to 8.6) and **Redis Cloud** (offering 8.2, 8.4
   and 8.6 among others) are certified for databases at 8.2 or later.
 - **Java client:** Jedis 8.0.x (8.0.2, October 2026), which supports Redis 7.2 through 8.10.
+- **Wire protocol: RESP3 only.** Every connection opens with `HELLO 3`. There is no RESP2 fallback and no
+  option to choose RESP2. Every supported Redis line has spoken RESP3 since 6.0, so the floor costs
+  nothing here (see §2.1).
 
 ### What the floor buys us
 
@@ -162,8 +165,7 @@ flowchart LR
   `sql`. We chose Jedis because:
   1. JSON, Query Engine, TimeSeries, probabilistic and Vector Set commands are already built in.
   2. It has cluster-aware pipelining (`ClusterPipeline`).
-  3. It negotiates RESP3 automatically, which client-side caching and the Smart Client Handoffs coming in
-     Jedis 8.1 both need.
+  3. It supports RESP3, the only protocol this connector speaks (see *Protocol* below).
   4. It is maintained by Redis.
   5. It needs the least rewriting from today's code.
   
@@ -178,6 +180,19 @@ flowchart LR
   [#325](https://github.com/RedisLabs/spark-redis/issues/325),
   [#237](https://github.com/RedisLabs/spark-redis/issues/237) and
   [#90](https://github.com/RedisLabs/spark-redis/issues/90).
+- **Protocol: RESP3 only.**
+  - Connections open with `HELLO 3`, which sends `AUTH` and `SETNAME` in the same round trip. We set the
+    protocol explicitly instead of relying on Jedis 8's automatic fallback to RESP2. A server or proxy
+    that refuses `HELLO 3` fails the job when it connects, with an error that names RESP3. The
+    connector never quietly downgrades.
+  - Codecs read RESP3's typed replies directly: maps for `HGETALL`, `XINFO` and Query Engine results,
+    doubles for sorted-set scores, and booleans. That removes today's hand-rolled reply parsing, such as
+    the custom `XINFO` decoder in `ConnectionUtils`.
+  - Jedis's newer resilience features need RESP3. Smart Client Handoffs (Jedis 8.1) help long-running
+    jobs keep their connections through planned maintenance on Redis Cloud and Redis Software.
+    Client-side caching also needs RESP3. Bulk scans gain nothing from it, so it stays off.
+  - Jedis 8's `ClusterPipeline` takes the protocol explicitly, so we always build it with RESP3.
+  - With one protocol there is one code path to test, and CI has no RESP2 row.
 - **Topology:**
   - Use `CLUSTER SHARDS` and refresh on `MOVED`/`ASK`. A partition re-resolves its slot owner instead of
     failing, which keeps reads correct during resharding and atomic slot migration.
@@ -402,7 +417,7 @@ spark.sql.catalog.redis.read.from    = replica-preferred
 - **`pip install spark-redis`:**
   - Typed helpers, for example `spark_redis.read_json(spark, prefix="user:", index="idx:user")`.
   - Docstrings.
-  - A **pure-Python `DataSource`** (PySpark Python Data Source API, built on redis-py). It is meant for
+  - A **pure-Python `DataSource`** (PySpark Python Data Source API, built on redis-py with `protocol=3`). It is meant for
     serverless environments that do not allow custom JARs, and supports only hash and JSON batch
     reads and writes and stream reads. Filter pushdown works on
     Spark 4.1. Streaming admission control and `AvailableNow` need Spark 4.2.
@@ -447,7 +462,7 @@ Related behaviour:
   `javax.net.ssl.*` properties (resolves [#305](https://github.com/RedisLabs/spark-redis/issues/305)).
 - **Token-based authentication** with automatic re-authentication, for example Entra ID for Azure Managed
   Redis, using Jedis `redis-authx` providers (Jedis 5.3+).
-- **Client name** is set with `client.name`, sent as `CLIENT SETNAME` (resolves
+- **Client name** is set with `client.name`, sent in the `HELLO 3 … SETNAME` handshake (resolves
   [#398](https://github.com/RedisLabs/spark-redis/issues/398)). `CLIENT SETINFO lib-name` stays as it is.
 
 ### 2.10 Observability
@@ -471,6 +486,7 @@ Related behaviour:
 | `binary` model (Java-serialized rows) | Read-only through `spark-redis-migrate --to json|hash`; no new writes |
 | RDD API (`sc.fromRedisKV`, `toRedisHASH`, …) | Kept in `compat`, reimplemented on `core`, and deprecated |
 | DStreams | Removed; available only on `branch-3.x` |
+| RESP2 wire protocol (Jedis 3's default) | RESP3 only. Stored data is unchanged, because the protocol only affects the wire. Servers and proxies that cannot negotiate `HELLO 3` are not supported |
 | Structured Streaming source offsets | A one-time restart from the stored `stream.offsets` is required. Checkpoints from 3.x are **not** compatible |
 
 The **`branch-3.x` maintenance line** targets Spark 3.5 and Scala 2.12/2.13. It receives security fixes,
@@ -481,6 +497,8 @@ is a bridge for users who cannot move to Spark 4 yet. It is not a supported targ
 
 - **One command.** `./mvnw verify -Pit` is the agent feedback loop and the CI gate. It exits non-zero on any
   failure.
+- **Protocol tests.** Connecting to a server that refuses `HELLO 3` fails with a clear RESP3 error. A
+  separate test asserts that every connection the connector opens reports `resp=3` in `CLIENT INFO`.
 - **Testcontainers matrix** across every supported Redis line, in these topologies:
   - standalone
   - 3-primary/3-replica cluster
@@ -513,6 +531,8 @@ is a bridge for users who cannot move to Spark 4 yet. It is not a supported targ
 | Query Engine coverage differs between OSS Cluster and Redis Software/Cloud | Use capability probing. Pushdown is an optimisation, and key scan is always a correct fallback |
 | Spark-internal API drift between 4.x lines | Use only public DSv2 and Connector APIs. A CI check fails on new imports from `org.apache.spark.sql.catalyst.*` / `execution.*` outside an allowlist |
 | Upstream marks Real-Time Mode or another API experimental or changes it | Put it behind a feature flag in its own module, outside the GA support promise |
+| A proxy or managed endpoint in the path does not support RESP3 | Fail fast at connect with a RESP3-specific error. Phase 0 checks Redis Software 8.2 and Redis Cloud databases with `HELLO 3`, and the docs list any unsupported proxies |
+| Some Query Engine replies may cost more to build in RESP3 than in RESP2 | Benchmark Query Engine reads under RESP3 against the Phase 0 baseline in Phases 2 and 4b. Raise any regression upstream rather than bringing RESP2 back |
 | Data written by 3.x is unreadable after upgrade | Golden-layout tests, the migration tool, and a documented one-time migration step |
 | Maintainer bandwidth (see [#393](https://github.com/RedisLabs/spark-redis/issues/393), [#384](https://github.com/RedisLabs/spark-redis/issues/384)) | Name code owners and a release manager (intent Q4). Automate version-matrix bumps |
 

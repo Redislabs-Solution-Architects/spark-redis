@@ -15,6 +15,7 @@
 | Scala / JDK | 2.12 / Java 8 | 2.13 / JDK 17 (tested on 17, 21 and 25) |
 | Redis | tested against 6.0.10 | 8.2 (floor) through 8.10; 8.12 when it reaches GA |
 | Client | Jedis 3.9 | Jedis 8.0 |
+| Wire protocol | RESP2 | RESP3 only, with no fallback |
 | Spark API | DSv1 plus the internal V1 streaming `Source`, and DStreams | DSv2 throughout: catalog, pushdown, row-level ops, streaming source and sink |
 | Redis data models | strings, hashes, lists, sets, sorted sets, streams | adds JSON/`VARIANT`, Query Engine, Vector Sets, vector fields, TimeSeries and probabilistic types |
 | Clients reached | Scala and Java; PySpark for DataFrames only | adds Spark SQL catalog, Spark Connect (Python/Scala), and a pip package |
@@ -205,6 +206,8 @@ the work up to each gate, and named humans pass the gates.
 1. **Test harness.** Replace the Makefile-launched `redis-server 6.0.10` with Testcontainers. Run the
    **existing** test suite unchanged against Redis 8.2, 8.6 and 8.10, in standalone, cluster and TLS+ACL
    topologies. Record what fails; those failures are the first real data about Redis 8 behaviour changes.
+   Also confirm that Redis Software 8.2 and Redis Cloud databases accept `HELLO 3`, because 4.x will
+   speak only RESP3.
 2. **Golden-layout characterization tests.** For every 3.x write path (DataFrame `hash` and `binary`, every
    RDD `toRedis*`, streams), snapshot the exact keys, types, values and TTLs produced. For every read path,
    snapshot the rows returned from fixed fixtures. These become the compatibility contract that 4.x must
@@ -270,6 +273,7 @@ most-requested issue family quickly:
    - `clusterSlots` → `clusterShards`
    - the hand-rolled `XINFO` → built-in `xinfoStream`
    - the pool moves onto `RedisClient`
+   - every connection opens with `HELLO 3`: RESP3 only, with no RESP2 fallback
    - TLS hostname verification is now on by default
 5. **Remove DStreams.**
 6. **Per-Spark-minor artifacts** for 4.1, 4.2 and 4.3. The CI matrix is
@@ -503,7 +507,7 @@ puts the matrix in one file and Phase 6 automates it.
 | **Redis:** `SET IFEQ`/`IFDEQ`, `DELEX`, `DIGEST` | §2.4 | 4e |
 | **Redis:** `CLUSTER SHARDS`, `CLUSTER SLOT-STATS`, atomic slot migration | §2.1, §2.3 | 1, 2, 6 |
 | **Redis:** `XACKDEL`, `XTRIM ACKED`, `XREADGROUP CLAIM`/`MAXSIZE`, `XNACK`, `XADD IDMP` | §2.5 | 3 |
-| **Redis:** RESP3, `CLIENT SETINFO` (already merged), token auth, `HOTKEYS` | §2.1, §2.9 | 1, 6 |
+| **Redis:** RESP3 as the only protocol, `CLIENT SETINFO` (already merged), token auth, `HOTKEYS` | §2.1, §2.9 | 1, 6 |
 | **Redis:** Array type (8.8), roaring bitmaps and set-member TTL (8.12) | Later lanes, once there is demand and they are GA | — |
 
 ## Decisions needed before Phase 1 starts
