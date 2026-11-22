@@ -498,8 +498,10 @@ Related behaviour:
   [#213](https://github.com/RedisLabs/spark-redis/issues/213) and
   [#249](https://github.com/RedisLabs/spark-redis/issues/249)).
 - **Secrets.** `spark.redis.auth` is renamed `spark.redis.password`, and `auth` is no longer accepted; it fails with a message naming `password`. Spark's
-  default `spark.redact.regex` does not match `auth`, so **today the password is shown in the Spark UI
-  Environment tab**. Passwords, tokens and URLs containing credentials are also redacted in our own logs.
+  default `spark.redaction.regex` is `(?i)secret|password|token|access[.]key` (verified in the Spark 3.2.1
+  jar). It does not match `spark.redis.auth`, so **today the Redis password is shown unredacted in the Spark UI
+  Environment tab, YARN logs and event logs**. The new key name contains `password`, so Spark's default
+  redaction covers it. Passwords, tokens and URLs containing credentials are also redacted in our own logs.
   Today `maskPassword` masks only `auth`, not URLs.
 - **Authentication uses ACL users only.** Connections send `HELLO 3 AUTH <user> <password>`, and `user`
   defaults to `default`. The docs publish least-privilege ACL rules for each role (batch reader, batch

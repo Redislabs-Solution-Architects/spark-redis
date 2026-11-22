@@ -53,6 +53,8 @@
 		     command line, for example -Dredis.image=redis:8.6. Forwarded to the test JVM below. -->
 		<redis.image>redis:8.2</redis.image>
 		<redis.containers>true</redis.containers>
+		<!-- Set to true (-Dgolden.update=true) to regenerate golden fixtures. Only the owner does that. -->
+		<golden.update>false</golden.update>
 	</properties>
 
 	<distributionManagement>
@@ -252,6 +254,7 @@
 					<systemProperties>
 						<redis.image>${redis.image}</redis.image>
 						<redis.containers>${redis.containers}</redis.containers>
+						<golden.update>${golden.update}</golden.update>
 					</systemProperties>
 				</configuration>
 				<executions>
@@ -351,6 +354,7 @@
 							<systemProperties>
 								<redis.image>${redis.image}</redis.image>
 								<redis.containers>${redis.containers}</redis.containers>
+								<golden.update>${golden.update}</golden.update>
 							</systemProperties>
 						</configuration>
 					</plugin>
