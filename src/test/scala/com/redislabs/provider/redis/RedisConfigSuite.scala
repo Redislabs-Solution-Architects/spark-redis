@@ -1,9 +1,13 @@
 package com.redislabs.provider.redis
 
+import com.redislabs.provider.redis.env.RedisContainers
 import org.scalatest.{FunSuite, Matchers}
 import redis.clients.jedis.util.JedisClusterCRC16
 
 class RedisConfigSuite extends FunSuite with Matchers {
+  // This suite connects to 6379 and 7379 directly, without an env trait, so it starts both servers itself.
+  RedisContainers.ensureStandalone()
+  RedisContainers.ensureCluster()
 
   val redisStandaloneConfig = new RedisConfig(RedisEndpoint(host = "127.0.0.1", port = 6379, auth = "passwd"))
   val redisClusterConfig = new RedisConfig(RedisEndpoint(host = "127.0.0.1", port = 7379))

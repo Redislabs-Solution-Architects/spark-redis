@@ -4,6 +4,8 @@ import com.redislabs.provider.redis.{RedisConfig, RedisEndpoint}
 import org.apache.spark.SparkConf
 
 trait RedisStandaloneSSLEnv extends Env {
+  // Start the Docker Redis this environment needs before RedisConfig below connects to it.
+  RedisContainers.ensureTls()
 
   override val redisPort = 6380
 

@@ -7,6 +7,8 @@ import org.apache.spark.SparkConf
  * Standalone with user/password authentication
  */
 trait RedisStandaloneAclEnv extends Env {
+  // Start the Docker Redis this environment needs before RedisConfig below connects to it.
+  RedisContainers.ensureStandalone()
 
   override val conf: SparkConf = new SparkConf()
     .setMaster("local[*]").setAppName(getClass.getName)
