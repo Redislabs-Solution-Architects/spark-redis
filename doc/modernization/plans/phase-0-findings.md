@@ -63,7 +63,7 @@ The low branch figure is typical for compiled Scala, where pattern matches and g
 | Target | Version | Result |
 |---|---|---|
 | Redis Software, latest (`redislabs/redis:latest`, built 2026-11-18) | Redis Software 8.2.6-58. The new database defaulted to **Redis 8.8**, with `resp3: true` | **RESP3 accepted**: `HELLO 3` returned `proto=3`, server version 8.8.0, mode standalone (through Redis Software's proxy) |
-| Redis Cloud, latest | — | **Not checked**: no test database has been provided. To run it, store the database's URL as the fork's `REDIS_CLOUD_URL` secret, or run `scripts/check-resp3.sh <url>` locally |
+| Redis Cloud, latest | — | **Skipped by owner decision (2026-11-22)**: it's assumed to behave like Redis Software. Anyone can still check a database with `scripts/check-resp3.sh <url>` |
 
 The 2026-11-22 run took 23 seconds with the image already pulled, and it left no containers or networks behind.
 
@@ -116,12 +116,29 @@ hash to fail. It passes on every line. On the 8.6 and 8.10 runs, Spark logged th
 `Error while encoding: ArrayIndexOutOfBoundsException`; on 8.2 it surfaced differently. Which key `SCAN` returns first
 decides the path, so this is not a Redis 8 change.
 
-### 3. The test TLS certificate has expired
+### 3. The test TLS certificate had expired (regenerated)
 
-`src/test/resources/tls/redis.crt` expired on 2021-05-17; the CA certificate is valid until 2030. The TLS test still
-passes, so the client's truststore evidently trusts the server certificate directly. The certificate should be
-regenerated before anything starts checking expiry, for example Jedis 8's default hostname verification in Phase 1.
-`tls/` is a protected path, so regenerating it needs the owner's approval.
+`src/test/resources/tls/redis.crt` expired on 2021-05-17, while the CA certificate is valid until 2030-05-15. The TLS
+test kept passing because the Java truststore (`clientkeystore`) also held the server certificate itself as a
+trusted entry, and Java doesn't check expiry on a certificate it trusts directly.
+
+At the owner's request (2026-11-22), `redis.crt` was re-issued with the same subject (`O=Redis Test, CN=Server`):
+
+- **Same key and CA.** It reuses `redis.key`, which was checked to match the old certificate, and is signed by the
+  same test CA. The serial number is 7161BD…6132, from `ca.txt`.
+- **Validity:** 2026-11-22 to 2030-05-13, just inside the CA's lifetime.
+- **Subject alternative names:** `localhost`, `127.0.0.1` and `::1`, with server authentication only.
+- **Truststore:** the `redis` entry in `clientkeystore` now holds the new certificate.
+
+Only `redis.crt`, `clientkeystore` and `ca.txt` changed. The proof:
+
+- `openssl verify -CAfile ca.crt redis.crt` passes.
+- Against a TLS Redis 8.2 using the test configuration, `openssl s_client` with `-verify_return_error` passes with
+  `-verify_ip 127.0.0.1` and `-verify_hostname localhost`, and fails with "hostname mismatch" for `wrong.example`.
+- `ConnectionSSLUtilsTest` passes.
+
+**Still to do:** the CA itself expires on 2030-05-15. The truststore's `client` key entry, which is self-signed and
+expired in 2020, is unused because the tests don't use client certificates.
 
 ### 4. The Redis password is not redacted in the Spark UI or logs
 
