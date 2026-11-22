@@ -26,8 +26,10 @@
 - [RedisLabs/spark-redis#394](https://github.com/RedisLabs/spark-redis/pull/394) ("[WIP] Prepare for
   Spark 4"). It moves to Scala 2.13, JDK 17, Jedis 5 and `CLUSTER SHARDS`, and removes DStreams. It has been
   open with no reviews since October 2024, and Phase 1 starts from it.
-- Redis field engineering's *Redis Connector for Spark*. It targets Spark 3.5 and Scala 2.12, and has no
-  Spark 4 build. Its option design for JSON and stream writes is worth reading before Phase 2.
+- Redis field engineering's *Redis Connector for Spark*
+  ([docs](https://redis-field-engineering.github.io/redis-spark/),
+  [binaries](https://github.com/redis-field-engineering/redis-spark-dist)). See the
+  [comparison below](#comparison-with-the-redis-connector-for-spark).
 - [llphxd/spark-redis-connector](https://github.com/llphxd/spark-redis-connector), a community project
   (Apache-2.0; v0.1.4, Nov 2026; one maintainer).
   - **What it is:** a DataSource V2 batch connector for Spark 3.3–3.5, Scala 2.12 and Jedis 5. It reads
@@ -43,6 +45,30 @@
     `keys`, `field.column`, `list.read.mode = explode | array`) against spec §2.2 before Phase 2b/2c. Its
     author is also a candidate contributor (intent open question 4), for example for the
     `zset`/`list`/`set` models. Any code we copy keeps its Apache-2.0 license and notices.
+
+### Comparison with the Redis Connector for Spark
+
+This compares the roadmap with the Redis Connector for Spark at **v0.10.0** (Sep 2026). It draws only on
+that connector's public docs and its public distribution repo.
+
+| Area | Redis Connector for Spark (v0.10.0) | This roadmap |
+|---|---|---|
+| License and source | Business Source License 1.1; source not published. Redis supports it for enterprise-tier customers as a "Developer Tool" | BSD-3-Clause, open source |
+| Spark / Scala / Java | Spark 3.5.4 recommended (3.1–3.5 should work), Scala 2.12 only, Java 8+. No Spark 4 build | Spark 4.1–4.3, Scala 2.13, JDK 17+ (§1) |
+| Redis | 5 and later | 8.2 and later, with capability gating for newer commands (§1) |
+| Reads | `SCAN`-based key reads (pattern, type, threads, batch size, replica reads); stream reads through consumer groups | Point lookups, runtime filtering, Query Engine pushdown and slot-partitioned key scans; stream reads in range or group mode (§2.3, §2.5) |
+| Write types | Hash, JSON (the default), string, stream | Those, plus sorted set, list, set, TimeSeries, Vector Set, vector fields and probabilistic types (§2.2) |
+| Write semantics | Append and overwrite | Also merge or replace, TTL options, conditional writes, and `MERGE`/`UPDATE`/`DELETE` (§2.4) |
+| Streaming | Micro-batch and continuous processing. The stream source is at-least-once, with batched acks. Live key changes come through keyspace notifications | DSv2 micro-batch with stream IDs held in the checkpoint, exactly-once with `IDMP`, admission control and `AvailableNow`. Real-Time Mode replaces continuous processing. Keyspace notifications are not used, because they are not durable (§2.5) |
+| Redis 8 features | None documented | Central to the design: JSON/`VARIANT`, Query Engine, `FT.HYBRID`, Vector Sets, `HSETEX`, `SET IFEQ`, `XADD IDMP`, … (§1, §2.2–§2.5) |
+| SQL catalog and functions | None documented | `TableCatalog`, `CREATE TABLE` → `FT.CREATE`, `redis_slot()` and other functions (§2.6) |
+| Python and Spark Connect | DataFrame options from PySpark | pip package, pure-Python fallback, Connect test suite (§2.7) |
+| Migration from spark-redis 3.x | Not a goal | Option aliases, golden-layout tests, migration tool (§2.11) |
+
+**Where they overlap.** The Redis Connector for Spark already covers part of Phase 2: the DSv2 batch
+scaffolding, a cluster-aware client, replica reads and the hash, JSON and string write paths. It also covers
+part of Phase 3: a consumer-group stream source and a streaming sink. It covers nothing from Phase 1
+(Spark 4), Phase 4 (Redis 8 data models), Phase 5 (Python and Connect) or Phase 6.
 
 ## Release train
 
