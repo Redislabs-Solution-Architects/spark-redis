@@ -1,17 +1,18 @@
 package com.redislabs.provider.redis.df.benchmark
 
-import com.redislabs.provider.redis.env.RedisClusterEnv
 import com.redislabs.provider.redis.util.Person
 import org.apache.spark.rdd.RDD
 
 /**
   * @author The Viet Nguyen
   */
-trait ManyValueBenchmarkSuite extends DataframeBenchmarkSuite with RedisClusterEnv {
+trait ManyValueBenchmarkSuite extends DataframeBenchmarkSuite {
 
   private def num = 1000000
 
   override def suiteTags: String = s"${super.suiteTags}, Many:$num"
+
+  override def datasetName: String = s"many-$num"
 
   override def rdd(): RDD[Person] = {
     val partitionsNum = 8
