@@ -1,0 +1,16 @@
+# The versions CI tests against. This file is the single source of truth for the test matrix
+# (.github/workflows/ci.yml reads it). Update it when an upstream line ships or reaches end of life;
+# see doc/modernization/spec.md §1 for the policy.
+
+# Redis lines in active development, as Docker image tags. Every job must pass.
+redis: ["8.2", "8.6", "8.10"]
+
+# Upcoming Redis lines. CI tests the newest release-candidate tag of each (for example 8.12-rc3).
+# These jobs may fail without failing the build.
+redis_preview: ["8.12"]
+
+# JDKs for this 3.x build. Phase 1 adds 17, 21 and 25 together with the Spark lines.
+jdk: ["8"]
+
+# The Redis line for nightly benchmarks: the floor, the same as doc/modernization/benchmarks/baseline-3.x.md.
+benchmark_redis: "8.2"

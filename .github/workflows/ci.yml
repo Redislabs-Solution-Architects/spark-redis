@@ -1,0 +1,148 @@
+# Test matrix (Phase 0 plan, step A4). It replaces integration.yml, and versions.yml decides what runs.
+# The tests start their own Redis in Docker through Testcontainers (see RedisContainers.scala), so no
+# Redis is installed on the runner. Guardrail checks run separately, in guardrails.yml.
+name: CI
+
+on:
+  push:
+    branches: [master, 'spike/phase-0']
+    paths-ignore: ['doc/**', '**/*.md']
+  pull_request:
+    paths-ignore: ['doc/**', '**/*.md']
+  # Nightly. GitHub runs scheduled workflows only from the default branch, so this starts once ci.yml reaches master.
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    name: Read versions.yml
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      redis: ${{ steps.read.outputs.redis }}
+      jdk: ${{ steps.read.outputs.jdk }}
+      preview: ${{ steps.read.outputs.preview }}
+      benchmark_redis: ${{ steps.read.outputs.benchmark_redis }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        name: Read the matrix and find the newest release-candidate tags
+        run: |
+          set -euo pipefail
+          echo "redis=$(yq -o=json -I=0 '.redis' versions.yml)" >> "$GITHUB_OUTPUT"
+          echo "jdk=$(yq -o=json -I=0 '.jdk' versions.yml)" >> "$GITHUB_OUTPUT"
+          echo "benchmark_redis=$(yq '.benchmark_redis' versions.yml)" >> "$GITHUB_OUTPUT"
+          tags=()
+          for line in $(yq '.redis_preview[]' versions.yml); do
+            pattern="^${line//./\\.}-rc[0-9]+$"
+            tag=$(curl -fsSL "https://hub.docker.com/v2/repositories/library/redis/tags?name=${line}-rc&page_size=100" \
+              | jq -r --arg p "$pattern" \
+                  '[.results[].name | select(test($p))] | sort_by(capture("rc(?<n>[0-9]+)$").n | tonumber) | last // empty') || tag=""
+            if [ -n "$tag" ]; then
+              tags+=("$tag")
+            else
+              echo "::notice::No release-candidate tag found for Redis $line; skipping its preview job."
+            fi
+          done
+          echo "preview=$(printf '%s\n' "${tags[@]+"${tags[@]}"}" | jq -R . | jq -cs 'map(select(length > 0))')" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test (Redis ${{ matrix.redis }}, JDK ${{ matrix.jdk }})
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        redis: ${{ fromJSON(needs.matrix.outputs.redis) }}
+        jdk: ${{ fromJSON(needs.matrix.outputs.jdk) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+      - name: Show the Redis version under test
+        run: docker run --rm "redis:${{ matrix.redis }}" redis-server --version
+      - name: Test
+        run: ./mvnw -B verify -Dredis.image="redis:${{ matrix.redis }}"
+      - name: Upload test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports-redis-${{ matrix.redis }}-jdk-${{ matrix.jdk }}
+          path: |
+            target/surefire-reports/
+            target/site/jacoco/
+          if-no-files-found: ignore
+
+  preview:
+    name: Preview (Redis ${{ matrix.redis }}, allowed to fail)
+    needs: matrix
+    if: needs.matrix.outputs.preview != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        redis: ${{ fromJSON(needs.matrix.outputs.preview) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ fromJSON(needs.matrix.outputs.jdk)[0] }}
+          cache: maven
+      - name: Show the Redis version under test
+        run: docker run --rm "redis:${{ matrix.redis }}" redis-server --version
+      - name: Test
+        run: ./mvnw -B verify -Dredis.image="redis:${{ matrix.redis }}"
+
+  benchmark:
+    # The numbers come from a GitHub-hosted runner, so they are not comparable with the baseline in
+    # doc/modernization/benchmarks/, which was measured on the owner's Mac. They are recorded, not gated,
+    # until there is a stable runner.
+    name: Benchmarks (Redis ${{ needs.matrix.outputs.benchmark_redis }})
+    needs: matrix
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ fromJSON(needs.matrix.outputs.jdk)[0] }}
+          cache: maven
+      - name: Run the benchmark suites
+        run: ./mvnw -B -Pbenchmark verify -Dredis.image="redis:${{ needs.matrix.outputs.benchmark_redis }}"
+      - name: Add the timings to the job summary
+        if: always()
+        run: |
+          if [ -f target/benchmarks.csv ]; then
+            {
+              echo "### Benchmarks on a GitHub-hosted runner (not comparable with the Mac baseline)"
+              echo
+              echo "| Benchmark | ms |"
+              echo "|---|---|"
+              tail -n +2 target/benchmarks.csv | sed -E 's/^(.*),([0-9]+)$/| \1 | \2 |/'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload the timings
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmarks-redis-${{ needs.matrix.outputs.benchmark_redis }}
+          path: target/benchmarks.csv
+          if-no-files-found: ignore
