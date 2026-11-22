@@ -1,0 +1,20 @@
+{
+  "schema": [
+    {"name": "id", "type": "string", "nullable": true},
+    {"name": "string", "type": "string", "nullable": true},
+    {"name": "byte", "type": "tinyint", "nullable": true},
+    {"name": "short", "type": "smallint", "nullable": true},
+    {"name": "int", "type": "int", "nullable": true},
+    {"name": "long", "type": "bigint", "nullable": true},
+    {"name": "float", "type": "float", "nullable": true},
+    {"name": "double", "type": "double", "nullable": true},
+    {"name": "boolean", "type": "boolean", "nullable": true},
+    {"name": "date", "type": "date", "nullable": true},
+    {"name": "timestamp", "type": "timestamp", "nullable": true}
+  ],
+  "rows": [
+    ["a", "text", 1, 2, 3, 4000000000, 1.5, 2.25, true, "2020-02-29", "2020-02-29T12:34:56.789Z"],
+    ["b", "ünïcødé ✓", -1, -2, -3, -4, -0.5, 1.0E10, false, "1970-01-01", "1999-12-31T23:59:59Z"],
+    ["empty", "", null, null, null, null, null, null, null, null, null]
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {"key": "golden_mixed:1", "type": "hash", "ttl": "none", "value": {"age": "30", "name": "John"}},
+    {"key": "golden_mixed:2", "type": "hash", "ttl": "none", "value": {"age": "35", "name": "Peter"}},
+    {"key": "golden_mixed:3", "type": "string", "ttl": "none", "value": {"utf8": "not a row"}},
+    {"key": "golden_mixed:4", "type": "list", "ttl": "none", "value": ["not", "a", "row"]},
+    {"key": "golden_mixed:5", "type": "zset", "ttl": "none", "value": [{"member": "not a row", "score": "1"}]}
+  ]
+}

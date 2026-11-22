@@ -1,0 +1,11 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {"key": "golden_people:John", "type": "hash", "ttl": "none",
+     "value": {"address": "60 Wall Street", "age": "30", "salary": "150.5"}},
+    {"key": "golden_people:Mary", "type": "hash", "ttl": "none",
+     "value": {"address": "1 Main Street", "age": "28", "salary": "99.9"}},
+    {"key": "golden_people:Peter", "type": "hash", "ttl": "none",
+     "value": {"address": "110 Wall Street", "age": "35", "salary": "200.3"}}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "schema": [
+    {"name": "salary", "type": "double", "nullable": true},
+    {"name": "name", "type": "string", "nullable": true}
+  ],
+  "rows": [[150.5, "John"], [200.3, "Peter"], [99.9, "Mary"]]
+}

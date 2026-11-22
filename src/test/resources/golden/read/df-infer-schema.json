@@ -1,0 +1,13 @@
+{
+  "schema": [
+    {"name": "salary", "type": "string", "nullable": true},
+    {"name": "age", "type": "string", "nullable": true},
+    {"name": "address", "type": "string", "nullable": true},
+    {"name": "_id", "type": "string", "nullable": true}
+  ],
+  "rows": [
+    ["150.5", "30", "60 Wall Street", "John"],
+    ["200.3", "35", "110 Wall Street", "Peter"],
+    ["99.9", "28", "1 Main Street", "Mary"]
+  ]
+}
