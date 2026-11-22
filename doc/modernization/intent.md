@@ -102,6 +102,7 @@ A Spark connector built for today's platforms, the one we would design if we sta
 | Keys on write | Every write has a deterministic key, so retries and replays never duplicate rows (spec §2.4) |
 | Logical databases | Not supported. Namespaces are connection profiles only |
 | New option names | Accepted as proposed in spec §2.11 |
+| Java package and format name | The `com.redis.sparkredis` package, so classes never clash with the Redis Connector for Spark (`com.redis.spark`). The format name stays `redis`. Install only one of the two connectors per cluster, or use our full class name (spec §2) |
 
 ## Open questions
 

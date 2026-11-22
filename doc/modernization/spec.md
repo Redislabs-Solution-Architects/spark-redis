@@ -149,7 +149,7 @@ flowchart LR
 There is no compatibility module. The migration tool, `spark-redis-migrate`, lives on `branch-3.x`, because it
 needs the Scala 2.12 classpath to read 3.x's Java-serialized data (§2.11).
 
-- **New package:** `com.redis.spark`. New code is not added under `org.apache.spark.*`. The old package
+- **New package:** `com.redis.sparkredis`. New code is not added under `org.apache.spark.*`. The old package
   was used to reach `private[sql]` APIs, which is exactly the coupling we are removing. The old
   format name is not kept as an alias. A stub `org.apache.spark.sql.redis.DefaultSource` fails with a
   message telling the user to switch to `format("redis")`.
@@ -160,6 +160,12 @@ needs the Scala 2.12 classpath to read 3.x's Java-serialized data (§2.11).
   artifacts share one source tree, and thin `spark-4.x` overlay source sets hold anything that needs a newer
   interface. Adding a Spark line means adding an overlay and a CI matrix entry. Dropping one means deleting
   them.
+- **Coexisting with the Redis Connector for Spark.** That connector uses the `com.redis.spark` package and
+  also registers the format name `redis`. Our separate package means no class names overlap. We keep the
+  format name `redis`, because it is the natural one and 3.x already registers it for streaming. If both
+  connectors are installed on one cluster, Spark cannot resolve `format("redis")` and fails with "Multiple
+  sources found for redis". The docs say to install only one, or to name ours by its full class name
+  (`format("com.redis.sparkredis.RedisTableProvider")`). The troubleshooting guide covers that error.
 
 ### 2.1 Client layer
 
@@ -418,7 +424,7 @@ Further read behaviour:
 The catalog is enabled like this:
 
 ```properties
-spark.sql.catalog.redis              = com.redis.spark.RedisCatalog
+spark.sql.catalog.redis              = com.redis.sparkredis.RedisCatalog
 spark.sql.catalog.redis.url          = rediss://default:${secret}@redis-12000.example.com:12000
 spark.sql.catalog.redis.read.from    = replica-preferred
 ```
@@ -639,6 +645,7 @@ brings one back. A hook and a CI check enforce this (`roadmap.md`, Phase 0).
 | Some Query Engine replies may cost more to build in RESP3 than in RESP2 | Benchmark Query Engine reads under RESP3 against the Phase 0 baseline in Phases 2 and 4b. Raise any regression upstream rather than bringing RESP2 back |
 | Jobs built on the RDD API cannot upgrade without code changes | A migration guide that maps every RDD function and old option to its 4.x replacement, golden-layout tests showing the replacement writes the same data, 4.0.0-M1 still shipping the RDD API (deprecated) so jobs can move to Spark 4 first, and `branch-3.x` until November 2027 |
 | A 3.x job that relied on `hash` being the default model would now write JSON | A table's catalog entry sets its model, and migrated tables keep `hash`. A table with no catalog entry and no `model` whose prefix already holds hashes fails at planning. The migration guide lists this change first |
+| This connector and the Redis Connector for Spark are installed on the same cluster | Both register `redis`, so `format("redis")` fails for both. Separate packages avoid class clashes. The docs say to install one, or to use our full class name, and the troubleshooting guide covers the error |
 | Data written by 3.x is unreadable after upgrade | Golden-layout tests, the migration tool, and a documented one-time migration step |
 | Maintainer bandwidth (see [#393](https://github.com/RedisLabs/spark-redis/issues/393), [#384](https://github.com/RedisLabs/spark-redis/issues/384)) | Name code owners and a release manager (intent Q4). Automate version-matrix bumps |
 

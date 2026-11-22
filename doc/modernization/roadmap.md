@@ -63,6 +63,7 @@ that connector's public docs and its public distribution repo.
 | Spark / Scala / Java | Spark 3.5.4 recommended (3.1–3.5 should work), Scala 2.12 only, Java 8+. No Spark 4 build | Spark 4.1–4.3, Scala 2.13, JDK 17+ (§1) |
 | Redis | 5 and later | 8.2 and later, with capability gating for newer commands (§1) |
 | Reads | `SCAN`-based key reads (pattern, type, threads, batch size, replica reads); stream reads through consumer groups | Point lookups, runtime filtering, Query Engine pushdown and slot-partitioned key scans; stream reads in range or group mode (§2.3, §2.5) |
+| Format name and package | `format("redis")`, in the `com.redis.spark` package | Also `format("redis")`, in a separate package (`com.redis.sparkredis`). Install only one connector per cluster, or use our full class name (spec §2) |
 | Write types | Hash, JSON (the default), string, stream | Those, plus sorted set, list, set, TimeSeries, Vector Set, vector fields and probabilistic types (§2.2) |
 | Write semantics | Append and overwrite | Also merge or replace, TTL options, conditional writes, and `MERGE`/`UPDATE`/`DELETE` (§2.4) |
 | Streaming | Micro-batch and continuous processing. The stream source is at-least-once, with batched acks. Live key changes come through keyspace notifications | DSv2 micro-batch with stream IDs held in the checkpoint, exactly-once with `IDMP`, admission control and `AvailableNow`. Real-Time Mode replaces continuous processing. Keyspace notifications are not used, because they are not durable (§2.5) |
@@ -134,7 +135,7 @@ the work up to each gate, and named humans pass the gates.
 - **`CLAUDE.md`** (under one page). It covers:
   - the one verify command
   - the module map
-  - "new code goes in `com.redis.spark`; nothing new under `org.apache.spark.*`"
+  - "new code goes in `com.redis.sparkredis`; nothing new under `org.apache.spark.*`"
   - "`src/main/scala/com/redislabs/**` is frozen until Phase 2 deletes it"
   - "if a test fails, fix the code, not the test"
   - capability gating, not version checks
@@ -331,7 +332,7 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
 **Scope:**
 
 - **2a: Foundation** (sequential; every other lane depends on it):
-  - split into `core`, `sql` and `it` modules, under the new package `com.redis.spark`, with a stub at the
+  - split into `core`, `sql` and `it` modules, under the new package `com.redis.sparkredis`, with a stub at the
     old `DefaultSource` name that tells users to switch to `format("redis")`
   - the `RedisExecutor` interface on Jedis 8
   - topology from `CLUSTER SHARDS`, refreshed on `MOVED`/`ASK`
