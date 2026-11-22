@@ -48,6 +48,8 @@ fi
 ## Review
 
 - The test really moves the slot on the servers (no mocks), and checks every one of the 100 keys.
+- It finds the cluster nodes through the harness (`RedisContainers.clusterPort`, `redisConfig.hosts`, or
+  `CLUSTER SHARDS`), never through a hard-coded port (CLAUDE.md rule 9).
 - If it fails: the assertion is unchanged from the agent's first version, the `failing-first.txt` line names the
   issue, and the report explains the cause (for example, pipelined `MOVED` replies that are never checked).
 - If it passes: the report says why the connector coped.

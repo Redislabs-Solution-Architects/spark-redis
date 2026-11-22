@@ -28,6 +28,9 @@ The caller gives you some of these. Use the defaults for the rest, and state the
      `/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home`. Check with `"$JAVA_HOME/bin/java" -version`.
    - `docker info` must succeed. Maven and Docker don't work inside Claude's sandbox, so run these commands
      outside it, which needs the owner's permission.
+   - `pom.xml` must forward `redis.image` to the test JVM (`<redis.image>` under the ScalaTest plugin's
+     `<systemProperties>`). Without that, every run silently uses `redis:8.2`: report this and stop, rather than
+     a result per image.
 3. **One run per image, one at a time.** The runs share `target/`, so never run two at once. For each image:
 
    ```bash
@@ -38,7 +41,10 @@ The caller gives you some of these. Use the defaults for the rest, and state the
    ```
 
    A full run can take longer than the Bash tool's 10-minute limit. Start it in the background and wait for it to
-   finish; don't read a half-written log as a result.
+   finish; don't read a half-written log as a result. While it runs, confirm the image actually started:
+   `docker ps --filter label=org.testcontainers=true --format '{{.Image}} {{.RunningFor}}'` lists it. Each test JVM
+   gets its own servers on free ports, so other runs on the machine may show up too; look for the containers your
+   run started.
 4. **Read the results** from the log and the copied reports:
    - Maven's exit status, and `BUILD SUCCESS` or `BUILD FAILURE`.
    - ScalaTest's summary: `Tests: succeeded N, failed N, canceled N, ignored N, pending N`, and any
@@ -67,8 +73,8 @@ The caller gives you some of these. Use the defaults for the rest, and state the
 ## Rules
 
 - Don't fix, retry until green, skip, quarantine or explain away a failure. Report it as it happened.
-- Rerun an image **once** only for an infrastructure error (an image pull or Docker error, or a port already in
-  use), and say in the report that you did.
+- Rerun an image **once** only for an infrastructure error (an image pull or Docker error, or a container that
+  didn't start), and say in the report that you did.
 - Don't run `-Dgolden.update=true` or anything else that writes fixtures.
 - If you can't run at all (no Docker, no JDK 8, no permission to leave the sandbox), say exactly what's missing
   and stop. Never report a guessed result.

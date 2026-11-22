@@ -10,9 +10,11 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B v
 ```
 
 - **JDK 8 only** for 3.x. A newer default `java` will not work, so always set `JAVA_HOME`.
-- **Docker must be running.** Testcontainers starts every Redis server the suites need; no local `redis-server`.
+- **Docker must be running.** Testcontainers starts the Redis servers each test JVM needs, on free ports, so runs can
+  overlap. No local `redis-server` (`-Dredis.containers=false` uses external servers on the old fixed ports).
 - **One suite:** add `-Dsuites=com.redislabs.provider.redis.df.standalone.HashDataframeStandaloneSuite`.
 - **Other Redis lines:** `-Dredis.image=redis:8.6`, `redis:8.10`. To run several, use the `verifier` agent.
+- **Shorthand:** `make test REDIS_IMAGE=redis:8.6 SUITES=<fqcn>,…` runs the same command (`JAVA_HOME` still applies).
 - `verify` is the gate. It exits non-zero on any failure, and CI runs the same command.
 
 ## Layout
@@ -44,6 +46,8 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B v
 7. **Format only what you edit.** A hook runs scalafmt on each Scala file you change. Never reformat other files.
 8. **Credentials:** the test passwords (`passwd`, `p1pp0`) are the only ones allowed in the repo. Never log or
    print a password, token or credentialed URL.
+9. **Never hard-code a Redis port in a test.** Ports are chosen at run time: use `redisPort` from the env traits, or
+   `RedisContainers.standalonePort`, `tlsPort` and `clusterPort`.
 
 ## Working on this repo
 

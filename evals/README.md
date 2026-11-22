@@ -61,8 +61,8 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home
 4. Record the result in the table below, then remove the worktree:
    `git worktree remove --force "$TMPDIR/eval-$N" && git branch -D "eval/$N-$(date +%Y%m%d)"`.
 
-Tests need Docker, as for `./mvnw verify`. Run one task at a time on a machine unless the harness uses dynamic
-ports.
+Tests need Docker, as for `./mvnw verify`. Each test JVM gets its own Redis servers on free ports, so tasks can run
+side by side, each in its own worktree.
 
 ## Scoring
 
