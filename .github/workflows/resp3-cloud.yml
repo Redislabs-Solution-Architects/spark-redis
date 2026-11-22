@@ -1,0 +1,34 @@
+# Phase 0 step A5 for Redis Cloud: checks that the test database in the REDIS_CLOUD_URL secret accepts
+# HELLO 3, which spark-redis 4.x requires (spec §2.1).
+#
+# The owner creates the database and stores its URL with `gh secret set REDIS_CLOUD_URL`, so the
+# credential never passes through an agent. The script prints only the server's name, version and mode,
+# and GitHub masks the secret in logs. Run it with:
+#   gh workflow run resp3-cloud.yml -R Redislabs-Solution-Architects/spark-redis --ref spike/phase-0
+name: RESP3 on Redis Cloud
+
+on:
+  workflow_dispatch:
+  # Nightly. GitHub runs scheduled workflows only from the default branch.
+  schedule:
+    - cron: '30 3 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: HELLO 3 against REDIS_CLOUD_URL
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check RESP3
+        env:
+          REDIS_CLOUD_URL: ${{ secrets.REDIS_CLOUD_URL }}
+        run: |
+          if [ -z "$REDIS_CLOUD_URL" ]; then
+            echo "::warning::The REDIS_CLOUD_URL secret is not set, so there is nothing to check."
+            exit 1
+          fi
+          scripts/check-resp3.sh "$REDIS_CLOUD_URL"
