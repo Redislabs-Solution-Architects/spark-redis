@@ -7,6 +7,8 @@ import org.apache.spark.SparkConf
  * Cluster with user/password authentication
  */
 trait RedisClusterAclEnv extends Env {
+  // Start the Docker Redis this environment needs before RedisConfig below connects to it.
+  RedisContainers.ensureCluster()
 
   override val redisPort = 7379
 

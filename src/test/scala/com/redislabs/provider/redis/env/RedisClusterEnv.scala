@@ -7,6 +7,8 @@ import org.apache.spark.SparkConf
   * @author The Viet Nguyen
   */
 trait RedisClusterEnv extends Env {
+  // Start the Docker Redis this environment needs before RedisConfig below connects to it.
+  RedisContainers.ensureCluster()
 
   override val redisPort = 7379
 

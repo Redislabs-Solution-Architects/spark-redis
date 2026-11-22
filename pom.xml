@@ -48,6 +48,7 @@
 		<jedis.version>3.9.0</jedis.version>
 		<spark.version>3.2.1</spark.version>
 		<plugins.scalatest.version>1.0</plugins.scalatest.version>
+		<testcontainers.version>1.21.4</testcontainers.version>
 	</properties>
 
 	<distributionManagement>
@@ -314,6 +315,14 @@
 			<groupId>org.scalatest</groupId>
 			<artifactId>scalatest_${scala.major.version}</artifactId>
 			<version>3.0.8</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- Runs the Redis servers the test suites need in Docker (src/test/scala/.../env/RedisContainers.scala).
+		     Testcontainers 1.x still supports Java 8, which this 3.x build targets. -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<version>${testcontainers.version}</version>
 			<scope>test</scope>
 		</dependency>
     </dependencies>
