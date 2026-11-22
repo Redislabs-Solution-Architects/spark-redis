@@ -57,6 +57,17 @@ A Spark connector built for today's platforms, the one we would design if we sta
   moves. The exact matrix and policy are in `spec.md` §1.
 - **RESP3 only.** The connector speaks RESP3 and nothing else, so there is no RESP2 mode to build, test
   or support. Every supported Redis line has spoken RESP3 since Redis 6.0.
+- **No legacy Redis patterns.** Redis keeps old commands working after it ships better replacements. Where
+  a replacement exists, the connector uses only the replacement and offers no option to bring the old form
+  back:
+  - `SCAN` over `KEYS`
+  - ACL users over `requirepass`
+  - Streams over list and Pub/Sub queues
+  - atomic command flags over two-step writes
+  - native JSON over JSON stored in a string
+  - Functions over Lua `EVAL`
+
+  The full list is in `spec.md` §2.14.
 - Keep the **BSD-3-Clause** license. Redis 8's AGPLv3/RSAL/SSPL server licensing does not change the client
   licence, but this needs confirming with legal.
 - Do not silently corrupt or orphan data written by 3.x: the `_spark:<table>:schema` keys and the binary

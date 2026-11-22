@@ -16,6 +16,7 @@
 | Redis | tested against 6.0.10 | 8.2 (floor) through 8.10; 8.12 when it reaches GA |
 | Client | Jedis 3.9 | Jedis 8.0 |
 | Wire protocol | RESP2 | RESP3 only, with no fallback |
+| Redis commands | Some legacy forms (`HMSET` + `EXPIRE`, `SETEX`, `SMEMBERS`, `BLPOP`, `INFO` parsing, `requirepass` in tests) | Modern replacements only (spec §2.14) |
 | Spark API | DSv1 plus the internal V1 streaming `Source`, and DStreams | DSv2 throughout: catalog, pushdown, row-level ops, streaming source and sink |
 | Redis data models | strings, hashes, lists, sets, sorted sets, streams | adds JSON/`VARIANT`, Query Engine, Vector Sets, vector fields, TimeSeries and probabilistic types |
 | Clients reached | Scala and Java; PySpark for DataFrames only | adds Spark SQL catalog, Spark Connect (Python/Scala), and a pip package |
@@ -132,6 +133,7 @@ the work up to each gate, and named humans pass the gates.
   - "`src/main/scala/com/redislabs/**` is frozen except for compatibility shims"
   - "if a test fails, fix the code, not the test"
   - capability gating, not version checks
+  - no legacy Redis commands or patterns (spec §2.14)
 - **Skills** (`.claude/skills/`) for knowledge that must be applied the same way every time:
   - `dsv2-connector`: which mix-ins we implement, and the rule against internal Spark APIs
   - `redis-capabilities`: how to add a capability-gated feature with its fallback and tests
@@ -143,12 +145,15 @@ the work up to each gate, and named humans pass the gates.
   - run scalafmt and scalastyle after each edit
   - scan the diff for secrets
   - block new imports from `org.apache.spark.sql.catalyst.*` or `execution.*` outside an allowlist
+  - block new calls to legacy Redis commands: `KEYS`, `SMEMBERS`, `HMSET`, `SETEX`, `SETNX`, `GETSET`,
+    `EVAL`/`EVALSHA`, `ZRANGEBYSCORE`, `BLPOP`/`BRPOP`, `SUBSCRIBE`. The same check also runs in CI
 - **`REVIEW.md`**, the rubric for Claude's PR review. Its passes:
   - correctness against the spec section the PR cites
   - cluster correctness (slot grouping, `MOVED`/`ASK` handling)
   - credential leakage into logs, the Spark UI or exceptions
   - 3.x compatibility (option aliases and golden layout)
   - capability gating has a fallback and a test
+  - no legacy Redis patterns (spec §2.14)
 
   Findings are marked Important or Nit, with a cap on nits. A finding never approves or blocks a PR on
   its own.
@@ -203,7 +208,9 @@ the work up to each gate, and named humans pass the gates.
 
 **Scope:**
 
-1. **Test harness.** Replace the Makefile-launched `redis-server 6.0.10` with Testcontainers. Run the
+1. **Test harness.** Replace the Makefile-launched `redis-server 6.0.10` with Testcontainers.
+   Configure every test server with named ACL users and an ACL password on `default` instead of
+   `requirepass`. Run the
    **existing** test suite unchanged against Redis 8.2, 8.6 and 8.10, in standalone, cluster and TLS+ACL
    topologies. Record what fails; those failures are the first real data about Redis 8 behaviour changes.
    Also confirm that Redis Software 8.2 and Redis Cloud databases accept `HELLO 3`, because 4.x will
@@ -269,7 +276,17 @@ most-requested issue family quickly:
    - json4s 4.0.7.
    - Behaviour changes from ANSI mode being the default.
 4. **Jedis 3.9 → 8.0:**
-   - `hmset` → `hset`
+   - legacy commands → modern forms (spec §2.14):
+     - `hmset` → `HSET`
+     - `hmset` + `expire` → `HSET` + `EXPIRE` in one `MULTI`/`EXEC`
+     - `setex` → `SET … EX`
+     - `smembers` → `SSCAN`
+     - `lrange 0 -1` → chunked `LRANGE`
+     - `zrangeByScore` → `ZRANGE … BYSCORE`
+     - `del` → `UNLINK`
+     - `INFO` parsing → `ROLE`
+
+     The stored data is unchanged, so the golden-layout tests still pass.
    - `clusterSlots` → `clusterShards`
    - the hand-rolled `XINFO` → built-in `xinfoStream`
    - the pool moves onto `RedisClient`
@@ -508,6 +525,7 @@ puts the matrix in one file and Phase 6 automates it.
 | **Redis:** `CLUSTER SHARDS`, `CLUSTER SLOT-STATS`, atomic slot migration | §2.1, §2.3 | 1, 2, 6 |
 | **Redis:** `XACKDEL`, `XTRIM ACKED`, `XREADGROUP CLAIM`/`MAXSIZE`, `XNACK`, `XADD IDMP` | §2.5 | 3 |
 | **Redis:** RESP3 as the only protocol, `CLIENT SETINFO` (already merged), token auth, `HOTKEYS` | §2.1, §2.9 | 1, 6 |
+| **Redis:** modern replacements only: `SCAN` family, ACL users, atomic command flags, Streams, native JSON, Functions | §2.14 | 0, 1, 2 |
 | **Redis:** Array type (8.8), roaring bitmaps and set-member TTL (8.12) | Later lanes, once there is demand and they are GA | — |
 
 ## Decisions needed before Phase 1 starts

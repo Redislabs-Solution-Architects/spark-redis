@@ -196,6 +196,8 @@ flowchart LR
 - **Topology:**
   - Use `CLUSTER SHARDS` and refresh on `MOVED`/`ASK`. A partition re-resolves its slot owner instead of
     failing, which keeps reads correct during resharding and atomic slot migration.
+  - Node roles come from `ROLE`, `CLUSTER SHARDS` and Sentinel. The connector never parses `INFO` text, which
+    is how 3.x finds replicas today.
   - Supported deployment modes: standalone; **Sentinel** (resolves
     [#207](https://github.com/RedisLabs/spark-redis/issues/207),
     [#329](https://github.com/RedisLabs/spark-redis/issues/329),
@@ -222,14 +224,14 @@ the work be split into parallel lanes (see `roadmap.md`).
 
 | `model` | Redis type | Row shape | Read path | Write path | Needs more than the 8.2 floor |
 |---|---|---|---|---|---|
-| `hash` (default) | Hash | one hash = one row | `HGETALL`, or `HMGET` with column pruning | `HSET`; `HSETEX` for per-field TTL; `HIMPORT` for bulk loads | `HIMPORT`: 8.10, Open Source only |
+| `hash` (default) | Hash | one hash = one row | `HMGET` of the schema's fields, narrowed further by column pruning | `HSET`; `HSETEX` for per-field TTL; `HIMPORT` for bulk loads | `HIMPORT`: 8.10, Open Source only |
 | `json` | JSON | one document = one row; nested `struct`, `array`, `map` and `VARIANT` columns | `JSON.MGET` grouped by slot; JSONPath projection | `JSON.SET` / `JSON.MSET`; `JSON.MERGE` for partial updates | — |
 | `string` | String | `_key`, `value` (string or binary) | `MGET` grouped by slot | `SET`; `MSETEX` for batches with TTL | `MSETEX`: 8.4 |
 | `stream` | Stream | one entry = one row; `_id` metadata column | `XRANGE`, split by ID range | `XADD`, with `IDMP` for exactly-once | `IDMP`: 8.6 |
 | `timeseries` | TimeSeries | `(_key, timestamp, value, labels…)` | `TS.MRANGE FILTER`, with aggregation pushdown | `TS.MADD`, with `TS.CREATE` labels | `TS.NRANGE`: 8.10 |
 | `vectorset` | Vector Set | `(_key, element, vector, attributes)` | `VSIM` KNN reads (with `FILTER` on attributes); full export is an open item, because there is no confirmed enumeration command | `VADD` with quantization and `SETATTR` | — |
-| `zset` / `list` / `set` | Sorted set, list, set | one member = one row (`_key`, `member`, `score` or `index`) | `ZRANGE` / `LRANGE` / `SSCAN` | `ZADD` / `RPUSH` / `SADD` | — |
-| `binary` (legacy) | String | 3.x Java-serialized rows | read-only, through `compat` | — | — |
+| `zset` / `list` / `set` | Sorted set, list, set | one member = one row (`_key`, `member`, `score` or `index`) | `ZSCAN` (or `ZRANGE … BYSCORE` when a score range is pushed down) / `LRANGE` in bounded chunks / `SSCAN` | `ZADD` / `RPUSH` / `SADD` | — |
+| `binary` (legacy) | String | 3.x Java-serialized rows | none in the connector; only `spark-redis-migrate` reads it, to move the data off | — | — |
 
 Two smaller additions:
 
@@ -268,7 +270,7 @@ For each scan, the `ScanBuilder` picks the **cheapest strategy that can answer t
 3. **Key scan, the fallback.** Run `SCAN MATCH <prefix>* TYPE <type> COUNT n` on each primary (or
    replica) shard, with each partition covering a slot range. Using `TYPE` server-side replaces today's
    extra `TYPE` round trip. Values are fetched with slot-grouped `MGET` / `JSON.MGET` or pipelined
-   `HGETALL`. Resolves [#187](https://github.com/RedisLabs/spark-redis/issues/187),
+   `HMGET`. Resolves [#187](https://github.com/RedisLabs/spark-redis/issues/187),
    [#86](https://github.com/RedisLabs/spark-redis/issues/86),
    [#202](https://github.com/RedisLabs/spark-redis/issues/202),
    [#303](https://github.com/RedisLabs/spark-redis/issues/303) and
@@ -318,8 +320,13 @@ Further read behaviour:
   `SET NX/XX`, `HSETEX FNX/FXX` and compare-and-set `SET IFEQ`/`IFNE`/`IFDEQ`/`IFDNE` (8.4+; the `IFDEQ` form compares against a `DIGEST`, so no value has to be fetched). Conditional deletes use `DELEX` (8.4+). Resolves
   [#260](https://github.com/RedisLabs/spark-redis/issues/260) and
   [#204](https://github.com/RedisLabs/spark-redis/issues/204).
-- **TTL** can be set four ways: table-level `ttl`; per-row `ttl.column` or `expireat.column`; and per-field
-  TTL via `HSETEX` / `HEXPIRE` for hashes.
+- **TTL** can be set four ways: table-level `ttl`; per-row `ttl.column` or `expireat.column`; and, for
+  hashes, per-field TTL with `HSETEX`. A value and its TTL are always written atomically:
+  - with one command where Redis has one: `SET … EX`, `MSETEX`, `HSETEX … EX`
+  - otherwise in one `MULTI`/`EXEC` on the key: `HSET` + `EXPIRE` for a row TTL, `JSON.SET` + `EXPIRE` for
+    JSON
+
+  3.x sends a separate `EXPIRE` after the write. 4.x never does (§2.14).
 - **Binary data.** `BinaryType` columns are written as raw bytes rather than `String.valueOf`. Resolves
   [#205](https://github.com/RedisLabs/spark-redis/issues/205),
   [#304](https://github.com/RedisLabs/spark-redis/issues/304),
@@ -377,6 +384,8 @@ Further read behaviour:
 - **DStreams** (`RedisInputDStream` and the list and stream receivers) are **removed** in 4.x. Spark has
   deprecated DStreams since 3.4 and calls them legacy, and they cannot be used through Spark Connect. They
   remain available in the 3.x maintenance branch.
+- **Streams are the only streaming source and sink.** There is no list (`BLPOP`), Pub/Sub or
+  keyspace-notification source (§2.14).
 
 ### 2.6 SQL, catalog and functions
 
@@ -430,8 +439,8 @@ spark.sql.catalog.redis.read.from    = replica-preferred
 | string / numeric / boolean | UTF-8 text (unchanged from 3.x) | native JSON |
 | date / timestamp / timestamp_ntz | ISO-8601 by default; `timestamp.format = iso \| epoch_millis` | same |
 | binary | raw bytes | base64 |
-| struct / array / map | not supported. Use `json`, or `nested.encoding = json` to store a JSON string in the field | native |
-| `VARIANT` | JSON string | native document (round-trips losslessly) |
+| struct / array / map | not supported; use the `json` model | native |
+| `VARIANT` | not supported; use the `json` model | native document (round-trips losslessly) |
 | `array<float>` tagged as a vector | FLOAT32 blob | JSON array |
 
 Related behaviour:
@@ -458,6 +467,10 @@ Related behaviour:
   default `spark.redact.regex` does not match `auth`, so **today the password is shown in the Spark UI
   Environment tab**. Passwords, tokens and URLs containing credentials are also redacted in our own logs.
   Today `maskPassword` masks only `auth`, not URLs.
+- **Authentication uses ACL users only.** Connections send `HELLO 3 AUTH <user> <password>`, and `user`
+  defaults to `default`. The docs publish least-privilege ACL rules for each role (batch reader, batch
+  writer, stream consumer, catalog admin), so nobody needs to run the connector as an `+@all` user
+  (§2.14).
 - **TLS** is configured per connection (truststore, keystore, mTLS, SNI) rather than through JVM-wide
   `javax.net.ssl.*` properties (resolves [#305](https://github.com/RedisLabs/spark-redis/issues/305)).
 - **Token-based authentication** with automatic re-authentication, for example Entra ID for Azure Managed
@@ -487,6 +500,7 @@ Related behaviour:
 | RDD API (`sc.fromRedisKV`, `toRedisHASH`, …) | Kept in `compat`, reimplemented on `core`, and deprecated |
 | DStreams | Removed; available only on `branch-3.x` |
 | RESP2 wire protocol (Jedis 3's default) | RESP3 only. Stored data is unchanged, because the protocol only affects the wire. Servers and proxies that cannot negotiate `HELLO 3` are not supported |
+| Legacy commands (`HMSET` + `EXPIRE`, `SETEX`, `SMEMBERS`, `BLPOP`, `INFO` parsing) | Their modern replacements (§2.14). The stored data and its TTLs are the same; only the commands sent differ |
 | Structured Streaming source offsets | A one-time restart from the stored `stream.offsets` is required. Checkpoints from 3.x are **not** compatible |
 
 The **`branch-3.x` maintenance line** targets Spark 3.5 and Scala 2.12/2.13. It receives security fixes,
@@ -521,6 +535,23 @@ is a bridge for users who cannot move to Spark 4 yet. It is not a supported targ
 - Sign releases and attach a CycloneDX SBOM. Python wheels go to PyPI using trusted publishing (OIDC).
 - `4.0.0` is the first release for Spark 4. Release Drafter, which the repo already uses, writes release
   notes from PR labels.
+
+
+### 2.14 Modern Redis only: legacy patterns we do not use
+
+Redis keeps legacy commands working for backward compatibility, even after it has shipped strictly better
+replacements. The 4.x connector uses **only the replacements**. It never sends the legacy form, and no option
+brings one back. A hook and a CI check enforce this (`roadmap.md`, Phase 0).
+
+| Legacy pattern | Where 3.x uses it | What 4.x uses instead |
+|---|---|---|
+| `KEYS`, and whole-collection reads such as `SMEMBERS`, `HGETALL` and `LRANGE 0 -1` | `RedisRDD.scala` (`smembers`, `hgetAll`, `lrange`) and schema inference | `SCAN … TYPE` for keys. `SSCAN`, `ZSCAN` and `HSCAN` for collections. `LRANGE` in bounded chunks. `HMGET` of the schema's fields for row-shaped hashes |
+| Password-only `AUTH <password>` with `requirepass` | Test setup (`Makefile`) | ACL users. Every connection authenticates with `HELLO 3 AUTH <user> <password>`. `user` defaults to `default`, so a server configured only with `requirepass` still works, because that password belongs to the `default` user. The docs ship least-privilege ACL rules for reader, writer and stream-consumer roles. Tests use named ACL users |
+| Lua `EVAL` / `EVALSHA` | Not used today | Not used. Native atomic commands cover every atomic step we need: `HSETEX`, `SET IFEQ`, `DELEX`, and `MULTI`/`EXEC` on a single key. If a later feature needs server-side logic, it uses Redis Functions (`FUNCTION LOAD` / `FCALL`) |
+| Lists (`BLPOP`) and Pub/Sub used as queues | `RedisInputDStream` (`blpop`) | Streams are the only streaming source and sink. Lists remain a batch table model. There is no list, Pub/Sub or keyspace-notification streaming |
+| Separate commands where one atomic command exists: `SET` then `EXPIRE`, `HMSET` then `EXPIRE`, `SETEX`, `SETNX`, `GETSET` | `HashRedisPersistence`, `BinaryRedisPersistence`, `redisFunctions.scala` (`hmset`, `setex`, `expire`) | One atomic command where Redis has one: `SET … EX/PX/NX/XX/GET`, `MSETEX`, and `HSETEX` for field TTLs. Where Redis has no single command, `MULTI`/`EXEC` on the one key: `HSET` + `EXPIRE` for a row TTL, or `JSON.SET` + `EXPIRE`. A value and its TTL are never written in separate, non-atomic steps |
+| Older command forms that have modern replacements: `HMSET`, `ZRANGEBYSCORE`, `DEL` on large keys, `CLUSTER SLOTS`, parsing `INFO` text for topology | `RedisRDD.scala`, `RedisSourceRelation.scala`, `RedisConfig.scala` | `HSET`; `ZRANGE … BYSCORE` or `ZSCAN`; `UNLINK`; `CLUSTER SHARDS`; `ROLE` and Sentinel |
+| JSON or serialized blobs stored in string keys or hash fields | Not used for rows today, but the `binary` model stores rows the same way using Java serialization | The `json` model. No mode writes JSON or a serialized blob into a string or a hash field. Only `spark-redis-migrate` reads the `binary` model, to move data off it |
 
 ---
 
