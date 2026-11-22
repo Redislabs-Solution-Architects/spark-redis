@@ -47,7 +47,7 @@ A Spark connector built for today's platforms, the one we would design if we sta
 | ML and AI engineers | Feature-store serving (Spark → Redis), embedding and vector ingestion, hybrid search export |
 | Streaming engineers | Redis Streams as a reliable source and sink, low-latency pipelines |
 | Platform teams | Databricks, EMR, Dataproc, Spark on Kubernetes; Redis Open Source, Redis Software, Redis Cloud |
-| Existing spark-redis 3.x users | Upgrade without losing data or rewriting every job |
+| Existing spark-redis 3.x users | Upgrade without losing data, with a clear guide to the code changes |
 
 ## Constraints
 
@@ -80,7 +80,9 @@ A Spark connector built for today's platforms, the one we would design if we sta
 ## Non-goals for 4.0
 
 - A DStream API. Spark deprecated DStreams, so we will drop them and point users to Structured Streaming.
-- Full parity for the RDD API across every data type. We keep a thin RDD layer for compatibility only.
+- The RDD API (`sc.fromRedis*` / `toRedis*`) and aliases for 3.x option names. 4.x is DataFrame and SQL only.
+  An old option name fails with a message naming its replacement, and a migration guide maps every RDD
+  function to the table model that replaces it. Data written by 3.x stays readable.
 - Redis Stack 6.x/7.x module versions on servers that are past end of life.
 
 ## Open questions for the product owner

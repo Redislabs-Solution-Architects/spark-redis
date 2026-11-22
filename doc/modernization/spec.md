@@ -142,14 +142,16 @@ flowchart LR
 |---|---|---|
 | `core` | Config, connections, topology, capability probe, table-model codecs, retry and backoff, metrics | Jedis, slf4j |
 | `sql` | DataSource V2 provider, catalog, scan and write builders, streaming source and sink, SQL functions | `core`, Spark SQL (`provided`) |
-| `compat` | 3.x option aliases, the legacy RDD API (deprecated), and the schema and binary-model migration tool | `core`, `sql` |
 | `python` | The `spark-redis` pip package: option helpers, docs, and a pure-Python fallback data source | PySpark, redis-py |
 | `it` | Testcontainers integration tests, golden-layout compatibility tests, benchmarks | all |
 
+There is no compatibility module. The migration tool, `spark-redis-migrate`, lives on `branch-3.x`, because it
+needs the Scala 2.12 classpath to read 3.x's Java-serialized data (§2.11).
+
 - **New package:** `com.redis.spark`. New code is not added under `org.apache.spark.*`. The old package
-  was used to reach `private[sql]` APIs, which is exactly the coupling we are removing. A thin
-  `org.apache.spark.sql.redis.DefaultSource` alias stays so that existing `format("org.apache.spark.sql.redis")`
-  jobs keep working.
+  was used to reach `private[sql]` APIs, which is exactly the coupling we are removing. The old
+  format name is not kept as an alias. A stub `org.apache.spark.sql.redis.DefaultSource` fails with a
+  message telling the user to switch to `format("redis")`.
 - **Build.** Maven multi-module with the Maven Wrapper; the stale sbt 0.13 files are deleted. Spark now
   ships a new minor line every quarter and adds connector interfaces in minors (4.1, 4.2 and 4.3 each added
   some). We therefore publish **one artifact per supported Spark minor**, following Iceberg's
@@ -230,7 +232,7 @@ the work be split into parallel lanes (see `roadmap.md`).
 | `stream` | Stream | one entry = one row; `_id` metadata column | `XRANGE`, split by ID range | `XADD`, with `IDMP` for exactly-once | `IDMP`: 8.6 |
 | `timeseries` | TimeSeries | `(_key, timestamp, value, labels…)` | `TS.MRANGE FILTER`, with aggregation pushdown | `TS.MADD`, with `TS.CREATE` labels | `TS.NRANGE`: 8.10 |
 | `vectorset` | Vector Set | `(_key, element, vector, attributes)` | `VSIM` KNN reads (with `FILTER` on attributes); full export is an open item, because there is no confirmed enumeration command | `VADD` with quantization and `SETATTR` | — |
-| `zset` / `list` / `set` | Sorted set, list, set | one member = one row (`_key`, `member`, `score` or `index`) | `ZSCAN` (or `ZRANGE … BYSCORE` when a score range is pushed down) / `LRANGE` in bounded chunks / `SSCAN` | `ZADD` / `RPUSH` / `SADD` | — |
+| `zset` / `list` / `set` | Sorted set, list, set | one member = one row (`_key`, `member`, `score` or `index`) | `ZSCAN` (or `ZRANGE … BYSCORE` when a score range is pushed down) / `LRANGE` in bounded chunks / `SSCAN` | `ZADD` / `RPUSH` (with `LTRIM` in the same `MULTI`/`EXEC` when `list.max.length` caps the list) / `SADD` | — |
 | `binary` (legacy) | String | 3.x Java-serialized rows | none in the connector; only `spark-redis-migrate` reads it, to move the data off | — | — |
 
 Two smaller additions:
@@ -285,7 +287,7 @@ Further read behaviour:
 - **Metadata columns** (`SupportsMetadataColumns`): `_key`, `_ttl` (remaining milliseconds, from `PTTL` or
   `HPTTL`), `_slot`, `_id` (streams) and `_score` (search).
 - **Partition count.** This is derived from per-slot key counts reported by `CLUSTER SLOT-STATS` (Redis 8.2)
-  and a target number of keys per partition,
+  and a target number of keys per partition (`read.keys.per.partition`),
   replacing the fixed default `partitions.number = 3` (resolves
   [#366](https://github.com/RedisLabs/spark-redis/issues/366) and
   [#300](https://github.com/RedisLabs/spark-redis/issues/300)).
@@ -344,7 +346,7 @@ Further read behaviour:
   [#320](https://github.com/RedisLabs/spark-redis/issues/320) and
   [#120](https://github.com/RedisLabs/spark-redis/issues/120).
 - **Failures are loud.** Any error reply fails the task, and Spark retries it. Pipelines are sized by
-  command count *and* by bytes. Silent partial writes are treated as a bug class with dedicated tests.
+  command count *and* by bytes (`pipeline.max.commands`, `pipeline.max.bytes`). Silent partial writes are treated as a bug class with dedicated tests.
   Resolves [#347](https://github.com/RedisLabs/spark-redis/issues/347),
   [#375](https://github.com/RedisLabs/spark-redis/issues/375),
   [#359](https://github.com/RedisLabs/spark-redis/issues/359),
@@ -359,7 +361,7 @@ Further read behaviour:
   which is the single source of truth. Today's consumer-group `SETID` dance goes away.
 - **`stream.read.mode = range` (default).** Reads use `XRANGE` with an exclusive start, bounded by the end
   offset, so every batch replays deterministically. Entry IDs start with a millisecond timestamp, so one
-  stream can be split into several partitions by time range. Resolves
+  stream can be split into several partitions by time range (`stream.partitions`). Resolves
   [#224](https://github.com/RedisLabs/spark-redis/issues/224).
 - **`stream.read.mode = group`**, for sharing a stream with other consumers. It reads with `XREADGROUP`
   (without `NOACK`) and acknowledges after Spark commits, using `XACK`, or `XACKDEL` (8.2+) to acknowledge and delete in one step. When a Spark task fails, its claimed entries are released straight away with `XNACK` (8.8+) rather than waiting for the idle timeout. It
@@ -428,8 +430,8 @@ spark.sql.catalog.redis.read.from    = replica-preferred
 ### 2.7 Python and Spark Connect
 
 - **Every feature is reachable through options and SQL.** That makes it work the same way from PySpark,
-  Spark SQL, and the Spark Connect Python and Scala clients, with no Python-side JVM bridging. The RDD API
-  is not reachable from Spark Connect, which is one more reason to make the DataFrame API the main one
+  Spark SQL, and the Spark Connect Python and Scala clients, with no Python-side JVM bridging. 4.x has no
+  RDD API, and Spark Connect could not reach one anyway. The DataFrame and SQL API is the only one
   (resolves [#379](https://github.com/RedisLabs/spark-redis/issues/379),
   [#352](https://github.com/RedisLabs/spark-redis/issues/352),
   [#278](https://github.com/RedisLabs/spark-redis/issues/278) and
@@ -474,7 +476,7 @@ Related behaviour:
   setting `host` silently drops the session's auth settings (resolves
   [#213](https://github.com/RedisLabs/spark-redis/issues/213) and
   [#249](https://github.com/RedisLabs/spark-redis/issues/249)).
-- **Secrets.** `spark.redis.auth` is renamed `spark.redis.password`, and `auth` is kept as an alias. Spark's
+- **Secrets.** `spark.redis.auth` is renamed `spark.redis.password`, and `auth` is no longer accepted; it fails with a message naming `password`. Spark's
   default `spark.redact.regex` does not match `auth`, so **today the password is shown in the Spark UI
   Environment tab**. Passwords, tokens and URLs containing credentials are also redacted in our own logs.
   Today `maskPassword` masks only `auth`, not URLs.
@@ -503,16 +505,36 @@ Related behaviour:
 
 | 3.x behaviour | 4.x behaviour |
 |---|---|
-| `format("org.apache.spark.sql.redis")` | Still works; it is an alias for `format("redis")` |
-| Options `table`, `keys.pattern`, `key.column`, `model`, `ttl`, `infer.schema`, `partitions.number`, `filter.keys.by.type`, `max.pipeline.size`, `scan.count`, `iterator.grouping.size`, `host`, `port`, `user`, `auth`, `dbNum`, `timeout`, `ssl` | All accepted. Renamed ones log a deprecation warning once |
+| `format("org.apache.spark.sql.redis")` | Fails at planning with a message to use `format("redis")` |
+| 3.x option names | Names whose meaning is unchanged keep working. Renamed or removed names fail at planning with the replacement (see *Renamed and removed options* below). There are no aliases |
 | `hash` model layout `<table>:<id>`, values stored as strings | **Unchanged**, and guarded by golden-layout tests |
 | `_spark:<table>:schema` (Java-serialized `StructType`) | Read once and rewritten as a JSON catalog entry by `spark-redis-migrate`. Java-serialized Scala 2.12 objects cannot be read reliably on 2.13, so the tool runs on the 3.x classpath |
-| `binary` model (Java-serialized rows) | Read-only through `spark-redis-migrate --to json|hash`; no new writes |
-| RDD API (`sc.fromRedisKV`, `toRedisHASH`, …) | Kept in `compat`, reimplemented on `core`, and deprecated |
+| `binary` model (Java-serialized rows) | Not readable by the connector. `spark-redis-migrate --to json|hash` moves the data |
+| RDD API (`sc.fromRedisKV`, `toRedisHASH`, …) | **Removed.** Jobs move to `format("redis")`; the migration guide maps every function to its table model. Kept only on `branch-3.x` |
 | DStreams | Removed; available only on `branch-3.x` |
 | RESP2 wire protocol (Jedis 3's default) | RESP3 only. Stored data is unchanged, because the protocol only affects the wire. Servers and proxies that cannot negotiate `HELLO 3` are not supported |
 | Legacy commands (`HMSET` + `EXPIRE`, `SETEX`, `SMEMBERS`, `BLPOP`, `INFO` parsing) | Their modern replacements (§2.14). The stored data and its TTLs are the same; only the commands sent differ |
 | Structured Streaming source offsets | A one-time restart from the stored `stream.offsets` is required. Checkpoints from 3.x are **not** compatible |
+
+#### Renamed and removed options
+
+4.x has **no aliases**. Using any name in the left column fails at planning time with the message in the
+right column, and nothing is silently remapped.
+
+| 3.x name | What to use in 4.x |
+|---|---|
+| `host`, `port`, `ssl`, `dbNum` (and `spark.redis.host`, `.port`, `.ssl`, `.db`) | `url` / `spark.redis.url`, for example `rediss://redis.example.com:12000` |
+| `auth` / `spark.redis.auth` | `password` / `spark.redis.password` |
+| `max.pipeline.size` / `spark.redis.max.pipeline.size` | `pipeline.max.commands`, alongside the new `pipeline.max.bytes` |
+| `partitions.number` | Removed. Partitions follow slot statistics; tune them with `read.keys.per.partition` |
+| `infer.schema` | Removed. When no schema is given and no catalog entry exists, the schema is inferred automatically (§2.8) |
+| `filter.keys.by.type` | Removed. Key scans always filter by type with `SCAN … TYPE` |
+| `iterator.grouping.size`, `spark.redis.rdd.write.iterator.grouping.size` | Removed. Nothing in DSv2 needs them |
+| `model = binary` | Removed. Move the data to `json` or `hash` with `spark-redis-migrate` |
+| `stream.parallelism` | `stream.partitions`: the number of ID-range splits per stream |
+
+Everything else (`table`, `keys.pattern`, `key.column`, `model = hash`, `ttl`, `scan.count`, `user`, `timeout`,
+and the other `stream.*` options) keeps its name and meaning.
 
 The **`branch-3.x` maintenance line** targets Spark 3.5 and Scala 2.12/2.13. It receives security fixes,
 dependency bumps, the migration tool, and nothing else, until Spark 3.5's extended-LTS window closes in **November 2027**. It
@@ -522,6 +544,7 @@ is a bridge for users who cannot move to Spark 4 yet. It is not a supported targ
 
 - **One command.** `./mvnw verify -Pit` is the agent feedback loop and the CI gate. It exits non-zero on any
   failure.
+- **Renamed-option tests.** Every 3.x option name in §2.11 fails with its documented message.
 - **Protocol tests.** Connecting to a server that refuses `HELLO 3` fails with a clear RESP3 error. A
   separate test asserts that every connection the connector opens reports `resp=3` in `CLIENT INFO`.
 - **Testcontainers matrix** across every supported Redis line, in these topologies:
@@ -548,7 +571,7 @@ is a bridge for users who cannot move to Spark 4 yet. It is not a supported targ
   notes from PR labels.
 
 
-### 2.14 Modern Redis only: legacy patterns we do not use
+### 2.14 Modern only: legacy patterns and APIs we do not keep
 
 Redis keeps legacy commands working for backward compatibility, even after it has shipped strictly better
 replacements. The 4.x connector uses **only the replacements**. It never sends the legacy form, and no option
@@ -564,6 +587,19 @@ brings one back. A hook and a CI check enforce this (`roadmap.md`, Phase 0).
 | Older command forms that have modern replacements: `HMSET`, `ZRANGEBYSCORE`, `DEL` on large keys, `CLUSTER SLOTS`, parsing `INFO` text for topology | `RedisRDD.scala`, `RedisSourceRelation.scala`, `RedisConfig.scala` | `HSET`; `ZRANGE … BYSCORE` or `ZSCAN`; `UNLINK`; `CLUSTER SHARDS`; `ROLE` and Sentinel |
 | JSON or serialized blobs stored in string keys or hash fields | Not used for rows today, but the `binary` model stores rows the same way using Java serialization | The `json` model. No mode writes JSON or a serialized blob into a string or a hash field. Only `spark-redis-migrate` reads the `binary` model, to move data off it |
 
+#### Legacy Spark and connector APIs we do not keep
+
+| Legacy API | What 4.x offers instead |
+|---|---|
+| RDD API (`sc.fromRedis*`, `rdd.toRedis*`, `RedisContext`) | The DataFrame and SQL table models (§2.2). The migration guide maps every RDD function to its replacement. The RDD API cannot be reached from Spark Connect or PySpark anyway |
+| DStreams (`RedisInputDStream`, `RedisStreamingContext`) | Structured Streaming on DSv2 (§2.5) |
+| DataSource V1 (`RelationProvider`, `PrunedFilteredScan`, the internal V1 streaming `Source`) | DataSource V2 throughout |
+| 3.x option names and `spark.redis.*` keys that changed | Planning-time errors that name the replacement (§2.11). No aliases |
+| `format("org.apache.spark.sql.redis")` | `format("redis")`. A stub class at the old name fails with a message that says so |
+| The `binary` model (Java-serialized rows) | `json` or `hash`, through `spark-redis-migrate` |
+
+`branch-3.x` keeps all of these on Spark 3.5 until November 2027.
+
 ---
 
 ## 3. Risks
@@ -575,6 +611,7 @@ brings one back. A hook and a CI check enforce this (`roadmap.md`, Phase 0).
 | Upstream marks Real-Time Mode or another API experimental or changes it | Put it behind a feature flag in its own module, outside the GA support promise |
 | A proxy or managed endpoint in the path does not support RESP3 | Fail fast at connect with a RESP3-specific error. Phase 0 checks Redis Software 8.2 and Redis Cloud databases with `HELLO 3`, and the docs list any unsupported proxies |
 | Some Query Engine replies may cost more to build in RESP3 than in RESP2 | Benchmark Query Engine reads under RESP3 against the Phase 0 baseline in Phases 2 and 4b. Raise any regression upstream rather than bringing RESP2 back |
+| Jobs built on the RDD API cannot upgrade without code changes | A migration guide that maps every RDD function and old option to its 4.x replacement, golden-layout tests showing the replacement writes the same data, 4.0.0-M1 still shipping the RDD API (deprecated) so jobs can move to Spark 4 first, and `branch-3.x` until November 2027 |
 | Data written by 3.x is unreadable after upgrade | Golden-layout tests, the migration tool, and a documented one-time migration step |
 | Maintainer bandwidth (see [#393](https://github.com/RedisLabs/spark-redis/issues/393), [#384](https://github.com/RedisLabs/spark-redis/issues/384)) | Name code owners and a release manager (intent Q4). Automate version-matrix bumps |
 

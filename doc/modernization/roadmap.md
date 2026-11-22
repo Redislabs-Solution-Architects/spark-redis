@@ -17,7 +17,7 @@
 | Client | Jedis 3.9 | Jedis 8.0 |
 | Wire protocol | RESP2 | RESP3 only, with no fallback |
 | Redis commands | Some legacy forms (`HMSET` + `EXPIRE`, `SETEX`, `SMEMBERS`, `BLPOP`, `INFO` parsing, `requirepass` in tests) | Modern replacements only (spec §2.14) |
-| Spark API | DSv1 plus the internal V1 streaming `Source`, and DStreams | DSv2 throughout: catalog, pushdown, row-level ops, streaming source and sink |
+| Spark API | RDD API, DSv1 plus the internal V1 streaming `Source`, and DStreams | DataFrame and SQL only, on DSv2 throughout: catalog, pushdown, row-level ops, streaming source and sink. No RDD API and no option aliases |
 | Redis data models | strings, hashes, lists, sets, sorted sets, streams | adds JSON/`VARIANT`, Query Engine, Vector Sets, vector fields, TimeSeries and probabilistic types |
 | Clients reached | Scala and Java; PySpark for DataFrames only | adds Spark SQL catalog, Spark Connect (Python/Scala), and a pip package |
 | Release | OSSRH, which is shut down | Central Portal and PyPI |
@@ -65,7 +65,7 @@ that connector's public docs and its public distribution repo.
 | Redis 8 features | None documented | Central to the design: JSON/`VARIANT`, Query Engine, `FT.HYBRID`, Vector Sets, `HSETEX`, `SET IFEQ`, `XADD IDMP`, … (§1, §2.2–§2.5) |
 | SQL catalog and functions | None documented | `TableCatalog`, `CREATE TABLE` → `FT.CREATE`, `redis_slot()` and other functions (§2.6) |
 | Python and Spark Connect | DataFrame options from PySpark | pip package, pure-Python fallback, Connect test suite (§2.7) |
-| Migration from spark-redis 3.x | Not a goal | Option aliases, golden-layout tests, migration tool (§2.11) |
+| Migration from spark-redis 3.x | Not a goal | Golden-layout tests, renamed-option errors, migration tool and guide (§2.11) |
 
 **Where they overlap.** The Redis Connector for Spark already covers part of Phase 2: the DSv2 batch
 scaffolding, a cluster-aware client, replica reads and the hash, JSON and string write paths. It also covers
@@ -130,7 +130,7 @@ the work up to each gate, and named humans pass the gates.
   - the one verify command
   - the module map
   - "new code goes in `com.redis.spark`; nothing new under `org.apache.spark.*`"
-  - "`src/main/scala/com/redislabs/**` is frozen except for compatibility shims"
+  - "`src/main/scala/com/redislabs/**` is frozen until Phase 2 deletes it"
   - "if a test fails, fix the code, not the test"
   - capability gating, not version checks
   - no legacy Redis commands or patterns (spec §2.14)
@@ -151,7 +151,7 @@ the work up to each gate, and named humans pass the gates.
   - correctness against the spec section the PR cites
   - cluster correctness (slot grouping, `MOVED`/`ASK` handling)
   - credential leakage into logs, the Spark UI or exceptions
-  - 3.x compatibility (option aliases and golden layout)
+  - 3.x data compatibility (golden layout) and the renamed-option messages
   - capability gating has a fallback and a test
   - no legacy Redis patterns (spec §2.14)
 
@@ -218,7 +218,8 @@ the work up to each gate, and named humans pass the gates.
 2. **Golden-layout characterization tests.** For every 3.x write path (DataFrame `hash` and `binary`, every
    RDD `toRedis*`, streams), snapshot the exact keys, types, values and TTLs produced. For every read path,
    snapshot the rows returned from fixed fixtures. These become the compatibility contract that 4.x must
-   meet. They are protected by a hook.
+   meet. For RDD writes, the contract is that the DataFrame equivalent named in the migration guide writes
+   the same data. The fixtures are protected by a hook.
 3. **Legacy fixtures.** Use the current Scala 2.12 build to produce `_spark:<table>:schema` blobs and
    `binary`-model rows. The migration tool will be tested against them.
 4. **Benchmark baseline** of the current connector, for later comparison:
@@ -292,7 +293,8 @@ most-requested issue family quickly:
    - the pool moves onto `RedisClient`
    - every connection opens with `HELLO 3`: RESP3 only, with no RESP2 fallback
    - TLS hostname verification is now on by default
-5. **Remove DStreams.**
+5. **Remove DStreams, and mark the RDD API `@deprecated`.** The RDD API ships unchanged in 4.0.0-M1, so
+   existing jobs can move to Spark 4 first. Phase 2e removes it.
 6. **Per-Spark-minor artifacts** for 4.1, 4.2 and 4.3. The CI matrix is
    Spark {4.1, 4.2, 4.3} × Redis {8.2, 8.4, 8.6, 8.8, 8.10} × {standalone, cluster, TLS}, on JDK 17, with
    JDK 21 and 25 run on the newest Spark line.
@@ -321,8 +323,8 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
 **Scope:**
 
 - **2a: Foundation** (sequential; every other lane depends on it):
-  - split into `core`, `sql`, `compat` and `it` modules, under the new package `com.redis.spark`, with the
-    old `DefaultSource` alias
+  - split into `core`, `sql` and `it` modules, under the new package `com.redis.spark`, with a stub at the
+    old `DefaultSource` name that tells users to switch to `format("redis")`
   - the `RedisExecutor` interface on Jedis 8
   - topology from `CLUSTER SHARDS`, refreshed on `MOVED`/`ASK`
   - **Sentinel** and **replica reads**
@@ -350,8 +352,9 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
 - **2e: Catalog and migration:**
   - JSON catalog entries
   - `spark-redis-migrate`, which runs on `branch-3.x` and rewrites schema blobs and `binary` rows
-  - option aliases
-  - the RDD API reimplemented on `core` and deprecated
+  - the renamed-option errors (spec §2.11), with no aliases
+  - removal of the RDD API and the old `org.apache.spark.sql.redis` package
+  - the 3.x → 4.x migration guide, mapping every RDD function and 3.x option to its replacement
 - **Cross-cutting:** custom metrics, structured logging (MDC), and the `EXPLAIN` strategy string.
 
 **Issues closed:**
@@ -365,6 +368,8 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
 - **Silent data loss:** #347, #375, #359, #267, #197
 - **Configuration:** #349, #213, #249, #305, #398
 - **Types and schema:** #358, #350
+- **RDD API questions:** #396, #397, #360, #261, #214, #211, #319. Each is answered by the table model
+  that replaces the RDD function
 
 **Exit criteria (proof):**
 
