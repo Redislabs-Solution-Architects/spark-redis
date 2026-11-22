@@ -23,25 +23,16 @@ The legacy Java-serialized blobs are in `../legacy/`.
 ## Running
 
 ```bash
-JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home mvn -B test \
-  -Dsuites='com.redislabs.provider.redis.golden.standalone.WriteLayoutStandaloneSuite'
+JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B verify -Dredis.image=redis:8.2 \
+  -DwildcardSuites=com.redislabs.provider.redis.golden
 ```
 
 A mismatch fails with the differences and writes what the test saw to
 `target/golden-actual/<kind>/<scenario>.<topology>.json`.
 
-**Regenerating (owner only):** set the system property `golden.update=true` in the test JVM. When standalone and
-cluster run in the same update, the second compares with what the first wrote, so both topologies must agree.
-
-The scalatest plugin only forwards the system properties listed in `pom.xml` to the test JVM. The pom forwards
-`redis.image`, so `-Dredis.image=redis:8.6` works on the `mvn` command line. It does not forward `golden.update` yet,
-so until it does, pass that one through the environment, which the forked JVM inherits:
-
-```bash
-JAVA_TOOL_OPTIONS="-Dgolden.update=true" mvn -B test -Dredis.image=redis:8.2 -Dsuites='...'
-```
-
-Regenerate `write/` before `../legacy/`: the legacy files are copied from the write fixtures.
+**Regenerating (owner only):** add `-Dgolden.update=true` to the command above. When standalone and cluster run in
+the same update, the second compares with what the first wrote, so both topologies must agree. The legacy files in
+`../legacy/` are frozen: an update only writes the ones that are missing, from the write fixtures.
 
 ## Snapshot format (`spark-redis-keyspace-snapshot/1`)
 

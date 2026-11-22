@@ -41,10 +41,11 @@ are one such capture.
 
 `com.redislabs.provider.redis.golden.LegacyFixturesSuite` checks that:
 
-- each file still equals the value in its golden write fixture;
+- each `binary` row equals its golden write capture byte for byte, and each schema blob decodes to the same
+  `StructType` as its capture;
 - every schema blob deserializes to the expected `StructType` with the current build;
 - every row deserializes to the expected values;
 - the 3.x connector reads `schema-all-types.bin` with the two all-types rows back as a `binary` model table.
 
-The files are regenerated from the write fixtures, by the owner only, with `-Dgolden.update=true` (see
-`../golden/README.md`).
+The files are frozen. An update with `-Dgolden.update=true` only writes the missing files, from the write fixtures;
+to capture one again, the owner deletes it first (see `../golden/README.md`).
