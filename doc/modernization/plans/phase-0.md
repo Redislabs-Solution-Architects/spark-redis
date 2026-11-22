@@ -1,8 +1,8 @@
 # Phase 0 plan: ground truth and guardrails
 
 > Stage: **Build**, the `plan.md` for Phase 0 (AI-native SDLC playbook). Inputs: [`roadmap.md`](../roadmap.md)
-> (Phase 0) and [`spec.md`](../spec.md) (§2.12 verification, §2.14 no legacy patterns). Status: **draft, awaiting
-> the owner's approval**. Work happens on `spike/phase-0` in the `Redislabs-Solution-Architects/spark-redis`
+> (Phase 0) and [`spec.md`](../spec.md) (§2.12 verification, §2.14 no legacy patterns). Status: **approved by the
+> owner on 2026-11-22**. Work happens on `spike/phase-0` in the `Redislabs-Solution-Architects/spark-redis`
 > fork, cut from `docs/modernization-roadmap`.
 
 ## Goal
