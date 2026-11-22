@@ -1,6 +1,6 @@
 # Spec: spark-redis 4.x
 
-> Stage: **Design** (AI-native SDLC playbook). Input: [`intent.md`](intent.md). Status: **draft, awaiting product-owner and tech-lead review**.
+> Stage: **Design** (AI-native SDLC playbook). Input: [`intent.md`](intent.md). Status: **development spike**; decisions are recorded in [`intent.md`](intent.md).
 > Next artifact: [`roadmap.md`](roadmap.md), then one `plan.md` per phase, written in plan mode from this spec.
 
 This spec describes the connector we would build today if we were starting from scratch. The design is fixed
@@ -46,8 +46,9 @@ second minor and the last minor of each major) get 5 years
 | 8.0 | 2025-05-02 | EOL 2026-12-01; no patch since Feb 2026 | Not supported |
 | 7.4, 7.2 | 2024, 2023 | Extended, security fixes only, until 2029-12-01 | Not supported (intent Q6) |
 
-- **Redis Software 8.2** (bundling database versions 6.2 to 8.6) and **Redis Cloud** (offering 8.2, 8.4
-  and 8.6 among others) are certified for databases at 8.2 or later.
+- **Redis Software and Redis Cloud:** only the **latest** Redis Software release and the latest database
+  version Redis Cloud offers are certified. Today that is Redis Software 8.2 (default database version 8.6)
+  and Redis Cloud 8.6. Older managed versions may work, but they are not tested.
 - **Java client:** Jedis 8.0.x (8.0.2, October 2026), which supports Redis 7.2 through 8.10.
 - **Wire protocol: RESP3 only.** Every connection opens with `HELLO 3`. There is no RESP2 fallback and no
   option to choose RESP2. Every supported Redis line has spoken RESP3 since 6.0, so the floor costs
@@ -155,14 +156,14 @@ needs the Scala 2.12 classpath to read 3.x's Java-serialized data (§2.11).
 - **Build.** Maven multi-module with the Maven Wrapper; the stale sbt 0.13 files are deleted. Spark now
   ships a new minor line every quarter and adds connector interfaces in minors (4.1, 4.2 and 4.3 each added
   some). We therefore publish **one artifact per supported Spark minor**, following Iceberg's
-  `iceberg-spark-runtime-<spark>_<scala>` convention, for example `spark-redis-spark-4.2_2.13`. All
+  `iceberg-spark-runtime-<spark>_<scala>` convention, for example `com.redis:spark-redis-spark-4.2_2.13`. All
   artifacts share one source tree, and thin `spark-4.x` overlay source sets hold anything that needs a newer
   interface. Adding a Spark line means adding an overlay and a CI matrix entry. Dropping one means deleting
   them.
 
 ### 2.1 Client layer
 
-- **Recommendation: Jedis 8** (`RedisClient` / `RedisClusterClient`; Jedis 8 removes the `UnifiedJedis`
+- **Client: Jedis 8** (`RedisClient` / `RedisClusterClient`; Jedis 8 removes the `UnifiedJedis`
   constructors and deprecates `JedisCluster`), used behind an internal `RedisExecutor` interface so that a Lettuce implementation could be added later without touching
   `sql`. We chose Jedis because:
   1. JSON, Query Engine, TimeSeries, probabilistic and Vector Set commands are already built in.
@@ -220,14 +221,15 @@ needs the Scala 2.12 classpath to read 3.x's Java-serialized data (§2.11).
 
 ### 2.2 Table models
 
-The `model` option chooses how a Spark row maps onto Redis. Every model implements one interface
+The `model` option chooses how a Spark row maps onto Redis, and it defaults to **`json`**. When a table has a
+catalog entry, the entry's model wins, so tables migrated from 3.x keep `hash`. Every model implements one interface
 (`RedisTableModel`: `encode`, `decode`, `readPlan`, `writePlan`, `capabilities`). That is the seam that lets
 the work be split into parallel lanes (see `roadmap.md`).
 
 | `model` | Redis type | Row shape | Read path | Write path | Needs more than the 8.2 floor |
 |---|---|---|---|---|---|
-| `hash` (default) | Hash | one hash = one row | `HMGET` of the schema's fields, narrowed further by column pruning | `HSET`; `HSETEX` for per-field TTL; `HIMPORT` for bulk loads | `HIMPORT`: 8.10, Open Source only |
-| `json` | JSON | one document = one row; nested `struct`, `array`, `map` and `VARIANT` columns | `JSON.MGET` grouped by slot; JSONPath projection | `JSON.SET` / `JSON.MSET`; `JSON.MERGE` for partial updates | — |
+| `hash` | Hash | one hash = one row | `HMGET` of the schema's fields, narrowed further by column pruning | `HSET`; `HSETEX` for per-field TTL; `HIMPORT` for bulk loads | `HIMPORT`: 8.10, Open Source only |
+| `json` (default) | JSON | one document = one row; nested `struct`, `array`, `map` and `VARIANT` columns | `JSON.MGET` grouped by slot; JSONPath projection | `JSON.SET` / `JSON.MSET`; `JSON.MERGE` for partial updates | — |
 | `string` | String | `_key`, `value` (string or binary) | `MGET` grouped by slot | `SET`; `MSETEX` for batches with TTL | `MSETEX`: 8.4 |
 | `stream` | Stream | one entry = one row; `_id` metadata column | `XRANGE`, split by ID range | `XADD`, with `IDMP` for exactly-once | `IDMP`: 8.6 |
 | `timeseries` | TimeSeries | `(_key, timestamp, value, labels…)` | `TS.MRANGE FILTER`, with aggregation pushdown | `TS.MADD`, with `TS.CREATE` labels | `TS.NRANGE`: 8.10 |
@@ -294,6 +296,17 @@ Further read behaviour:
 
 ### 2.4 Write path
 
+- **Keys are deterministic, so replays are safe.** Every row's key comes from the data, never from a
+  random number:
+  - `key.column` names the column that holds the key, and the table's prefix is added in front.
+  - `key.generate = content-hash` is for data with no natural key. It derives the key from a 128-bit digest
+    (for example XXH3-128) of the row's canonical encoding, which is defined by the connector, not by
+    Spark's internal row format. Identical rows map to the same key and collapse into one, and the docs say
+    so.
+
+  A write with neither fails at planning. 3.x generated a random UUID key in that case, so a Spark task
+  retry or a replayed micro-batch wrote the same rows again under new keys. With deterministic keys, a
+  retry or replay rewrites the same keys, which is what makes the sink promise in §2.5 true.
 - **Distribution.** The writer implements `RequiresDistributionAndOrdering`, clustered by
   `redis_slot(_key)`. Each task then writes to one shard, which means fewer connections, fuller pipelines
   and no cross-shard fan-out. This can be turned off with `write.distribution = none`. Resolves
@@ -386,8 +399,8 @@ Further read behaviour:
 
 **Sinks:**
 
-- **Every table model is also a streaming sink.** Key-value upserts are idempotent, so replaying a batch is
-  safe and gives effectively exactly-once results.
+- **Every table model is also a streaming sink.** Keys are always deterministic (§2.4), so upserts are
+  idempotent: replaying a batch rewrites the same keys and gives effectively exactly-once results.
 - **`model = stream` sink.** Writes with `XADD`. Delivery is exactly-once when the server supports
   idempotent producers (`XADD IDMP`, 8.6+). The producer ID is derived from `(queryId, partition)` and the
   sequence number from `(batchId, row)`. Note that IDMP has a known limitation with AOF when
@@ -410,7 +423,8 @@ spark.sql.catalog.redis.url          = rediss://default:${secret}@redis-12000.ex
 spark.sql.catalog.redis.read.from    = replica-preferred
 ```
 
-- **Namespaces** are connection profiles or logical DBs. This replaces the hand-built multi-cluster setup
+- **Namespaces** are connection profiles. Numbered logical databases (`SELECT`) are not supported (§2.14).
+  This replaces the hand-built multi-cluster setup
   in `doc/cluster.md`.
 - **Tables** are catalog entries plus discovered Query Engine indexes.
 - **`CREATE TABLE redis.app.users (…) USING redis TBLPROPERTIES (model='json', prefix='user:', index='true')`**
@@ -471,7 +485,8 @@ Related behaviour:
 ### 2.9 Configuration and security
 
 - **One URL option.** `spark.redis.url`, or `url` on a single source, accepts `redis://`, `rediss://` and
-  `redis-sentinel://` (resolves [#349](https://github.com/RedisLabs/spark-redis/issues/349)). Named
+  `redis-sentinel://`, and rejects a database number in the path (§2.14) (resolves
+  [#349](https://github.com/RedisLabs/spark-redis/issues/349)). Named
   profiles use `spark.redis.<profile>.*`. A source-level option overrides **only that setting**: today,
   setting `host` silently drops the session's auth settings (resolves
   [#213](https://github.com/RedisLabs/spark-redis/issues/213) and
@@ -508,6 +523,8 @@ Related behaviour:
 | `format("org.apache.spark.sql.redis")` | Fails at planning with a message to use `format("redis")` |
 | 3.x option names | Names whose meaning is unchanged keep working. Renamed or removed names fail at planning with the replacement (see *Renamed and removed options* below). There are no aliases |
 | `hash` model layout `<table>:<id>`, values stored as strings | **Unchanged**, and guarded by golden-layout tests |
+| `hash` as the default model | The default is now `json`. Tables migrated with `spark-redis-migrate` keep `model = hash` in their catalog entry. A 3.x job that relied on the default must set `model = hash`. If a table has no catalog entry and no `model`, and its prefix already holds hashes, the job fails at planning and says so |
+| Random UUID keys when `key.column` is not set | Fails at planning: set `key.column` or `key.generate = content-hash` (§2.4) |
 | `_spark:<table>:schema` (Java-serialized `StructType`) | Read once and rewritten as a JSON catalog entry by `spark-redis-migrate`. Java-serialized Scala 2.12 objects cannot be read reliably on 2.13, so the tool runs on the 3.x classpath |
 | `binary` model (Java-serialized rows) | Not readable by the connector. `spark-redis-migrate --to json|hash` moves the data |
 | RDD API (`sc.fromRedisKV`, `toRedisHASH`, …) | **Removed.** Jobs move to `format("redis")`; the migration guide maps every function to its table model. Kept only on `branch-3.x` |
@@ -523,7 +540,8 @@ right column, and nothing is silently remapped.
 
 | 3.x name | What to use in 4.x |
 |---|---|
-| `host`, `port`, `ssl`, `dbNum` (and `spark.redis.host`, `.port`, `.ssl`, `.db`) | `url` / `spark.redis.url`, for example `rediss://redis.example.com:12000` |
+| `host`, `port`, `ssl` (and `spark.redis.host`, `.port`, `.ssl`) | `url` / `spark.redis.url`, for example `rediss://redis.example.com:12000` |
+| `dbNum` / `spark.redis.db` | Removed. Numbered logical databases are not supported; use a separate Redis database and connection profile |
 | `auth` / `spark.redis.auth` | `password` / `spark.redis.password` |
 | `max.pipeline.size` / `spark.redis.max.pipeline.size` | `pipeline.max.commands`, alongside the new `pipeline.max.bytes` |
 | `partitions.number` | Removed. Partitions follow slot statistics; tune them with `read.keys.per.partition` |
@@ -534,7 +552,8 @@ right column, and nothing is silently remapped.
 | `stream.parallelism` | `stream.partitions`: the number of ID-range splits per stream |
 
 Everything else (`table`, `keys.pattern`, `key.column`, `model = hash`, `ttl`, `scan.count`, `user`, `timeout`,
-and the other `stream.*` options) keeps its name and meaning.
+and the other `stream.*` options) keeps its name and meaning. Note that the *default* model is now `json`
+(see the table above).
 
 The **`branch-3.x` maintenance line** targets Spark 3.5 and Scala 2.12/2.13. It receives security fixes,
 dependency bumps, the migration tool, and nothing else, until Spark 3.5's extended-LTS window closes in **November 2027**. It
@@ -545,6 +564,8 @@ is a bridge for users who cannot move to Spark 4 yet. It is not a supported targ
 - **One command.** `./mvnw verify -Pit` is the agent feedback loop and the CI gate. It exits non-zero on any
   failure.
 - **Renamed-option tests.** Every 3.x option name in §2.11 fails with its documented message.
+- **Deterministic-key tests.** Retrying a write task or replaying a micro-batch leaves exactly the same set
+  of keys.
 - **Protocol tests.** Connecting to a server that refuses `HELLO 3` fails with a clear RESP3 error. A
   separate test asserts that every connection the connector opens reports `resp=3` in `CLIENT INFO`.
 - **Testcontainers matrix** across every supported Redis line, in these topologies:
@@ -564,9 +585,13 @@ is a bridge for users who cannot move to Spark 4 yet. It is not a supported targ
 
 ### 2.13 Release engineering
 
-- Publish to **Maven Central through the Central Portal**. OSSRH (`oss.sonatype.org`), which the current
-  workflow uses, has been shut down.
-- Sign releases and attach a CycloneDX SBOM. Python wheels go to PyPI using trusted publishing (OIDC).
+- **GitHub Actions** builds, signs and publishes every release from the fork. The jars go to **GitHub
+  Packages** (Maven) and are attached to a **GitHub Release**, together with a CycloneDX SBOM. OSSRH
+  (`oss.sonatype.org`), which the current workflow targets, has been shut down.
+- Resolving from GitHub Packages needs a GitHub token, even for public packages. The GitHub Release assets
+  are a download that needs no token.
+- **Maven Central** (through the Central Portal) and **PyPI** wait for an official release, after the
+  spike. Both can be added to the same GitHub Actions workflow, with PyPI using trusted publishing (OIDC).
 - `4.0.0` is the first release for Spark 4. Release Drafter, which the repo already uses, writes release
   notes from PR labels.
 
@@ -585,6 +610,7 @@ brings one back. A hook and a CI check enforce this (`roadmap.md`, Phase 0).
 | Lists (`BLPOP`) and Pub/Sub used as queues | `RedisInputDStream` (`blpop`) | Streams are the only streaming source and sink. Lists remain a batch table model. There is no list, Pub/Sub or keyspace-notification streaming |
 | Separate commands where one atomic command exists: `SET` then `EXPIRE`, `HMSET` then `EXPIRE`, `SETEX`, `SETNX`, `GETSET` | `HashRedisPersistence`, `BinaryRedisPersistence`, `redisFunctions.scala` (`hmset`, `setex`, `expire`) | One atomic command where Redis has one: `SET … EX/PX/NX/XX/GET`, `MSETEX`, and `HSETEX` for field TTLs. Where Redis has no single command, `MULTI`/`EXEC` on the one key: `HSET` + `EXPIRE` for a row TTL, or `JSON.SET` + `EXPIRE`. A value and its TTL are never written in separate, non-atomic steps |
 | Older command forms that have modern replacements: `HMSET`, `ZRANGEBYSCORE`, `DEL` on large keys, `CLUSTER SLOTS`, parsing `INFO` text for topology | `RedisRDD.scala`, `RedisSourceRelation.scala`, `RedisConfig.scala` | `HSET`; `ZRANGE … BYSCORE` or `ZSCAN`; `UNLINK`; `CLUSTER SHARDS`; `ROLE` and Sentinel |
+| Numbered logical databases (`SELECT`, `dbNum`) | `RedisConfig.scala` (`dbNum`), `spark.redis.db` | One Redis database per connection profile. Redis Cluster supports only database 0, and on Redis Software and Redis Cloud each database is its own endpoint |
 | JSON or serialized blobs stored in string keys or hash fields | Not used for rows today, but the `binary` model stores rows the same way using Java serialization | The `json` model. No mode writes JSON or a serialized blob into a string or a hash field. Only `spark-redis-migrate` reads the `binary` model, to move data off it |
 
 #### Legacy Spark and connector APIs we do not keep
@@ -612,6 +638,7 @@ brings one back. A hook and a CI check enforce this (`roadmap.md`, Phase 0).
 | A proxy or managed endpoint in the path does not support RESP3 | Fail fast at connect with a RESP3-specific error. Phase 0 checks Redis Software 8.2 and Redis Cloud databases with `HELLO 3`, and the docs list any unsupported proxies |
 | Some Query Engine replies may cost more to build in RESP3 than in RESP2 | Benchmark Query Engine reads under RESP3 against the Phase 0 baseline in Phases 2 and 4b. Raise any regression upstream rather than bringing RESP2 back |
 | Jobs built on the RDD API cannot upgrade without code changes | A migration guide that maps every RDD function and old option to its 4.x replacement, golden-layout tests showing the replacement writes the same data, 4.0.0-M1 still shipping the RDD API (deprecated) so jobs can move to Spark 4 first, and `branch-3.x` until November 2027 |
+| A 3.x job that relied on `hash` being the default model would now write JSON | A table's catalog entry sets its model, and migrated tables keep `hash`. A table with no catalog entry and no `model` whose prefix already holds hashes fails at planning. The migration guide lists this change first |
 | Data written by 3.x is unreadable after upgrade | Golden-layout tests, the migration tool, and a documented one-time migration step |
 | Maintainer bandwidth (see [#393](https://github.com/RedisLabs/spark-redis/issues/393), [#384](https://github.com/RedisLabs/spark-redis/issues/384)) | Name code owners and a release manager (intent Q4). Automate version-matrix bumps |
 

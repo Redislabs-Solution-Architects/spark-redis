@@ -6,6 +6,9 @@
 > `doc/modernization/plans/`. That plan names the files, the order of changes, the tests, the risks and the
 > proof for each step. The playbook's test for a good plan applies: an engineer who never saw the
 > conversation should be able to implement the change from the plan alone.
+>
+> This is a **development spike** in the `Redislabs-Solution-Architects/spark-redis` fork. The fork's
+> owner is the code owner and the release manager.
 
 ## Where we are
 
@@ -20,14 +23,15 @@
 | Spark API | RDD API, DSv1 plus the internal V1 streaming `Source`, and DStreams | DataFrame and SQL only, on DSv2 throughout: catalog, pushdown, row-level ops, streaming source and sink. No RDD API and no option aliases |
 | Redis data models | strings, hashes, lists, sets, sorted sets, streams | adds JSON/`VARIANT`, Query Engine, Vector Sets, vector fields, TimeSeries and probabilistic types |
 | Clients reached | Scala and Java; PySpark for DataFrames only | adds Spark SQL catalog, Spark Connect (Python/Scala), and a pip package |
-| Release | OSSRH, which is shut down | Central Portal and PyPI |
+| Release | OSSRH, which is shut down | GitHub Actions to GitHub Packages and GitHub Releases; Maven Central and PyPI after the spike |
 | Backlog | ~100 open issues, many duplicates | each one closed by a phase below, or explicitly declined |
 
 **Prior art to reuse:**
 
 - [RedisLabs/spark-redis#394](https://github.com/RedisLabs/spark-redis/pull/394) ("[WIP] Prepare for
   Spark 4"). It moves to Scala 2.13, JDK 17, Jedis 5 and `CLUSTER SHARDS`, and removes DStreams. It has been
-  open with no reviews since October 2024, and Phase 1 starts from it.
+  open with no reviews since October 2024. The spike is built in the fork instead, and uses #394 only as a
+  reference for the Scala 2.13 and JDK 17 changes.
 - Redis field engineering's *Redis Connector for Spark*
   ([docs](https://redis-field-engineering.github.io/redis-spark/),
   [binaries](https://github.com/redis-field-engineering/redis-spark-dist)). See the
@@ -78,7 +82,7 @@ part of Phase 3: a consumer-group stream source and a streaming sink. It covers 
 |---|---|---|---|
 | 0. Ground truth and guardrails | none | A test suite and CI running on Redis 8; agent guardrails in place | Product owner approves the intent and spec |
 | 1. Platform lift | **4.0.0-M1**, plus 3.2.0 on `branch-3.x` | Today's features running on Spark 4.1–4.3, Redis 8.2+ and Jedis 8 | All golden-layout tests pass across the matrix |
-| 2. DataSource V2 batch core | **4.0.0-M2** | Pushdown, slot-aware writes, Sentinel, replica reads, catalog, metrics, migration tool | At least 2× write throughput; point lookups run without `SCAN` |
+| 2. DataSource V2 batch core | **4.0.0-M2** | JSON as the default model, deterministic keys, pushdown, slot-aware writes, Sentinel, replica reads, catalog, metrics, migration tool | At least 2× write throughput; point lookups run without `SCAN` |
 | 3. Streaming on DSv2 | **4.0.0 GA** | A reliable stream source, sinks for every model, exactly-once with `IDMP` | Kill-and-replay tests show no loss or duplicates |
 | 4. Redis 8 data models | **4.1.0** | JSON/`VARIANT`, Query Engine pushdown, vectors, hybrid search, TimeSeries, `MERGE`/`UPDATE`/`DELETE` | Proof that pushdown reads only what the query needs |
 | 5. Python, Connect and SQL | **4.2.0** | pip package, pure-Python fallback source, Connect-tested, cookbook | A Python suite passes against a Spark Connect server |
@@ -92,11 +96,12 @@ flowchart LR
   SPI --> WR[2c Write path]
   SPI --> CF[2d Config + security]
   SPI --> CT[2e Catalog +<br/>migration tool]
-  RD & WR & CF & CT --> M2((4.0.0-M2))
+  SPI --> JS[2f JSON model<br/>the default]
+  RD & WR & CF & CT & JS --> M2((4.0.0-M2))
   M2 --> SRC[3a Stream source]
   M2 --> SNK[3b Sinks +<br/>ForeachWriter]
   SRC & SNK --> GA((4.0.0 GA))
-  M2 --> J[4a JSON + VARIANT]
+  M2 --> J[4a VARIANT +<br/>JSON extras]
   M2 --> QE[4b Query Engine<br/>pushdown]
   J --> VEC[4c Vectors +<br/>hybrid search]
   QE --> VEC
@@ -235,10 +240,10 @@ the work up to each gate, and named humans pass the gates.
    - delete the sbt 0.13 files
    - add the Maven Wrapper and scalafmt
    - add one `versions.yml` that drives the CI matrix
-   - publish a **Central Portal** snapshot as a dry run
+   - publish a snapshot to **GitHub Packages** from GitHub Actions as a dry run
 7. **Backlog triage.** An agent proposes a label for each of the ~100 open issues, naming the phase that
    resolves it or "declined: reason". A human confirms each label, and closes the duplicates.
-8. **Decisions.** The product owner answers the open questions in `intent.md`.
+8. **Decisions.** Done for the spike (see `intent.md`), except the scope of the Spark 3.5 bridge.
 
 **Exit criteria:**
 
@@ -246,7 +251,7 @@ the work up to each gate, and named humans pass the gates.
 - The golden tests pass against *current* code.
 - The benchmark baseline is committed.
 - The intent and spec are accepted.
-- A Central snapshot has been published.
+- A snapshot has been published to GitHub Packages.
 
 **Lanes:** three in parallel, with disjoint files: (a) harness plus CI; (b) golden tests plus fixtures;
 (c) guardrails, hygiene and triage.
@@ -268,7 +273,8 @@ most-requested issue family quickly:
 
 **Scope:**
 
-1. Rebase PR #394 and review it as the starting point.
+1. Start from the fork's `master`. Use #394 as a reference for the Scala 2.13 and JDK 17 changes, not as a
+   base.
 2. **Scala 2.13 and JDK 17:** `JavaConversions` → `CollectionConverters`, and Scala 2.13 collection
    changes.
 3. **Spark 4.1 compile:**
@@ -300,7 +306,8 @@ most-requested issue family quickly:
    JDK 21 and 25 run on the newest Spark line.
 7. **`branch-3.x` bridge (3.2.0):** Spark 3.5 with Scala 2.12 and 2.13, Jedis 8, and current CVE fixes.
    It receives security fixes only, until November 2027.
-8. Publish **4.0.0-M1** to Central.
+8. Publish **4.0.0-M1** to GitHub Packages and a GitHub Release. M1 still defaults to `hash` and generates
+   UUID keys, because it ships today's behaviour unchanged. Phase 2 changes both.
 
 **Exit criteria:**
 
@@ -317,7 +324,8 @@ it our **reference line** for docs, examples and the default artifact.
 
 ## Phase 2: DataSource V2 batch core → 4.0.0-M2
 
-**Goal.** The new architecture, at parity and then beyond for `hash`, `string`, `zset`, `list` and `set`.
+**Goal.** The new architecture, at parity and then beyond for `json` (the new default), `hash`, `string`,
+`zset`, `list` and `set`.
 The spec sections are §2.1–§2.4 and §2.6–§2.11.
 
 **Scope:**
@@ -337,6 +345,7 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
   - column pruning, metadata columns and statistics
   - correct `unhandledFilters`
 - **2c: Write path:**
+  - deterministic keys (`key.column` or `key.generate = content-hash`); writes without a key fail
   - slot-clustered distribution
   - `write.mode = merge|replace`
   - overwrite strategies
@@ -345,7 +354,7 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
   - raw binary columns
   - loud failures
 - **2d: Config and security:**
-  - `url` and named profiles
+  - `url` and named profiles, with no database numbers
   - the `auth` → `password` rename, plus redaction in the Spark UI and logs
   - TLS per connection
   - `client.name`
@@ -355,6 +364,8 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
   - the renamed-option errors (spec §2.11), with no aliases
   - removal of the RDD API and the old `org.apache.spark.sql.redis` package
   - the 3.x → 4.x migration guide, mapping every RDD function and 3.x option to its replacement
+- **2f: JSON model (the default):** read and write, including nested `struct`/`array`/`map` columns;
+  `JSON.MGET` grouped by slot; `JSON.SET` with key TTL in one `MULTI`/`EXEC`.
 - **Cross-cutting:** custom metrics, structured logging (MDC), and the `EXPLAIN` strategy string.
 
 **Issues closed:**
@@ -367,6 +378,7 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
 - **Binary data:** #205, #304, #320, #120
 - **Silent data loss:** #347, #375, #359, #267, #197
 - **Configuration:** #349, #213, #249, #305, #398
+- **JSON:** #348
 - **Types and schema:** #358, #350
 - **RDD API questions:** #396, #397, #360, #261, #214, #211, #319. Each is answered by the table model
   that replaces the RDD function
@@ -377,10 +389,11 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
 - Writes on a 3-shard cluster run at **at least 2× the baseline** throughput.
 - A lookup of 10k keys from a 10M-key table issues **no `SCAN`** (checked from the metrics).
 - The migration tool round-trips every Phase 0 fixture.
+- Retrying a write task or replaying a batch leaves exactly the same set of keys.
 - No credentials appear in the Spark UI Environment tab or in logs (an automated test).
 
-**Lanes:** 2a goes first, alone. After that, 2b, 2c, 2d and 2e run in parallel worktrees, up to three at a
-time.
+**Lanes:** 2a goes first, alone. After that, 2b, 2c, 2d, 2e and 2f run in parallel worktrees, up to three
+at a time.
 
 ## Phase 3: streaming on DSv2 → 4.0.0 GA
 
@@ -397,7 +410,7 @@ time.
   - lag metrics
   - `XTRIM ACKED`
 - **3b: Sinks:**
-  - every table model works as a streaming sink
+  - every table model works as a streaming sink, with deterministic keys
   - the stream sink uses `XADD IDMP` (exactly-once) with a deterministic dedup field as the fallback
   - **`RedisForeachWriter`**, which works in Real-Time Mode today through the Foreach sink
 - **Docs:** the 3.x → 4.x checkpoint migration (a one-time restart from `stream.offsets`).
@@ -427,13 +440,14 @@ parallel.
 
 | Lane | Scope | Issues | Proof |
 |---|---|---|---|
-| 4a JSON + `VARIANT` | The `json` model; nested `struct`/`array`/`map`; `VARIANT` ↔ document; variant-extraction pushdown to JSONPath | [#348](https://github.com/RedisLabs/spark-redis/issues/348) | Nested schemas round-trip; `variant_get` fetches only the path it needs |
+| 4a `VARIANT` and JSON extras | `VARIANT` ↔ document; variant-extraction pushdown to JSONPath; `JSON.MERGE` partial updates. The base `json` model ships in Phase 2f | — | `variant_get` fetches only the path it needs |
 | 4b Query Engine | Filter, limit, TopN and aggregate pushdown; schema inference from `FT.INFO`; `CREATE TABLE` → `FT.CREATE`; `ALTER` → `FT.ALTER`; swap overwrite through `FT.ALIASUPDATE`; deletes by predicate | — | A filtered read of 1% of a 10M-document table touches at most 2% of keys |
 | 4c Vectors | `VECTOR` fields in hashes and JSON (FLOAT32 and others; HNSW, FLAT and SVS-VAMANA options passed through); `redis_vector()`; KNN reads with `_score`; `FT.HYBRID` (8.4+); the `vectorset` model (`VADD` with quantization, `VSIM` with `FILTER`) | — | Recall and latency match `redis-cli` results on a reference dataset |
 | 4d TimeSeries and friends | The `timeseries` model (`TS.MRANGE FILTER` with aggregation pushdown); probabilistic write options; `redis_bf_exists`; GEO sub-mode | [#185](https://github.com/RedisLabs/spark-redis/issues/185) | Aggregation runs server-side (checked from the metrics) |
 | 4e Row-level ops | `MERGE INTO`, `UPDATE` and `DELETE` (delta-based on `_key`); `write.condition` (`NX`/`XX`/`IFEQ`/`IFDEQ`, `DELEX`); `SupportsSchemaEvolution` in the 4.2+ artifacts | [#260](https://github.com/RedisLabs/spark-redis/issues/260), [#204](https://github.com/RedisLabs/spark-redis/issues/204), [#323](https://github.com/RedisLabs/spark-redis/issues/323), [#340](https://github.com/RedisLabs/spark-redis/issues/340) | A concurrent-writer test shows that compare-and-set never loses an update |
 
-**Dependencies.** 4c needs 4a and 4b. 4b can start with hash indexes before 4a lands. Every lane must
+**Dependencies.** 4c needs 4b. 4b can index JSON from the start, because the `json` model ships in Phase 2.
+Every lane must
 pass on the **8.2 floor**, where capability-gated features are refused at planning time with a clear
 message.
 
@@ -475,7 +489,7 @@ cookbook.
   - atomic slot migration during a Query Engine scan or a key scan
   - primary failover during writes
   - `OOM` and `maxclients` errors
-  - run against Redis Software and Redis Cloud nightly
+  - run nightly against the latest Redis Software release and the latest Redis Cloud version
 - **Enterprise features:**
   - Active-Active and multi-endpoint failover with `MultiDbClient`
   - token-based authentication (Entra ID)
@@ -523,7 +537,7 @@ puts the matrix in one file and Phase 6 automates it.
 | **Spark:** Spark Connect, Python Data Source API, Declarative Pipelines, Connect JDBC | §2.7 | 5 |
 | **Spark:** `transformWithState` | none; it works with our source as is. A Redis `StateStoreProvider` is out of scope (§4) | — |
 | **Spark:** DSv2 `Changelog` (4.2) | Not pursued. Keyspace notifications are fire-and-forget, so they are not a durable change log; Streams already cover CDC | — |
-| **Redis:** JSON, Query Engine (including on OSS Cluster), `FT.HYBRID`, SVS-VAMANA | §2.2, §2.3 | 4a–4c |
+| **Redis:** JSON (the default model), Query Engine (including on OSS Cluster), `FT.HYBRID`, SVS-VAMANA | §2.2, §2.3 | 2, 4a–4c |
 | **Redis:** Vector Sets, TimeSeries, probabilistic types | §2.2 | 4c, 4d |
 | **Redis:** `HSETEX`/`HGETEX`, field TTL, `HIMPORT`, `MSETEX` | §2.4 | 2 |
 | **Redis:** `SET IFEQ`/`IFDEQ`, `DELEX`, `DIGEST` | §2.4 | 4e |
@@ -533,9 +547,7 @@ puts the matrix in one file and Phase 6 automates it.
 | **Redis:** modern replacements only: `SCAN` family, ACL users, atomic command flags, Streams, native JSON, Functions | §2.14 | 0, 1, 2 |
 | **Redis:** Array type (8.8), roaring bitmaps and set-member TTL (8.12) | Later lanes, once there is demand and they are GA | — |
 
-## Decisions needed before Phase 1 starts
+## Decisions
 
-These are listed in [`intent.md`](intent.md#open-questions-for-the-product-owner): Maven coordinates,
-the client library (the spec recommends Jedis 8), the scope of the `branch-3.x` bridge, the named code
-owners and release manager, Redis Software and Cloud certification, and whether to support Redis 7.2 and
-7.4.
+The decisions for the spike are recorded in [`intent.md`](intent.md#decisions-2026-11-22). One question is
+still open: how far the `branch-3.x` bridge for Spark 3.5 should go.

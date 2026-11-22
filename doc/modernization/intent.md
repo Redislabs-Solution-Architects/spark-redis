@@ -1,6 +1,7 @@
 # Intent: spark-redis for Spark 4 and Redis 8
 
-> Stage: **Plan** (AI-native SDLC playbook). Status: **draft, awaiting product-owner review**.
+> Stage: **Plan** (AI-native SDLC playbook). Status: **development spike** in the `Redislabs-Solution-Architects/spark-redis` fork. Decisions are
+> recorded at the end; one question is still open.
 > Next artifact: [`spec.md`](spec.md) → [`roadmap.md`](roadmap.md) → one `plan.md` per phase.
 
 ## Problem
@@ -66,6 +67,7 @@ A Spark connector built for today's platforms, the one we would design if we sta
   - atomic command flags over two-step writes
   - native JSON over JSON stored in a string
   - Functions over Lua `EVAL`
+  - one Redis database per connection over numbered logical databases (`SELECT`)
 
   The full list is in `spec.md` §2.14.
 - Keep the **BSD-3-Clause** license. Redis 8's AGPLv3/RSAL/SSPL server licensing does not change the client
@@ -85,24 +87,26 @@ A Spark connector built for today's platforms, the one we would design if we sta
   function to the table model that replaces it. Data written by 3.x stays readable.
 - Redis Stack 6.x/7.x module versions on servers that are past end of life.
 
-## Open questions for the product owner
+## Decisions (2026-11-22)
 
-1. **Coordinates:** keep the `com.redislabs` group, or move to `com.redis`? The spec proposes one artifact
-   per Spark minor, for example `com.redis:spark-redis-spark-4.2_2.13`. This affects the migration story and
-   who owns the Maven Central namespace.
-2. **Client library:** Jedis 8 or Lettuce 7? `spec.md` recommends Jedis 8 behind an internal interface.
-3. **Spark 3.5:** Spark 3.5 is in extended LTS, which means security fixes only, until November 2027.
+| Question | Decision |
+|---|---|
+| Where the work happens | A development spike in the `Redislabs-Solution-Architects/spark-redis` fork. RedisLabs/spark-redis#394 is a reference only, not the starting point |
+| Ownership | The fork's owner is the code owner and the release manager for the spike |
+| Maven coordinates | The `com.redis` group, with one artifact per Spark minor, for example `com.redis:spark-redis-spark-4.2_2.13` |
+| Client library | Jedis 8 |
+| Release pipeline | GitHub Actions publishes from the fork to GitHub Packages and GitHub Releases. Maven Central and PyPI wait for an official release (spec §2.13) |
+| Redis Software and Redis Cloud | Certify against the latest Redis Software release and the latest Redis Cloud database version only |
+| Redis 7.2 and 7.4 | Out of scope, under the active-development rule |
+| Default `model` | `json` |
+| Keys on write | Every write has a deterministic key, so retries and replays never duplicate rows (spec §2.4) |
+| Logical databases | Not supported. Namespaces are connection profiles only |
+| New option names | Accepted as proposed in spec §2.11 |
+
+## Open questions
+
+1. **Spark 3.5:** Spark 3.5 is in extended LTS, which means security fixes only, until November 2027.
    `roadmap.md` proposes one *bridge* release on `branch-3.x` (Spark 3.5, Jedis 8, CVE fixes and the
-   migration tool) and then security fixes only. Is that enough, given that large platforms such as
+   migration tool) and then security fixes only. With the RDD API removed from 4.x, `branch-3.x` is also
+   where RDD-based jobs stay until they are rewritten. Is that enough, given that large platforms such as
    Databricks LTS runtimes still ship Spark 3.5?
-4. **Ownership:** who are the code owners and release manager after this lands? The playbook needs named
-   humans at the review and release gates.
-5. **Redis Software and Cloud:** which versions do we certify against, given that they lag Redis Open
-   Source? The proposal is databases at 8.2 or later on Redis Software 8.2 and on Redis Cloud.
-6. **Redis 7.2 and 7.4:** both are still patched, with security fixes only, until 2029, and Redis Cloud still
-   offers them. Under the "active development" rule they are out of scope. Do we accept that, or keep
-   best-effort, untested support for the `hash`, `string` and `stream` models?
-7. **Building on existing work:** [RedisLabs/spark-redis#394](https://github.com/RedisLabs/spark-redis/pull/394)
-   ("Prepare for Spark 4") already moves the build to Spark 4, Scala 2.13, JDK 17 and `CLUSTER SHARDS`. We
-   would like Phase 1 to build on it, with credit to its author. Would its author like to continue that
-   work with us?
