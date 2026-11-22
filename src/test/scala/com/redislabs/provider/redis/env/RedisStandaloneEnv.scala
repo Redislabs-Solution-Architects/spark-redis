@@ -7,9 +7,6 @@ import org.apache.spark.SparkConf
  * @author The Viet Nguyen
  */
 trait RedisStandaloneEnv extends Env {
-  // Start the Docker Redis this environment needs before RedisConfig below connects to it.
-  RedisContainers.ensureStandalone()
-
   override val conf: SparkConf = new SparkConf()
     .setMaster("local[*]").setAppName(getClass.getName)
     .set("spark.redis.host", redisHost)

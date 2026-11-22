@@ -3,22 +3,23 @@ package com.redislabs.provider.redis.env
 import java.net.{InetAddress, ServerSocket}
 import java.time.Duration
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
-import org.testcontainers.containers.FixedHostPortGenericContainer
+import org.testcontainers.containers.{FixedHostPortGenericContainer, GenericContainer}
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.utility.MountableFile
 
 /**
-  * Runs the Redis servers that the test suites expect, in Docker, on the fixed host ports the suites already use:
-  * 6379 (standalone), 6380 (TLS) and 7379-7381 (cluster). Each server starts once per test JVM, the first time a
-  * suite needs it, and Testcontainers removes it when the JVM exits.
+  * Runs the Redis servers the test suites need, in Docker, on **free host ports chosen at run time**. Each test JVM
+  * gets its own servers, so any number of test runs can happen on one machine at the same time. Each server starts
+  * the first time a suite asks for its port, and Testcontainers removes it when the JVM exits.
   *
-  * Because the host ports are fixed, only one test run per machine can use the containers at a time.
+  * The env traits read their ports from here (see `Env.redisPort`), so suites never hard-code a port.
   *
   * System properties:
   *  - `redis.image`: the Redis image to run (default `redis:8.2`)
-  *  - `redis.containers`: set to `false` to use Redis servers started outside the tests instead
+  *  - `redis.containers`: set to `false` to use Redis servers started outside the tests instead, on the old
+  *    fixed ports (6379 standalone, 6380 TLS, 7379-7381 cluster)
   */
 object RedisContainers {
 
@@ -29,32 +30,37 @@ object RedisContainers {
   private val StartupTimeout = Duration.ofSeconds(90)
   private val ReadOnly: Int = Integer.parseInt("644", 8)
   private val Executable: Int = Integer.parseInt("755", 8)
+  private val StandalonePort = 6379
+  private val TlsPort = 6380
+  private val ClusterNodes = 3
+  private val ClusterStartAttempts = 3
 
-  private class RedisContainer extends FixedHostPortGenericContainer[RedisContainer](Image)
+  private class RedisContainer extends GenericContainer[RedisContainer](Image)
 
-  private def copy(container: RedisContainer, resource: String, target: String, mode: Int = ReadOnly): Unit = {
+  /** The cluster's nodes announce their own port numbers to clients, so container and host ports must match. */
+  private class RedisClusterContainer extends FixedHostPortGenericContainer[RedisClusterContainer](Image)
+
+  private def copy(container: GenericContainer[_], resource: String, target: String, mode: Int = ReadOnly): Unit = {
     container.withCopyFileToContainer(MountableFile.forClasspathResource(resource, mode), target)
   }
 
-  /** Fails with a clear message, instead of a Docker stack trace, when another process already holds a port. */
-  private def requireFree(ports: Int*): Unit = ports.foreach { port =>
-    val free = Try(new ServerSocket(port, 1, InetAddress.getByName("127.0.0.1")).close()).isSuccess
-    require(free, s"Port $port is already in use, so the test Redis ($Image) cannot start. Stop whatever holds " +
-      "it, or run with -Dredis.containers=false to test against the Redis already listening there.")
-  }
-
-  private def startedWhen(container: RedisContainer, logLine: String): RedisContainer = {
+  private def startedWhen[C <: GenericContainer[C]](container: C, logLine: String): C = {
     container.waitingFor(Wait.forLogMessage(s".*$logLine.*\\n", 1).withStartupTimeout(StartupTimeout))
     container.start()
     container
+  }
+
+  /** Ports the OS reports as free right now. Another process could take one before Docker binds it. */
+  private def freePorts(count: Int): Seq[Int] = {
+    val sockets = (1 to count).map(_ => new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")))
+    try sockets.map(_.getLocalPort) finally sockets.foreach(_.close())
   }
 
   private lazy val standalone: RedisContainer = {
     val c = new RedisContainer
     copy(c, "containers/standalone.conf", s"$ConfDir/redis.conf")
     copy(c, "containers/users.acl", s"$ConfDir/users.acl")
-    requireFree(6379)
-    c.withFixedExposedPort(6379, 6379)
+    c.withExposedPorts(Int.box(StandalonePort))
     c.withCommand("redis-server", s"$ConfDir/redis.conf")
     startedWhen(c, "Ready to accept connections")
   }
@@ -66,29 +72,39 @@ object RedisContainers {
     Seq("redis.crt", "redis.key", "ca.crt", "redis.dh").foreach { name =>
       copy(c, s"tls/$name", s"$ConfDir/tls/$name")
     }
-    requireFree(6380)
-    c.withFixedExposedPort(6380, 6380)
+    c.withExposedPorts(Int.box(TlsPort))
     c.withCommand("redis-server", s"$ConfDir/redis.conf")
     startedWhen(c, "Ready to accept connections")
   }
 
-  private lazy val cluster: RedisContainer = {
-    val c = new RedisContainer
+  private def startCluster(ports: Seq[Int]): RedisClusterContainer = {
+    val c = new RedisClusterContainer
     copy(c, "containers/users-cluster.acl", s"$ConfDir/users-cluster.acl")
     copy(c, "containers/start-cluster.sh", s"$ConfDir/start-cluster.sh", Executable)
-    val ports = Seq(7379, 7380, 7381)
-    requireFree(ports: _*)
     ports.foreach(port => c.withFixedExposedPort(port, port))
-    c.withCommand("sh", s"$ConfDir/start-cluster.sh")
+    c.withCommand(Seq("sh", s"$ConfDir/start-cluster.sh") ++ ports.map(_.toString): _*)
     startedWhen(c, "CLUSTER READY")
   }
 
-  /** Standalone Redis on 6379, with ACL users `default`/`passwd` and `alice`/`p1pp0`. */
-  def ensureStandalone(): Unit = if (Enabled) require(standalone.isRunning, s"standalone $Image is not running")
+  /** The cluster's node ports, with a few attempts in case another process takes a chosen port first. */
+  private lazy val cluster: (RedisClusterContainer, Seq[Int]) = {
+    def attempt(left: Int): (RedisClusterContainer, Seq[Int]) = {
+      val ports = freePorts(ClusterNodes)
+      Try(startCluster(ports)) match {
+        case Success(container) => (container, ports)
+        case Failure(_) if left > 1 => attempt(left - 1)
+        case Failure(e) => throw e
+      }
+    }
+    attempt(ClusterStartAttempts)
+  }
 
-  /** TLS-only Redis on 6380, with the same ACL users, using the certificates in `src/test/resources/tls`. */
-  def ensureTls(): Unit = if (Enabled) require(tls.isRunning, s"TLS $Image is not running")
+  /** Standalone Redis, with ACL users `default`/`passwd` and `alice`/`p1pp0`. */
+  def standalonePort: Int = if (Enabled) standalone.getMappedPort(StandalonePort) else StandalonePort
 
-  /** Three-primary cluster on 7379-7381, with `default` (no password) and `alice`/`p1pp0`. */
-  def ensureCluster(): Unit = if (Enabled) require(cluster.isRunning, s"cluster $Image is not running")
+  /** TLS-only Redis with the same ACL users, using the certificates in `src/test/resources/tls`. */
+  def tlsPort: Int = if (Enabled) tls.getMappedPort(TlsPort) else TlsPort
+
+  /** Port of the first of three cluster primaries, with `default` (no password) and `alice`/`p1pp0`. */
+  def clusterPort: Int = if (Enabled) cluster._2.head else 7379
 }

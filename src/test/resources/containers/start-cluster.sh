@@ -1,28 +1,40 @@
 #!/bin/sh
-# Three-primary Redis Cluster on ports 7379-7381 inside one container, for the cluster suites.
-# Replaces the Makefile's start-cluster target; the slot ranges are the same, so slot-dependent tests behave
-# the same. Nodes announce 127.0.0.1 so clients on the host reach them through the fixed port mappings.
+# Three-primary Redis Cluster inside one container, for the cluster suites.
+#
+# Usage: start-cluster.sh <port1> <port2> <port3>
+#
+# The ports are free host ports chosen by RedisContainers. Each node listens on the same port number inside the
+# container as on the host, and announces 127.0.0.1:<port>, so clients on the host can follow the cluster's
+# redirects. The cluster bus uses fixed internal ports (17001-17003) that are never published.
+# The slot ranges match the old Makefile, so slot-dependent tests behave the same.
 set -e
+[ "$#" -eq 3 ] || { echo "usage: $0 <port1> <port2> <port3>" >&2; exit 2; }
+P1=$1; P2=$2; P3=$3
 CONF_DIR=/usr/local/etc/redis
 mkdir -p /data/cluster
-for port in 7379 7380 7381; do
+
+bus=17001
+for port in "$P1" "$P2" "$P3"; do
   redis-server --port "$port" --bind 0.0.0.0 --protected-mode no \
     --cluster-enabled yes --cluster-config-file "/data/cluster/nodes-$port.conf" \
-    --cluster-announce-ip 127.0.0.1 \
+    --cluster-port "$bus" --cluster-announce-ip 127.0.0.1 \
     --aclfile "$CONF_DIR/users-cluster.acl" \
     --save "" --appendonly no \
     --dir /data/cluster --logfile "/data/cluster/redis-$port.log" --daemonize yes
+  bus=$((bus + 1))
 done
-for port in 7379 7380 7381; do
+for port in "$P1" "$P2" "$P3"; do
   until redis-cli -p "$port" ping >/dev/null 2>&1; do sleep 0.1; done
 done
-redis-cli -p 7380 cluster meet 127.0.0.1 7379 >/dev/null
-redis-cli -p 7381 cluster meet 127.0.0.1 7379 >/dev/null
-redis-cli -p 7379 cluster addslotsrange 0 2047 3334 5460 >/dev/null
-redis-cli -p 7380 cluster addslotsrange 2048 3333 5461 7777 10000 10922 >/dev/null
-redis-cli -p 7381 cluster addslotsrange 7778 9999 10923 16383 >/dev/null
-for port in 7379 7380 7381; do
+
+redis-cli -p "$P2" cluster meet 127.0.0.1 "$P1" 17001 >/dev/null
+redis-cli -p "$P3" cluster meet 127.0.0.1 "$P1" 17001 >/dev/null
+redis-cli -p "$P1" cluster addslotsrange 0 2047 3334 5460 >/dev/null
+redis-cli -p "$P2" cluster addslotsrange 2048 3333 5461 7777 10000 10922 >/dev/null
+redis-cli -p "$P3" cluster addslotsrange 7778 9999 10923 16383 >/dev/null
+for port in "$P1" "$P2" "$P3"; do
   until redis-cli -p "$port" cluster info | grep -q 'cluster_state:ok'; do sleep 0.2; done
 done
+
 echo "CLUSTER READY"
-exec tail -F /data/cluster/redis-7379.log /data/cluster/redis-7380.log /data/cluster/redis-7381.log
+exec tail -F "/data/cluster/redis-$P1.log" "/data/cluster/redis-$P2.log" "/data/cluster/redis-$P3.log"
