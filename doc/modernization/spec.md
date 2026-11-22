@@ -26,7 +26,7 @@ today, and nothing else.** Snapshot taken on 2026-11-21.
 | **4.1** | 2025-12-16 | Maintained; EOL not published (we estimate about Jun 2027) | 17/21 | 3.10+ | **Supported (floor)** |
 | 4.5 | Branch cut about Feb 2027 | Future **4.x LTS** (18 months) | — | — | The long-term anchor once it ships |
 | 4.0 | 2025-05-23 | At EOL (4.0.5 is probably the last release) | 17/21 | 3.9+ | Not supported |
-| 3.5 | 2023-09-13 | Extended LTS, security fixes only, until Nov 2027 | 8/11/17 | 3.8+ | Bridge release only (§2.11) |
+| 3.5 | 2023-09-13 | Extended LTS, security fixes only, until Nov 2027 | 8/11/17 | 3.8+ | Not supported. `branch-3.x` hosts only the migration tool (§2.11) |
 
 All supported Spark lines use **Scala 2.13** only. The build targets **JDK 17** and CI also runs on JDK 21
 and 25.
@@ -533,8 +533,8 @@ Related behaviour:
 | Random UUID keys when `key.column` is not set | Fails at planning: set `key.column` or `key.generate = content-hash` (§2.4) |
 | `_spark:<table>:schema` (Java-serialized `StructType`) | Read once and rewritten as a JSON catalog entry by `spark-redis-migrate`. Java-serialized Scala 2.12 objects cannot be read reliably on 2.13, so the tool runs on the 3.x classpath |
 | `binary` model (Java-serialized rows) | Not readable by the connector. `spark-redis-migrate --to json|hash` moves the data |
-| RDD API (`sc.fromRedisKV`, `toRedisHASH`, …) | **Removed.** Jobs move to `format("redis")`; the migration guide maps every function to its table model. Kept only on `branch-3.x` |
-| DStreams | Removed; available only on `branch-3.x` |
+| RDD API (`sc.fromRedisKV`, `toRedisHASH`, …) | **Removed.** Jobs move to `format("redis")`; the migration guide maps every function to its table model. The existing 3.x releases still have it |
+| DStreams | Removed; the existing 3.x releases still have them |
 | RESP2 wire protocol (Jedis 3's default) | RESP3 only. Stored data is unchanged, because the protocol only affects the wire. Servers and proxies that cannot negotiate `HELLO 3` are not supported |
 | Legacy commands (`HMSET` + `EXPIRE`, `SETEX`, `SMEMBERS`, `BLPOP`, `INFO` parsing) | Their modern replacements (§2.14). The stored data and its TTLs are the same; only the commands sent differ |
 | Structured Streaming source offsets | A one-time restart from the stored `stream.offsets` is required. Checkpoints from 3.x are **not** compatible |
@@ -561,9 +561,11 @@ Everything else (`table`, `keys.pattern`, `key.column`, `model = hash`, `ttl`, `
 and the other `stream.*` options) keeps its name and meaning. Note that the *default* model is now `json`
 (see the table above).
 
-The **`branch-3.x` maintenance line** targets Spark 3.5 and Scala 2.12/2.13. It receives security fixes,
-dependency bumps, the migration tool, and nothing else, until Spark 3.5's extended-LTS window closes in **November 2027**. It
-is a bridge for users who cannot move to Spark 4 yet. It is not a supported target for new features.
+**`branch-3.x`** hosts only `spark-redis-migrate`, built against Spark 3.5 and Scala 2.12. Reading 3.x's
+Java-serialized schemas and `binary` rows needs the 3.x classpath, so the tool cannot live in the 4.x build.
+There is **no bridge release** during the spike. Users who cannot move to Spark 4 yet stay on the existing
+3.x releases. If the spike becomes the official line, a bridge release on Spark 3.5 can be reconsidered
+before Spark 3.5's extended LTS ends in November 2027.
 
 ### 2.12 Verification
 
@@ -630,7 +632,7 @@ brings one back. A hook and a CI check enforce this (`roadmap.md`, Phase 0).
 | `format("org.apache.spark.sql.redis")` | `format("redis")`. A stub class at the old name fails with a message that says so |
 | The `binary` model (Java-serialized rows) | `json` or `hash`, through `spark-redis-migrate` |
 
-`branch-3.x` keeps all of these on Spark 3.5 until November 2027.
+The existing 3.x releases still have all of these, for jobs that cannot move yet.
 
 ---
 
@@ -643,7 +645,7 @@ brings one back. A hook and a CI check enforce this (`roadmap.md`, Phase 0).
 | Upstream marks Real-Time Mode or another API experimental or changes it | Put it behind a feature flag in its own module, outside the GA support promise |
 | A proxy or managed endpoint in the path does not support RESP3 | Fail fast at connect with a RESP3-specific error. Phase 0 checks Redis Software 8.2 and Redis Cloud databases with `HELLO 3`, and the docs list any unsupported proxies |
 | Some Query Engine replies may cost more to build in RESP3 than in RESP2 | Benchmark Query Engine reads under RESP3 against the Phase 0 baseline in Phases 2 and 4b. Raise any regression upstream rather than bringing RESP2 back |
-| Jobs built on the RDD API cannot upgrade without code changes | A migration guide that maps every RDD function and old option to its 4.x replacement, golden-layout tests showing the replacement writes the same data, 4.0.0-M1 still shipping the RDD API (deprecated) so jobs can move to Spark 4 first, and `branch-3.x` until November 2027 |
+| Jobs built on the RDD API cannot upgrade without code changes | A migration guide that maps every RDD function and old option to its 4.x replacement, golden-layout tests showing the replacement writes the same data, 4.0.0-M1 still shipping the RDD API (deprecated) so jobs can move to Spark 4 first, and the existing 3.x releases for jobs that cannot move yet |
 | A 3.x job that relied on `hash` being the default model would now write JSON | A table's catalog entry sets its model, and migrated tables keep `hash`. A table with no catalog entry and no `model` whose prefix already holds hashes fails at planning. The migration guide lists this change first |
 | This connector and the Redis Connector for Spark are installed on the same cluster | Both register `redis`, so `format("redis")` fails for both. Separate packages avoid class clashes. The docs say to install one, or to use our full class name, and the troubleshooting guide covers the error |
 | Data written by 3.x is unreadable after upgrade | Golden-layout tests, the migration tool, and a documented one-time migration step |

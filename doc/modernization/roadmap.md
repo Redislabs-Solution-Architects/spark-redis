@@ -82,7 +82,7 @@ part of Phase 3: a consumer-group stream source and a streaming sink. It covers 
 | Phase | Release | What users get | Main gate |
 |---|---|---|---|
 | 0. Ground truth and guardrails | none | A test suite and CI running on Redis 8; agent guardrails in place | Product owner approves the intent and spec |
-| 1. Platform lift | **4.0.0-M1**, plus 3.2.0 on `branch-3.x` | Today's features running on Spark 4.1–4.3, Redis 8.2+ and Jedis 8 | All golden-layout tests pass across the matrix |
+| 1. Platform lift | **4.0.0-M1** | Today's features running on Spark 4.1–4.3, Redis 8.2+ and Jedis 8 | All golden-layout tests pass across the matrix |
 | 2. DataSource V2 batch core | **4.0.0-M2** | JSON as the default model, deterministic keys, pushdown, slot-aware writes, Sentinel, replica reads, catalog, metrics, migration tool | At least 2× write throughput; point lookups run without `SCAN` |
 | 3. Streaming on DSv2 | **4.0.0 GA** | A reliable stream source, sinks for every model, exactly-once with `IDMP` | Kill-and-replay tests show no loss or duplicates |
 | 4. Redis 8 data models | **4.1.0** | JSON/`VARIANT`, Query Engine pushdown, vectors, hybrid search, TimeSeries, `MERGE`/`UPDATE`/`DELETE` | Proof that pushdown reads only what the query needs |
@@ -244,7 +244,7 @@ the work up to each gate, and named humans pass the gates.
    - publish a snapshot to **GitHub Packages** from GitHub Actions as a dry run
 7. **Backlog triage.** An agent proposes a label for each of the ~100 open issues, naming the phase that
    resolves it or "declined: reason". A human confirms each label, and closes the duplicates.
-8. **Decisions.** Done for the spike (see `intent.md`), except the scope of the Spark 3.5 bridge.
+8. **Decisions.** Done for the spike (see `intent.md`).
 
 **Exit criteria:**
 
@@ -305,8 +305,8 @@ most-requested issue family quickly:
 6. **Per-Spark-minor artifacts** for 4.1, 4.2 and 4.3. The CI matrix is
    Spark {4.1, 4.2, 4.3} × Redis {8.2, 8.4, 8.6, 8.8, 8.10} × {standalone, cluster, TLS}, on JDK 17, with
    JDK 21 and 25 run on the newest Spark line.
-7. **`branch-3.x` bridge (3.2.0):** Spark 3.5 with Scala 2.12 and 2.13, Jedis 8, and current CVE fixes.
-   It receives security fixes only, until November 2027.
+7. **`branch-3.x`:** set up the branch, on Spark 3.5 and Scala 2.12, that will host `spark-redis-migrate`
+   (Phase 2e). There is no bridge release.
 8. Publish **4.0.0-M1** to GitHub Packages and a GitHub Release. M1 still defaults to `hash` and generates
    UUID keys, because it ships today's behaviour unchanged. Phase 2 changes both.
 
@@ -314,10 +314,10 @@ most-requested issue family quickly:
 
 - Golden-layout and existing tests pass across the full matrix.
 - Benchmarks are within 10% of baseline.
-- 4.0.0-M1 and 3.2.0 are published.
+- 4.0.0-M1 is published.
 
 **Lanes:** (a) the code port, which stays one lane because it touches every file; (b) build and the CI
-matrix; (c) the `branch-3.x` bridge.
+matrix; (c) the `branch-3.x` skeleton for the migration tool.
 
 **Risk.** If Spark 4.1 reaches EOL (expected around June 2027) before 4.0.0 GA, GA ships with a 4.2 floor.
 4.2 has the longest maintenance window of any current line (18 months, to about January 2028). That makes
@@ -519,7 +519,7 @@ puts the matrix in one file and Phase 6 automates it.
 | ~Apr 2027 | Spark 4.3 EOL (6-month window) | Drop the 4.3 artifact |
 | ~Jun 2027 | Spark 4.1 EOL (our estimate; not published) | The floor moves to 4.2 |
 | ~mid-2027 | Spark 4.5 LTS GA | Make 4.5 the long-term reference line |
-| Nov 2027 | Spark 3.5 extended LTS ends | Archive `branch-3.x` |
+| Nov 2027 | Spark 3.5 extended LTS ends | Archive `branch-3.x` once users have migrated their 3.x data |
 | Sep 2030 | Redis 8.2 (extended) EOL | Review the Redis floor every year; it may move earlier as standard lines come and go |
 
 ## Feature coverage: where each Spark 4 and Redis 8 capability lands
@@ -550,5 +550,4 @@ puts the matrix in one file and Phase 6 automates it.
 
 ## Decisions
 
-The decisions for the spike are recorded in [`intent.md`](intent.md#decisions-2026-11-22). One question is
-still open: how far the `branch-3.x` bridge for Spark 3.5 should go.
+The decisions for the spike are recorded in [`intent.md`](intent.md#decisions-2026-11-22). None are open.

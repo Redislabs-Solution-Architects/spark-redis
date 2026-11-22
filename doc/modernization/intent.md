@@ -1,7 +1,7 @@
 # Intent: spark-redis for Spark 4 and Redis 8
 
 > Stage: **Plan** (AI-native SDLC playbook). Status: **development spike** in the `Redislabs-Solution-Architects/spark-redis` fork. Decisions are
-> recorded at the end; one question is still open.
+> recorded at the end.
 > Next artifact: [`spec.md`](spec.md) → [`roadmap.md`](roadmap.md) → one `plan.md` per phase.
 
 ## Problem
@@ -102,12 +102,9 @@ A Spark connector built for today's platforms, the one we would design if we sta
 | Keys on write | Every write has a deterministic key, so retries and replays never duplicate rows (spec §2.4) |
 | Logical databases | Not supported. Namespaces are connection profiles only |
 | New option names | Accepted as proposed in spec §2.11 |
+| Spark 3.5 and `branch-3.x` | No bridge release during the spike. `branch-3.x` hosts only `spark-redis-migrate`, because it needs the 3.x classpath. Users who cannot move to Spark 4 yet stay on the existing 3.x releases. A bridge release can be reconsidered if the spike becomes the official line |
 | Java package and format name | The `com.redis.sparkredis` package, so classes never clash with the Redis Connector for Spark (`com.redis.spark`). The format name stays `redis`. Install only one of the two connectors per cluster, or use our full class name (spec §2) |
 
 ## Open questions
 
-1. **Spark 3.5:** Spark 3.5 is in extended LTS, which means security fixes only, until November 2027.
-   `roadmap.md` proposes one *bridge* release on `branch-3.x` (Spark 3.5, Jedis 8, CVE fixes and the
-   migration tool) and then security fixes only. With the RDD API removed from 4.x, `branch-3.x` is also
-   where RDD-based jobs stay until they are rewritten. Is that enough, given that large platforms such as
-   Databricks LTS runtimes still ship Spark 3.5?
+None for the spike.
