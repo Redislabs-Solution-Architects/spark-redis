@@ -87,6 +87,7 @@ A Spark connector built for today's platforms, the one we would design if we sta
 6. **Redis 7.2 and 7.4:** both are still patched, with security fixes only, until 2029, and Redis Cloud still
    offers them. Under the "active development" rule they are out of scope. Do we accept that, or keep
    best-effort, untested support for the `hash`, `string` and `stream` models?
-7. **Existing WIP:** [RedisLabs/spark-redis#394](https://github.com/RedisLabs/spark-redis/pull/394)
-   ("Prepare for Spark 4") has been open since October 2024. Can we take it over as the Phase 1 starting
-   point, and credit its author?
+7. **Building on existing work:** [RedisLabs/spark-redis#394](https://github.com/RedisLabs/spark-redis/pull/394)
+   ("Prepare for Spark 4") already moves the build to Spark 4, Scala 2.13, JDK 17 and `CLUSTER SHARDS`. We
+   would like Phase 1 to build on it, with credit to its author. Would its author like to continue that
+   work with us?

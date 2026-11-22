@@ -29,7 +29,7 @@
 - Redis field engineering's *Redis Connector for Spark*. It targets Spark 3.5 and Scala 2.12, and has no
   Spark 4 build. Its option design for JSON and stream writes is worth reading before Phase 2.
 - [llphxd/spark-redis-connector](https://github.com/llphxd/spark-redis-connector), a community project
-  (Apache-2.0; v0.1.4, Nov 2026; one maintainer). Its author has recommended it on six open issues here.
+  (Apache-2.0; v0.1.4, Nov 2026; one maintainer).
   - **What it is:** a DataSource V2 batch connector for Spark 3.3–3.5, Scala 2.12 and Jedis 5. It reads
     and writes strings, hashes, lists, sets and sorted sets, each with a consistent table layout.
   - **What it lacks:**
