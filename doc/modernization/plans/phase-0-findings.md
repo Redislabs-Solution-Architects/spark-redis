@@ -1,7 +1,7 @@
 # Phase 0 findings
 
 Results from running the **unchanged 3.x code** against Redis 8, recorded by step A3 of
-[`phase-0.md`](phase-0.md). Step A5 (the RESP3 checks on managed Redis) will add a section here.
+[`phase-0.md`](phase-0.md), and from the RESP3 checks on managed Redis in step A5.
 
 ## A3: the existing suite on Redis 8
 
@@ -45,9 +45,52 @@ Measured with JaCoCo on the `redis:8.2` run, after fixing coverage collection (n
 The least covered classes with 15 or more lines are `RedisContext` (66%), `RedisConfig` (81%) and `RedisEndpoint` (82%).
 The low branch figure is typical for compiled Scala, where pattern matches and generated code add many branches.
 
+## A5: RESP3 on managed Redis
+
+4.x will speak only RESP3 (spec §2.1), so step A5 checks that the managed Redis it certifies against accepts
+`HELLO 3`. The check is in two scripts:
+
+- **`scripts/check-resp3.sh <redis-url> [docker-network]`** sends `HELLO 3` from a throwaway `redis:8.10` container
+  and passes only if the reply says `proto 3`. It was tested against:
+  - Redis 8.2.11 with the right password: passes, `proto=3`
+  - the same server with a wrong password: fails, showing `WRONGPASS`
+  - Redis 5, which has no RESP3: fails with `ERR unknown command HELLO`
+- **`scripts/redis-software-resp3.sh`** starts a throwaway one-node Redis Software cluster on its own Docker
+  network, creates one database with default settings, runs the check, and removes everything afterwards.
+  - It publishes no host ports.
+  - The admin and database passwords are random, used only inside the run, and never printed.
+
+| Target | Version | Result |
+|---|---|---|
+| Redis Software, latest (`redislabs/redis:latest`, built 2026-11-18) | Redis Software 8.2.6-58. The new database defaulted to **Redis 8.8**, with `resp3: true` | **RESP3 accepted**: `HELLO 3` returned `proto=3`, server version 8.8.0, mode standalone (through Redis Software's proxy) |
+| Redis Cloud, latest | — | **Not checked**: no test database has been provided. To run it, store the database's URL as the fork's `REDIS_CLOUD_URL` secret, or run `scripts/check-resp3.sh <url>` locally |
+
+The 2026-11-22 run took 23 seconds with the image already pulled, and it left no containers or networks behind.
+
+### What this means
+
+- **The latest Redis Software is RESP3 by default.** A new database has `resp3: true`, so 4.x's RESP3-only rule
+  needs no configuration there.
+- **Databases can switch RESP3 off.** A database created on an older Redis Software release, or one with `resp3`
+  set to false, would make 4.x fail at connect, which is what spec §2.1 intends. The docs should tell Redis Software
+  users how to check and enable the setting.
+- **Redis Software 8.2.6 creates 8.8 databases by default,** which is newer than its 8.6 default noted in spec §1.
+  The spec's certification line ("latest Redis Software release") still holds.
+
+### Script bugs found while running the check
+
+Both were fixed before the results above:
+
+1. **Password generation.** The passwords were generated with `tr … </dev/urandom | head`. Under `set -o pipefail`,
+   `tr` exits with SIGPIPE (code 141) when `head` closes the pipe, so the script stopped silently on its first
+   line. It now uses `openssl rand`.
+2. **Database status.** The status was read from the REST JSON with `grep`, which picked up a nested shard status
+   (`idle`) instead of the database's top-level `status`. It now parses the JSON with Python and prints single
+   fields only, because the database object includes its password.
+
 ## Other findings
 
-### 1. Test coverage was never recorded (fixed in this PR; reported upstream)
+### 1. Test coverage was never recorded (fixed in PR #9; reported upstream as RedisLabs/spark-redis#404)
 
 **Symptom.** Every build logged "Skipping JaCoCo execution due to missing execution data file." There were two causes:
 
