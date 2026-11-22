@@ -209,6 +209,8 @@ the work up to each gate, and named humans pass the gates.
 
 ## Phase 0: ground truth and guardrails
 
+**Plan:** [`plans/phase-0.md`](plans/phase-0.md).
+
 **Goal.** Make this codebase safe to change, with a feedback loop that humans and agents both trust,
 *before* anything is ported.
 
