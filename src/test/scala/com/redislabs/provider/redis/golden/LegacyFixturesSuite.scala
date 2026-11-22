@@ -19,10 +19,15 @@ import org.json4s._
 /**
   * Legacy fixtures for `spark-redis-migrate` (Phase 0, step B4): Java-serialized `_spark:<table>:schema` blobs and
   * `binary` model rows in `src/test/resources/legacy/`, exactly as 3.x wrote them in the B2 captures. The suite checks
-  * that the current build deserializes every blob, that each file still equals its B2 capture, and that the 3.x
+  * that the current build deserializes every blob, that each file still matches its B2 capture, and that the 3.x
   * connector reads them back as a table.
   *
-  * With `-Dgolden.update=true` it rewrites the `.bin` files from the write fixtures instead.
+  * A `binary` row must equal its capture byte for byte. A schema blob must decode to the same `StructType` as its
+  * capture: the bytes of a serialized `StructType` depend on which of its lazy fields Spark evaluated before writing
+  * it, so a later capture of the same schema can differ (`df-hash-key-column` and `df-binary-key-column` do).
+  *
+  * The files are frozen once written. With `-Dgolden.update=true` the suite only writes the files that are missing,
+  * from the write fixtures; to capture one again, the owner deletes it first.
   */
 class LegacyFixturesSuite extends GoldenSuite with RedisStandaloneEnv {
 
@@ -61,16 +66,23 @@ class LegacyFixturesSuite extends GoldenSuite with RedisStandaloneEnv {
     case other => other
   }
 
-  test("each legacy file equals what 3.x wrote in its B2 capture") {
+  test("each legacy file matches what 3.x wrote in its B2 capture") {
     info(s"build: Scala ${scala.util.Properties.versionNumberString}, Spark ${org.apache.spark.SPARK_VERSION}, " +
       s"Java ${System.getProperty("java.version")} (${System.getProperty("java.vendor")})")
     Sources.foreach { case (name, (scenario, key)) =>
       val bytes = captured(scenario, key)
-      if (GoldenSuite.UpdateMode) {
+      val file = new File(Dir, name)
+      if (GoldenSuite.UpdateMode && !file.exists()) {
         Dir.mkdirs()
-        Files.write(new File(Dir, name).toPath, bytes)
+        Files.write(file.toPath, bytes)
       }
-      assert(legacy(name).sameElements(bytes), s"legacy/$name differs from $key in write/$scenario.json")
+      val matches =
+        if (name.startsWith("schema-")) {
+          SerializationUtils.deserialize[StructType](legacy(name)) == SerializationUtils.deserialize[StructType](bytes)
+        } else {
+          legacy(name).sameElements(bytes)
+        }
+      assert(matches, s"legacy/$name does not match $key in write/$scenario.json")
     }
   }
 
