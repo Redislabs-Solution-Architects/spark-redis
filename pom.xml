@@ -83,10 +83,17 @@
 						<goals>
 							<goal>prepare-agent</goal>
 						</goals>
+						<!-- The scalatest plugin sets its own <argLine>, which replaces the argLine property this goal
+						     sets by default, so the agent never loaded and coverage was never recorded. Expose the agent
+						     under its own property and reference it from the scalatest argLine below. -->
+						<configuration>
+							<propertyName>jacocoArgLine</propertyName>
+						</configuration>
 					</execution>
 					<execution>
 						<id>report</id>
-						<phase>test</phase>
+						<!-- verify, not test: in the test phase this ran before the scalatest plugin had produced any data. -->
+						<phase>verify</phase>
 						<goals>
 							<goal>report</goal>
 						</goals>
@@ -252,7 +259,7 @@
 					<reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
 					<junitxml>.</junitxml>
 					<filereports>WDF TestSuite.txt</filereports>
-					<argLine>-XX:MaxPermSize=256m -Xmx2g -Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</argLine>
+					<argLine>${jacocoArgLine} -Xmx2g -Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</argLine>
 					<tagsToExclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToExclude>
 					<!-- The plugin does not pass Maven's -D properties to the forked test JVM, so forward them here. -->
 					<systemProperties>
