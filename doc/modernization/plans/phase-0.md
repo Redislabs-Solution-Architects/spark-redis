@@ -57,19 +57,22 @@ artifact the owner can check.
 - **Change:**
   - **One set of containers per test JVM**, started lazily. The image comes from the system property
     `redis.image` (default `redis:8.2`).
-  - **Containers bind the same host ports the suites already use:** 6379, 6380 for TLS, and 7379–7381 for the
-    cluster. That keeps all 59 suites unchanged. Testcontainers' port bindings are set through
-    `withCreateContainerCmdModifier`.
+  - **Containers get free host ports chosen at run time** (amended 2026-11-22 at the owner's request; the
+    first version used fixed ports). The env traits read their ports from `RedisContainers` instead of
+    hard-coding 6379, 6380 and 7379, so the suites' test logic is unchanged. Each test JVM gets its own
+    servers, so any number of test runs can happen on one machine at once.
   - **Authentication uses an ACL file instead of `requirepass`:**
     - `user default on >passwd ~* &* +@all`
     - `user alice on >p1pp0 ~* &* +@all`
     
     These are the same test credentials the suites already use (spec §2.14). They replace the Makefile's
     `requirepass` and `USER_ACL` lines.
-  - **TLS container:** mounts `src/test/resources/tls` read-only, with `port 0` and `tls-port 6380`.
-  - **Cluster:** one container runs three `redis-server` processes on 7379–7381 with
-    `cluster-announce-ip 127.0.0.1`. Slots are assigned with exactly the Makefile's ranges, so tests that depend
-    on slots behave as before.
+  - **TLS container:** copies in the certificates from `src/test/resources/tls`, with `port 0` and
+    `tls-port 6380` mapped to a random host port.
+  - **Cluster:** one container runs three `redis-server` processes on three free host ports, with each node
+    listening inside the container on the same number it has on the host. The nodes announce
+    `127.0.0.1:<port>`, and the cluster bus uses fixed internal ports that are never published. Slots are
+    assigned with exactly the Makefile's ranges, so tests that depend on slots behave as before.
 - **Proof:**
   - `JAVA_HOME=<zulu-8> ./mvnw -B test -Dsuites=com.redislabs.provider.redis.df.standalone.HashDataframeStandaloneSuite`
     passes on a machine with no `redis-server` installed.
@@ -352,9 +355,9 @@ The owner signs off on each item:
 
 | Risk | Mitigation |
 |---|---|
-| Fixed host ports mean two runs on the same machine collide | Run one test job per runner in CI and one run at a time locally. Phase 2's `it` module moves to dynamic ports |
+| Another process takes a cluster port between choosing it and Docker binding it | `RedisContainers` retries the cluster start up to three times with new free ports |
 | Redis 8 behaviour changes break many existing tests | That's Phase 1 work, not harness work. If more than 20% of tests end up quarantined, stop and reassess with the owner |
-| The cluster container's announced address is unreachable on some Docker setups | Announce `127.0.0.1` and bind the same host ports. If that fails on a platform, fall back to host networking on Linux CI |
+| The cluster container's announced address is unreachable on some Docker setups | Announce `127.0.0.1` and publish each node on the same host port number. If that fails on a platform, fall back to host networking on Linux CI |
 | Benchmarks on GitHub-hosted runners are noisy | The baseline comes from the owner's Mac. CI results are warnings only until there's a stable runner |
 | Java-serialized fixtures depend on the Scala and Spark build that made them | `legacy/README.md` records the producing build. B4's test proves the current build reads them |
 | The sandbox blocks Docker and `.claude/hooks` | Those steps run in the owner's terminal or with explicit approval |

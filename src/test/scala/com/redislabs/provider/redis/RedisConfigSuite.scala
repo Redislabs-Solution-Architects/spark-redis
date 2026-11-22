@@ -5,12 +5,12 @@ import org.scalatest.{FunSuite, Matchers}
 import redis.clients.jedis.util.JedisClusterCRC16
 
 class RedisConfigSuite extends FunSuite with Matchers {
-  // This suite connects to 6379 and 7379 directly, without an env trait, so it starts both servers itself.
-  RedisContainers.ensureStandalone()
-  RedisContainers.ensureCluster()
+  // This suite has no env trait, so it asks RedisContainers for both ports directly.
+  private val standalonePort = RedisContainers.standalonePort
+  private val clusterPort = RedisContainers.clusterPort
 
-  val redisStandaloneConfig = new RedisConfig(RedisEndpoint(host = "127.0.0.1", port = 6379, auth = "passwd"))
-  val redisClusterConfig = new RedisConfig(RedisEndpoint(host = "127.0.0.1", port = 7379))
+  val redisStandaloneConfig = new RedisConfig(RedisEndpoint(host = "127.0.0.1", port = standalonePort, auth = "passwd"))
+  val redisClusterConfig = new RedisConfig(RedisEndpoint(host = "127.0.0.1", port = clusterPort))
 
   test("getNodesBySlots") {
     redisStandaloneConfig.getNodesBySlots(0, 16383).length shouldBe 1
@@ -27,7 +27,8 @@ class RedisConfigSuite extends FunSuite with Matchers {
   }
 
   test("getNodes") {
-    redisStandaloneConfig.getNodes(RedisEndpoint(host = "127.0.0.1", port = 6379, auth = "passwd")).length shouldBe 1
-    redisClusterConfig.getNodes(RedisEndpoint(host = "127.0.0.1", port = 7379)).length shouldBe 7
+    redisStandaloneConfig.getNodes(RedisEndpoint(host = "127.0.0.1", port = standalonePort, auth = "passwd"))
+      .length shouldBe 1
+    redisClusterConfig.getNodes(RedisEndpoint(host = "127.0.0.1", port = clusterPort)).length shouldBe 7
   }
 }
