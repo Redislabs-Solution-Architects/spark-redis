@@ -98,6 +98,7 @@ A Spark connector built for today's platforms, the one we would design if we sta
 | Release pipeline | GitHub Actions publishes from the fork to GitHub Packages and GitHub Releases. Maven Central and PyPI wait for an official release (spec §2.13) |
 | Redis Software and Redis Cloud | Certify against the latest Redis Software release and the latest Redis Cloud database version only |
 | Redis 7.2 and 7.4 | Out of scope, under the active-development rule |
+| Redis Cloud RESP3 | Not tested separately. Assumed to accept RESP3 because the latest Redis Software does (Phase 0 findings, A5) |
 | Default `model` | `json` |
 | Keys on write | Every write has a deterministic key, so retries and replays never duplicate rows (spec §2.4) |
 | Logical databases | Not supported. Namespaces are connection profiles only |

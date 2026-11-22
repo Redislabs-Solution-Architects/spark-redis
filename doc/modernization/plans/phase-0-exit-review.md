@@ -5,11 +5,12 @@
 
 ## Verdict
 
-**Phase 0 can't exit yet: 5 of 8 criteria are met, and 3 wait on the owner.** None of the gaps is a code problem:
+**Phase 0 can't exit yet: 6 of 8 criteria are met, and 2 wait on the owner.** Neither gap is a code problem:
 
 - the eval baseline run
 - the `backlog.md` sign-off
-- a Redis Cloud test database for the RESP3 check
+
+Criterion 8 counts as met because the owner decided Redis Cloud doesn't need its own RESP3 check (see the table).
 
 Two non-blocking items also need follow-up:
 
@@ -27,7 +28,7 @@ Two non-blocking items also need follow-up:
 | 5 | `CLAUDE.md`, `REVIEW.md`, the hooks, the verifier, the `golden-layout` skill and 10 evals are in place, and the eval baseline is recorded | **Waiting on the owner** | Everything is in place (PR #7): `CLAUDE.md` (63 lines), `REVIEW.md`, `.claude/settings.json` with `protect-paths.sh` and `after-edit.sh`, `.claude/agents/verifier.md`, `.claude/skills/golden-layout/SKILL.md`, and 10 tasks in `evals/tasks/` (01 and 09 fixed in PR #10). **The baseline row in `evals/README.md` is still the placeholder**, because the evals haven't been run |
 | 6 | A snapshot has been published to GitHub Packages | **Met, not seen directly** | The `publish-snapshot` runs 45076832942 (from a temporary branch) and 45077405383 (from `spike/phase-0` at `d90cdaf`) both succeeded, and the deploy step ended in `BUILD SUCCESS` for `spark-redis_2.12-3.1.0-SNAPSHOT`. The agent's `gh` token lacks `read:packages`, so the owner should confirm the package appears on the fork's Packages page |
 | 7 | `backlog.md` is confirmed | **Waiting on the owner** | `doc/modernization/backlog.md` has 117 rows. **The sign-off line is blank** |
-| 8 | The RESP3 check is recorded for the latest Redis Software, and for Redis Cloud if a database was provided | **Redis Software met; Redis Cloud waiting on the owner** | Redis Software 8.2.6-58, with a default 8.8 database: `HELLO 3` returned `proto=3` ([findings](phase-0-findings.md#a5-resp3-on-managed-redis)). For Redis Cloud, `.github/workflows/resp3-cloud.yml` runs the check from the `REDIS_CLOUD_URL` secret once the owner creates a test database and sets the secret |
+| 8 | The RESP3 check is recorded for the latest Redis Software, and for Redis Cloud if a database was provided | **Met** | Redis Software 8.2.6-58, with a default 8.8 database: `HELLO 3` returned `proto=3` ([findings](phase-0-findings.md#a5-resp3-on-managed-redis)). **Redis Cloud was skipped by owner decision (2026-11-22)**: it's assumed to accept RESP3 because the latest Redis Software does. No Redis Cloud database was provided |
 
 ## Measurements
 
@@ -47,25 +48,22 @@ These are the measures the playbook asks for (see `phase-0.md`, "Measurement").
 
 1. **Owner: run the 10 evals once** and fill in the baseline row in `evals/README.md` (criterion 5).
 2. **Owner: confirm `backlog.md`** and sign it (criterion 7).
-3. **Owner: create a Redis Cloud test database** on the latest version Redis Cloud offers. The free Essentials tier is
-   enough. Then store its URL with `gh secret set REDIS_CLOUD_URL -R Redislabs-Solution-Architects/spark-redis` and
-   run `gh workflow run resp3-cloud.yml -R Redislabs-Solution-Architects/spark-redis --ref spike/phase-0`
-   (criterion 8). The agent doesn't handle account API keys or database passwords.
-4. **Owner: confirm the snapshot** appears on the fork's Packages page (criterion 6).
-5. **The 8.12-rc3 preview job runs too long.** In every run it stayed on its Test step for 14 minutes or more, while
+3. **Owner: confirm the snapshot** appears on the fork's Packages page (criterion 6).
+4. **The 8.12-rc3 preview job runs too long.** In every run it stayed on its Test step for 14 minutes or more, while
    the required jobs finish in about 4. One run was cancelled when a newer push superseded it. The job is allowed to
    fail and times out at 45 minutes. Read its log once a run ends, to see whether it's a hang on the release
    candidate or a harness problem.
-6. **CLAUDE.md lessons.** The playbook says to add a line to `CLAUDE.md` for each repeated mistake. Two candidates
+5. **CLAUDE.md lessons.** The playbook says to add a line to `CLAUDE.md` for each repeated mistake. Two candidates
    from Phase 0:
    - *"scalatest-maven-plugin doesn't pass `-D` properties to the test JVM; add new properties to both
      `systemProperties` blocks in `pom.xml`."* This came up twice, for `redis.image` and `golden.update`.
    - *"Wait for CI to finish before merging."* PRs #11 and #12 were merged with their test jobs still running.
-7. **The test TLS certificate has expired** (2021). Regenerate it before Phase 1 turns on Jedis 8's hostname
-   verification. `tls/` is protected, so this needs the owner's approval.
+6. **The test TLS certificate: fixed in this PR**, at the owner's request. `redis.crt` expired in 2021. It is now
+   re-issued by the same test CA and valid until 2030-05-13, with subject alternative names `localhost`,
+   `127.0.0.1` and `::1`, ready for Phase 1's hostname verification. See finding 3.
 
 ## Sign-off
 
-When items 1–4 are done, the owner signs here to close Phase 0 and approve starting the Phase 1 plan.
+When items 1–3 are done, the owner signs here to close Phase 0 and approve starting the Phase 1 plan.
 
   Owner: ____________________  Date: ____________
