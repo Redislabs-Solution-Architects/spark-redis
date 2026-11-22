@@ -1,0 +1,18 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {"key": "golden_rdd:hash:h1", "type": "hash", "ttl": "none", "value": {"f1": "v1", "f2": "v2"}},
+    {"key": "golden_rdd:hash:h2", "type": "hash", "ttl": "none", "value": {"f3": "v3"}},
+    {"key": "golden_rdd:list:l1", "type": "list", "ttl": "none", "value": ["c", "a", "b"]},
+    {"key": "golden_rdd:list:l2", "type": "list", "ttl": "none", "value": ["z", "y"]},
+    {"key": "golden_rdd:set:s1", "type": "set", "ttl": "none", "value": ["x", "y"]},
+    {"key": "golden_rdd:set:s2", "type": "set", "ttl": "none", "value": ["w"]},
+    {"key": "golden_rdd:str:a", "type": "string", "ttl": "none", "value": {"utf8": "1"}},
+    {"key": "golden_rdd:str:b", "type": "string", "ttl": "none", "value": {"utf8": "hello"}},
+    {"key": "golden_rdd:zset:z1", "type": "zset", "ttl": "none", "value": [
+      {"member": "a", "score": "1"}, {"member": "b", "score": "2"}, {"member": "c", "score": "3.5"},
+      {"member": "d", "score": "10"}]},
+    {"key": "golden_rdd:zset:z2", "type": "zset", "ttl": "none", "value": [
+      {"member": "e", "score": "-1"}, {"member": "f", "score": "0"}]}
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {"key": "golden_rdd_to_redis_fixed_list:trimmed", "type": "list", "ttl": "none", "value": ["5", "4", "3"]},
+    {
+      "key": "golden_rdd_to_redis_fixed_list:untrimmed",
+      "type": "list",
+      "ttl": "none",
+      "value": ["3", "2", "1"]
+    }
+  ]
+}

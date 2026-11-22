@@ -25,10 +25,19 @@ trait DataframeBenchmarkSuite extends RedisDataframeSuite with RedisBenchmarks w
 
   def persistentModel: String
 
+  /** `standalone` or `cluster`. */
+  def topology: String
+
+  /** The dataset's name in `target/benchmarks.csv`, for example `single` or `many-1000000`. */
+  def datasetName: String
+
+  /** The stable part of the CSV name: `<topology>/<model>/<dataset>`. */
+  def benchmarkName: String = s"$topology/$persistentModel/$datasetName"
+
   def rdd(): RDD[Person]
 
   override def afterAll(): Unit = {
-    time(s"$suiteTags, Cleanup") {
+    time(s"$suiteTags, Cleanup", s"$benchmarkName/cleanup") {
       val hosts = redisConfig.hosts
       implicit val readWriteConfig: ReadWriteConfig = ReadWriteConfig.Default
       sc.fromRedisKeyPattern()
@@ -48,7 +57,7 @@ trait DataframeBenchmarkSuite extends RedisDataframeSuite with RedisBenchmarks w
 
   test(s"$suiteTags, Write") {
     val df = spark.createDataFrame(rdd())
-    time(s"$suiteTags, Write") {
+    time(s"$suiteTags, Write", s"$benchmarkName/write") {
       df.write.format(RedisFormat)
         .option(SqlOptionModel, persistentModel)
         .option(SqlOptionTableName, tableName)
@@ -59,7 +68,7 @@ trait DataframeBenchmarkSuite extends RedisDataframeSuite with RedisBenchmarks w
   }
 
   test(s"$suiteTags, Read") {
-    time(s"$suiteTags, Read") {
+    time(s"$suiteTags, Read", s"$benchmarkName/read") {
       spark.read.format(RedisFormat)
         .option(SqlOptionModel, persistentModel)
         .option(SqlOptionTableName, tableName)
@@ -72,7 +81,7 @@ trait DataframeBenchmarkSuite extends RedisDataframeSuite with RedisBenchmarks w
   }
 
   test(s"$suiteTags, Read all fields") {
-    time(s"$suiteTags, Read all fields") {
+    time(s"$suiteTags, Read all fields", s"$benchmarkName/read-all-fields") {
       spark.read.format(RedisFormat)
         .option(SqlOptionModel, persistentModel)
         .option(SqlOptionTableName, tableName)
@@ -86,7 +95,7 @@ trait DataframeBenchmarkSuite extends RedisDataframeSuite with RedisBenchmarks w
   }
 
   test(s"$suiteTags, Read 1 fields") {
-    time(s"$suiteTags, Read 1 fields") {
+    time(s"$suiteTags, Read 1 fields", s"$benchmarkName/read-1-field") {
       spark.read.format(RedisFormat)
         .option(SqlOptionModel, persistentModel)
         .option(SqlOptionTableName, tableName)
@@ -100,7 +109,7 @@ trait DataframeBenchmarkSuite extends RedisDataframeSuite with RedisBenchmarks w
   }
 
   test(s"$suiteTags, Read 0 fields") {
-    time(s"$suiteTags, Read 0 fields") {
+    time(s"$suiteTags, Read 0 fields", s"$benchmarkName/read-0-fields") {
       spark.read.format(RedisFormat)
         .option(SqlOptionModel, persistentModel)
         .option(SqlOptionTableName, tableName)
@@ -114,7 +123,7 @@ trait DataframeBenchmarkSuite extends RedisDataframeSuite with RedisBenchmarks w
   }
 
   test(s"$suiteTags, Take 10") {
-    time(s"$suiteTags, Take 10") {
+    time(s"$suiteTags, Take 10", s"$benchmarkName/take-10") {
       spark.read.format(RedisFormat)
         .option(SqlOptionModel, persistentModel)
         .option(SqlOptionTableName, tableName)

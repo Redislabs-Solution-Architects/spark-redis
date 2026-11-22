@@ -1,0 +1,37 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {
+      "key": "golden_stream_consumer_group:events",
+      "type": "stream",
+      "ttl": "none",
+      "value": {
+        "entries": [
+          {"id": "#1", "fields": [["name", "name-1"], ["age", "21"]]},
+          {"id": "#2", "fields": [["name", "name-2"], ["age", "22"]]},
+          {"id": "#3", "fields": [["name", "name-3"], ["age", "23"]]},
+          {"id": "#4", "fields": [["name", "name-4"], ["age", "24"]]},
+          {"id": "#5", "fields": [["name", "name-5"], ["age", "25"]]}
+        ],
+        "groups": [
+          {
+            "name": "latest",
+            "last-delivered-id": "#5",
+            "entries-read": null,
+            "lag": 0,
+            "pending": 0,
+            "consumers": [{"name": "consumer-1", "pending": 0}]
+          },
+          {
+            "name": "spark-source",
+            "last-delivered-id": "#5",
+            "entries-read": 5,
+            "lag": 0,
+            "pending": 0,
+            "consumers": [{"name": "consumer-1", "pending": 0}]
+          }
+        ]
+      }
+    }
+  ]
+}

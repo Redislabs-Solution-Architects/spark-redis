@@ -1,0 +1,7 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {"key": "golden_rdd_to_redis_set:s", "type": "set", "ttl": "none", "value": ["x", "y", "z"]},
+    {"key": "golden_rdd_to_redis_set:ttl", "type": "set", "ttl": 3600, "value": ["x"]}
+  ]
+}

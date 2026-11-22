@@ -1,0 +1,29 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {
+      "key": "golden_rdd_to_redis_kv:a",
+      "type": "string",
+      "ttl": "none",
+      "value": {"base64": "MQ==", "utf8": "1"}
+    },
+    {
+      "key": "golden_rdd_to_redis_kv:empty",
+      "type": "string",
+      "ttl": "none",
+      "value": {"base64": "", "utf8": ""}
+    },
+    {
+      "key": "golden_rdd_to_redis_kv:ttl",
+      "type": "string",
+      "ttl": 3600,
+      "value": {"base64": "ZXhwaXJlcw==", "utf8": "expires"}
+    },
+    {
+      "key": "golden_rdd_to_redis_kv:unicode",
+      "type": "string",
+      "ttl": "none",
+      "value": {"base64": "w7xuw69jw7hkw6kg4pyT", "utf8": "ünïcødé ✓"}
+    }
+  ]
+}

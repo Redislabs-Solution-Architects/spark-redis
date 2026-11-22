@@ -1,0 +1,59 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {
+      "key": "_spark:golden_df_binary_key_column:schema",
+      "type": "string",
+      "ttl": "none",
+      "value": {
+        "base64": "rO0ABXNyACVvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5TdHJ1Y3RUeXBlyZv7Aito4bMCAAZJAAlfaGFzaENvZGVCAAhiaXRtYXAkMEwADWZpZWxkTmFtZXNTZXR0ACBMc2NhbGEvY29sbGVjdGlvbi9pbW11dGFibGUvU2V0O1sABmZpZWxkc3QAKVtMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvU3RydWN0RmllbGQ7TAALbmFtZVRvRmllbGR0ABZMc2NhbGEvY29sbGVjdGlvbi9NYXA7TAALbmFtZVRvSW5kZXhxAH4AA3hwAAAAAABwdXIAKVtMb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuU3RydWN0RmllbGQ7tWPEaGAaDUcCAAB4cAAAAARzcgAmb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuU3RydWN0RmllbGSgVijy4NwSMQIABFoACG51bGxhYmxlTAAIZGF0YVR5cGV0ACVMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvRGF0YVR5cGU7TAAIbWV0YWRhdGF0ACVMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvTWV0YWRhdGE7TAAEbmFtZXQAEkxqYXZhL2xhbmcvU3RyaW5nO3hwAXNyACZvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5TdHJpbmdUeXBlJDSuWtcwJHrbAgAAeHBzcgAjb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuTWV0YWRhdGFtjWLvldkl+wIAA0kACV9oYXNoQ29kZVoACGJpdG1hcCQwTAADbWFwdAAgTHNjYWxhL2NvbGxlY3Rpb24vaW1tdXRhYmxlL01hcDt4cKATnrgBc3IAKHNjYWxhLmNvbGxlY3Rpb24uaW1tdXRhYmxlLk1hcCRFbXB0eU1hcCSx6xuFbkKAywIAAHhwdAAEbmFtZXNxAH4ABwBzcgAnb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuSW50ZWdlclR5cGUk+Cyhq8nkf6YCAAB4cHEAfgAQdAADYWdlc3EAfgAHAXEAfgANcQB+ABB0AAdhZGRyZXNzc3EAfgAHAHNyACZvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5Eb3VibGVUeXBlJPPB5nk9S1n2AgAAeHBxAH4AEHQABnNhbGFyeXBw",
+        "javaSerialized": {
+          "class": "org.apache.spark.sql.types.StructType",
+          "sparkSchema": {
+            "type": "struct",
+            "fields": [
+              {"name": "name", "type": "string", "nullable": true, "metadata": {}},
+              {"name": "age", "type": "integer", "nullable": false, "metadata": {}},
+              {"name": "address", "type": "string", "nullable": true, "metadata": {}},
+              {"name": "salary", "type": "double", "nullable": false, "metadata": {}}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "golden_df_binary_key_column:John",
+      "type": "string",
+      "ttl": "none",
+      "value": {
+        "base64": "rO0ABXVyABNbTGphdmEubGFuZy5PYmplY3Q7kM5YnxBzKWwCAAB4cAAAAAR0AARKb2huc3IAEWphdmEubGFuZy5JbnRlZ2VyEuKgpPeBhzgCAAFJAAV2YWx1ZXhyABBqYXZhLmxhbmcuTnVtYmVyhqyVHQuU4IsCAAB4cAAAAB50AA42MCBXYWxsIFN0cmVldHNyABBqYXZhLmxhbmcuRG91YmxlgLPCSilr+wQCAAFEAAV2YWx1ZXhxAH4ABEBi0AAAAAAA",
+        "javaSerialized": {
+          "class": "[Ljava.lang.Object;",
+          "values": [
+            {"class": "java.lang.String", "value": "John"},
+            {"class": "java.lang.Integer", "value": "30"},
+            {"class": "java.lang.String", "value": "60 Wall Street"},
+            {"class": "java.lang.Double", "value": "150.5"}
+          ]
+        }
+      }
+    },
+    {
+      "key": "golden_df_binary_key_column:Peter",
+      "type": "string",
+      "ttl": "none",
+      "value": {
+        "base64": "rO0ABXVyABNbTGphdmEubGFuZy5PYmplY3Q7kM5YnxBzKWwCAAB4cAAAAAR0AAVQZXRlcnNyABFqYXZhLmxhbmcuSW50ZWdlchLioKT3gYc4AgABSQAFdmFsdWV4cgAQamF2YS5sYW5nLk51bWJlcoaslR0LlOCLAgAAeHAAAAAjdAAPMTEwIFdhbGwgU3RyZWV0c3IAEGphdmEubGFuZy5Eb3VibGWAs8JKKWv7BAIAAUQABXZhbHVleHEAfgAEQGkJmZmZmZo=",
+        "javaSerialized": {
+          "class": "[Ljava.lang.Object;",
+          "values": [
+            {"class": "java.lang.String", "value": "Peter"},
+            {"class": "java.lang.Integer", "value": "35"},
+            {"class": "java.lang.String", "value": "110 Wall Street"},
+            {"class": "java.lang.Double", "value": "200.3"}
+          ]
+        }
+      }
+    }
+  ]
+}

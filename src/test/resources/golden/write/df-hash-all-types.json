@@ -1,0 +1,72 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {
+      "key": "_spark:golden_df_hash_all_types:schema",
+      "type": "string",
+      "ttl": "none",
+      "value": {
+        "base64": "rO0ABXNyACVvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5TdHJ1Y3RUeXBlyZv7Aito4bMCAAZJAAlfaGFzaENvZGVCAAhiaXRtYXAkMEwADWZpZWxkTmFtZXNTZXR0ACBMc2NhbGEvY29sbGVjdGlvbi9pbW11dGFibGUvU2V0O1sABmZpZWxkc3QAKVtMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvU3RydWN0RmllbGQ7TAALbmFtZVRvRmllbGR0ABZMc2NhbGEvY29sbGVjdGlvbi9NYXA7TAALbmFtZVRvSW5kZXhxAH4AA3hwAAAAAABwdXIAKVtMb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuU3RydWN0RmllbGQ7tWPEaGAaDUcCAAB4cAAAAA1zcgAmb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuU3RydWN0RmllbGSgVijy4NwSMQIABFoACG51bGxhYmxlTAAIZGF0YVR5cGV0ACVMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvRGF0YVR5cGU7TAAIbWV0YWRhdGF0ACVMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvTWV0YWRhdGE7TAAEbmFtZXQAEkxqYXZhL2xhbmcvU3RyaW5nO3hwAXNyACZvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5TdHJpbmdUeXBlJDSuWtcwJHrbAgAAeHBzcgAjb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuTWV0YWRhdGFtjWLvldkl+wIAA0kACV9oYXNoQ29kZVoACGJpdG1hcCQwTAADbWFwdAAgTHNjYWxhL2NvbGxlY3Rpb24vaW1tdXRhYmxlL01hcDt4cKATnrgBc3IAKHNjYWxhLmNvbGxlY3Rpb24uaW1tdXRhYmxlLk1hcCRFbXB0eU1hcCSx6xuFbkKAywIAAHhwdAACaWRzcQB+AAcBcQB+AA1xAH4AEHQABnN0cmluZ3NxAH4ABwFzcgAkb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuQnl0ZVR5cGUkbKLET4ycQiMCAAB4cHEAfgAQdAAEYnl0ZXNxAH4ABwFzcgAlb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuU2hvcnRUeXBlJBu+R/oL9dp9AgAAeHBxAH4AEHQABXNob3J0c3EAfgAHAXNyACdvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5JbnRlZ2VyVHlwZST4LKGryeR/pgIAAHhwcQB+ABB0AANpbnRzcQB+AAcBc3IAJG9yZy5hcGFjaGUuc3Bhcmsuc3FsLnR5cGVzLkxvbmdUeXBlJK0CDVcLTPc7AgAAeHBxAH4AEHQABGxvbmdzcQB+AAcBc3IAJW9yZy5hcGFjaGUuc3Bhcmsuc3FsLnR5cGVzLkZsb2F0VHlwZSSAOb6kHy74CAIAAHhwcQB+ABB0AAVmbG9hdHNxAH4ABwFzcgAmb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuRG91YmxlVHlwZSTzweZ5PUtZ9gIAAHhwcQB+ABB0AAZkb3VibGVzcQB+AAcBc3IAJm9yZy5hcGFjaGUuc3Bhcmsuc3FsLnR5cGVzLkRlY2ltYWxUeXBlzw70jLO80gUCAAZJAAlwcmVjaXNpb25JAAVzY2FsZUwACmFzSW50ZWdyYWx0ADlMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvRGVjaW1hbCREZWNpbWFsQXNJZkludGVncmFsJDtMAApmcmFjdGlvbmFsdAA5TG9yZy9hcGFjaGUvc3Bhcmsvc3FsL3R5cGVzL0RlY2ltYWwkRGVjaW1hbElzRnJhY3Rpb25hbCQ7TAAHbnVtZXJpY3EAfgAxTAAIb3JkZXJpbmdxAH4AMXhwAAAACgAAAAJzcgA3b3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuRGVjaW1hbCREZWNpbWFsQXNJZkludGVncmFsJNNL+aWc23pAAgAAeHBzcgA3b3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuRGVjaW1hbCREZWNpbWFsSXNGcmFjdGlvbmFsJO81wjb6B5FWAgAAeHBxAH4ANnEAfgA2cQB+ABB0AAdkZWNpbWFsc3EAfgAHAXNyACdvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5Cb29sZWFuVHlwZSRBjnG8Y6/qkwIAAHhwcQB+ABB0AAdib29sZWFuc3EAfgAHAXNyACRvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5EYXRlVHlwZSRwUSJ6HYauFAIAAHhwcQB+ABB0AARkYXRlc3EAfgAHAXNyAClvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5UaW1lc3RhbXBUeXBlJI/bt6IxH1YCAgAAeHBxAH4AEHQACXRpbWVzdGFtcHNxAH4ABwFzcgAmb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuQmluYXJ5VHlwZSRO4Zpw9ySpPgIAAHhwcQB+ABB0AAZiaW5hcnlwcA==",
+        "javaSerialized": {
+          "class": "org.apache.spark.sql.types.StructType",
+          "sparkSchema": {
+            "type": "struct",
+            "fields": [
+              {"name": "id", "type": "string", "nullable": true, "metadata": {}},
+              {"name": "string", "type": "string", "nullable": true, "metadata": {}},
+              {"name": "byte", "type": "byte", "nullable": true, "metadata": {}},
+              {"name": "short", "type": "short", "nullable": true, "metadata": {}},
+              {"name": "int", "type": "integer", "nullable": true, "metadata": {}},
+              {"name": "long", "type": "long", "nullable": true, "metadata": {}},
+              {"name": "float", "type": "float", "nullable": true, "metadata": {}},
+              {"name": "double", "type": "double", "nullable": true, "metadata": {}},
+              {"name": "decimal", "type": "decimal(10,2)", "nullable": true, "metadata": {}},
+              {"name": "boolean", "type": "boolean", "nullable": true, "metadata": {}},
+              {"name": "date", "type": "date", "nullable": true, "metadata": {}},
+              {"name": "timestamp", "type": "timestamp", "nullable": true, "metadata": {}},
+              {"name": "binary", "type": "binary", "nullable": true, "metadata": {}}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "golden_df_hash_all_types:a",
+      "type": "hash",
+      "ttl": "none",
+      "value": {
+        "binary": "[B@<identity-hash>",
+        "boolean": "true",
+        "byte": "1",
+        "date": "2020-02-29",
+        "decimal": "12.34",
+        "double": "2.25",
+        "float": "1.5",
+        "int": "3",
+        "long": "4000000000",
+        "short": "2",
+        "string": "text",
+        "timestamp": "2020-02-29 12:34:56.789"
+      }
+    },
+    {
+      "key": "golden_df_hash_all_types:b",
+      "type": "hash",
+      "ttl": "none",
+      "value": {
+        "binary": "[B@<identity-hash>",
+        "boolean": "false",
+        "byte": "-1",
+        "date": "1970-01-01",
+        "decimal": "-0.01",
+        "double": "1.0E10",
+        "float": "-0.5",
+        "int": "-3",
+        "long": "-4",
+        "short": "-2",
+        "string": "ünïcødé ✓",
+        "timestamp": "1999-12-31 23:59:59.0"
+      }
+    }
+  ]
+}

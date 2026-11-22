@@ -1,0 +1,10 @@
+{
+  "schema": [
+    {"name": "name", "type": "string", "nullable": true},
+    {"name": "age", "type": "int", "nullable": true},
+    {"name": "address", "type": "string", "nullable": true},
+    {"name": "salary", "type": "double", "nullable": true},
+    {"name": "email", "type": "string", "nullable": true}
+  ],
+  "rows": [["eter", 35, "110 Wall Street", 200.3, null]]
+}

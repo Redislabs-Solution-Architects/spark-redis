@@ -1,0 +1,12 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {
+      "key": "golden_rdd_to_redis_byte_list:a",
+      "type": "list",
+      "ttl": "none",
+      "value": ["1", {"base64": "/w=="}]
+    },
+    {"key": "golden_rdd_to_redis_byte_list:ttl", "type": "list", "ttl": 3600, "value": ["1"]}
+  ]
+}
