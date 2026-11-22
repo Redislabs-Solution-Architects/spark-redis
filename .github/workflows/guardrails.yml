@@ -1,0 +1,45 @@
+# Guardrail checks on every pull request (Phase 0 plan, step C3). Each check looks only at what the PR adds.
+# The test matrix runs separately, in ci.yml. Run the same checks locally with, for example:
+#   scripts/check-legacy-redis.sh --base origin/spike/phase-0
+name: Guardrails
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guardrails-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  legacy-redis:
+    name: No legacy Redis commands
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: scripts/check-legacy-redis.sh --base "origin/${{ github.base_ref }}"
+
+  spark-internal-imports:
+    name: No new Spark internal APIs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: scripts/check-spark-internal-imports.sh --base "origin/${{ github.base_ref }}"
+
+  secrets:
+    name: No secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: scripts/check-secrets.sh --base "origin/${{ github.base_ref }}"
