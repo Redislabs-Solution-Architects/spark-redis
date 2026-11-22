@@ -22,9 +22,10 @@ target/
 *.pyc
 checkpoint-test/
 
-# Claude Code: personal settings and agent worktrees (the shared .claude/ files are committed)
+# Claude Code: personal settings, agent worktrees and the hook log (the shared .claude/ files are committed)
 .claude/settings.local.json
 .claude/worktrees/
+.claude/hook-blocks.log
 
 # eclipse
 .project

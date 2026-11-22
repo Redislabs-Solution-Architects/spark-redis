@@ -1,0 +1,10 @@
+# Tests committed failing ahead of their fix (CLAUDE.md rule 5).
+#
+# A bug's test lands first, failing, in its own commit. Its fix comes after, and must make the test pass without
+# changing it. .claude/hooks/protect-paths.sh blocks agent edits to every test listed here, so the agent that fixes
+# a bug can't weaken the test that proves it.
+#
+# One repo-relative test file per line, then "#" and the issue or findings entry, for example:
+#   src/test/scala/com/redislabs/provider/redis/rdd/cluster/MovedWriteClusterSuite.scala  # #347
+#
+# Agents may add lines but not remove them. The owner removes a line once its fix has merged.
