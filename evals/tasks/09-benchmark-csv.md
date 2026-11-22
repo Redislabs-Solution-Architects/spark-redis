@@ -2,14 +2,18 @@
 
 **Tests:** a small, self-contained change to test infrastructure, kept to the files it needs.
 
-**Starting commit:** `eval-base-phase-0`. Phase 0 step B5 already added this sink, so the setup puts
-`RedisBenchmarks.scala` back to its state before B5.
+**Starting commit:** `eval-base-phase-0`. Phase 0 step B5 already added this sink, so the setup puts the benchmark
+code back to its state before B5 (`37c855d`): `RedisBenchmarks.scala`, and the suites under `df/benchmark/`, whose B5
+versions call the two-argument `time(tag, name)`. The suites B5 added are removed.
 
 ## Setup
 
 ```bash
-git checkout 37c855d -- src/test/scala/com/redislabs/provider/redis/RedisBenchmarks.scala
-./mvnw -B -q test-compile           # if B5 code no longer compiles, adjust by hand and tag the result eval-start/09
+bench=src/test/scala/com/redislabs/provider/redis/df/benchmark
+git checkout 37c855d -- src/test/scala/com/redislabs/provider/redis/RedisBenchmarks.scala "$bench"
+added=$(git diff --name-only --diff-filter=A 37c855d -- "$bench")
+[ -z "$added" ] || git rm -q $added
+./mvnw -B -q test-compile
 rm -f target/benchmarks.csv
 ```
 
