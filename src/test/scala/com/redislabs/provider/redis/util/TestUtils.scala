@@ -1,8 +1,12 @@
 package com.redislabs.provider.redis.util
 
+import java.nio.ByteBuffer
 import java.util.UUID
 
 import org.scalatest.Assertions
+import redis.clients.jedis.{Jedis, ScanParams}
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.reflect.Manifest
 
 object TestUtils {
@@ -35,5 +39,21 @@ object TestUtils {
     interceptRes
   }
 
-
+  /**
+    * How many keys on the server behind `conn` match the glob `pattern`. Uses SCAN ... MATCH, not KEYS (spec section
+    * 2.14), and counts each key once even when SCAN returns it more than once. On a cluster it counts one node only.
+    */
+  def countKeys(conn: Jedis, pattern: String): Long = {
+    val params = new ScanParams().`match`(pattern).count(1000)
+    val keys = mutable.Set[ByteBuffer]()
+    var cursor = ScanParams.SCAN_POINTER_START_BINARY
+    var done = false
+    while (!done) {
+      val reply = conn.scan(cursor, params)
+      reply.getResult.asScala.foreach(key => keys += ByteBuffer.wrap(key))
+      cursor = reply.getCursorAsBytes
+      done = reply.isCompleteIteration
+    }
+    keys.size.toLong
+  }
 }
