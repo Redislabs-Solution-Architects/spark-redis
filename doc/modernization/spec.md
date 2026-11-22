@@ -327,6 +327,17 @@ Further read behaviour:
     JSON
 
   3.x sends a separate `EXPIRE` after the write. 4.x never does (§2.14).
+
+  **Decision: row TTL stays key-level, as in 3.x.** We considered relying on `HSETEX` alone and rejected it,
+  because it changes how expiry behaves:
+  - `TTL key` returns -1.
+  - A partial upsert in `merge` mode refreshes only the fields it writes, so a row can lose its older columns
+    first.
+  - A field another writer adds without a TTL keeps the key alive.
+  - JSON has no field-TTL command at all.
+
+  Key-level TTL costs two extra commands per key (`MULTI` and `EXEC`) inside the same pipelined round trip.
+  The Phase 2 write benchmark measures that cost.
 - **Binary data.** `BinaryType` columns are written as raw bytes rather than `String.valueOf`. Resolves
   [#205](https://github.com/RedisLabs/spark-redis/issues/205),
   [#304](https://github.com/RedisLabs/spark-redis/issues/304),
