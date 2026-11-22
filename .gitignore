@@ -20,20 +20,12 @@ target/
 *.class
 *.log
 *.pyc
-sbt/*.jar
-
-# sbt specific
-.cache/
-.history/
-.lib/
-dist/*
-target/
-lib_managed/
-src_managed/
-project/boot/
-project/plugins/project/
-build/*.jar
 checkpoint-test/
+
+# Claude Code: personal settings, agent worktrees and the hook log (the shared .claude/ files are committed)
+.claude/settings.local.json
+.claude/worktrees/
+.claude/hook-blocks.log
 
 # eclipse
 .project

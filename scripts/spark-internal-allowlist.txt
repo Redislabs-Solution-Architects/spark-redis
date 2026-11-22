@@ -1,0 +1,15 @@
+# Spark internal APIs that code may still reference (scripts/check-spark-internal-imports.sh).
+#
+# One fully qualified name per line. An entry allows that name and anything under it, so
+# org.apache.spark.sql.catalyst.InternalRow also allows org.apache.spark.sql.catalyst.InternalRow.empty.
+#
+# Spec section 3: Spark-internal APIs drift between 4.x lines, so new code uses only the public DSv2 and Connector
+# APIs. Adding an entry needs the owner's approval in the PR that adds it, with the reason in a comment.
+#
+# The 3.x code (org.apache.spark.sql.redis) uses these today. Phase 2 deletes that code, and these entries with it.
+org.apache.spark.sql.catalyst.InternalRow
+org.apache.spark.sql.catalyst.expressions.GenericRow
+org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+org.apache.spark.sql.execution.streaming.Offset
+org.apache.spark.sql.execution.streaming.SerializedOffset
+org.apache.spark.sql.execution.streaming.Source
