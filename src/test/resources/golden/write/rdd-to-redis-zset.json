@@ -1,0 +1,23 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {
+      "key": "golden_rdd_to_redis_zset:ttl",
+      "type": "zset",
+      "ttl": 3600,
+      "value": [{"member": "a", "score": "1"}]
+    },
+    {
+      "key": "golden_rdd_to_redis_zset:z",
+      "type": "zset",
+      "ttl": "none",
+      "value": [
+        {"member": "b", "score": "-2"},
+        {"member": "e", "score": "0.1"},
+        {"member": "a", "score": "1.5"},
+        {"member": "d", "score": "1.5"},
+        {"member": "c", "score": "1000"}
+      ]
+    }
+  ]
+}

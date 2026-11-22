@@ -139,7 +139,7 @@ object GoldenSuite {
   val Root = new File("src/test/resources/golden")
   /**
     * `-Dgolden.update=true` in the test JVM. The scalatest plugin only forwards the system properties listed in
-    * `pom.xml`, so until the pom forwards this one, pass it with `JAVA_TOOL_OPTIONS=-Dgolden.update=true`.
+    * `pom.xml`, and until the pom lists this one, pass it with `JAVA_TOOL_OPTIONS=-Dgolden.update=true`.
     */
   val UpdateMode: Boolean = sys.props.get("golden.update").exists(_.toBoolean)
   val StreamTimeoutMillis = 60000L

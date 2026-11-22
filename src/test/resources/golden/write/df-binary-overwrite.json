@@ -1,0 +1,62 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {
+      "key": "_spark:golden_df_binary_overwrite:schema",
+      "type": "string",
+      "ttl": "none",
+      "value": {
+        "base64": "rO0ABXNyACVvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5TdHJ1Y3RUeXBlyZv7Aito4bMCAAZJAAlfaGFzaENvZGVCAAhiaXRtYXAkMEwADWZpZWxkTmFtZXNTZXR0ACBMc2NhbGEvY29sbGVjdGlvbi9pbW11dGFibGUvU2V0O1sABmZpZWxkc3QAKVtMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvU3RydWN0RmllbGQ7TAALbmFtZVRvRmllbGR0ABZMc2NhbGEvY29sbGVjdGlvbi9NYXA7TAALbmFtZVRvSW5kZXhxAH4AA3hwAAAAAABwdXIAKVtMb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuU3RydWN0RmllbGQ7tWPEaGAaDUcCAAB4cAAAAAVzcgAmb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuU3RydWN0RmllbGSgVijy4NwSMQIABFoACG51bGxhYmxlTAAIZGF0YVR5cGV0ACVMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvRGF0YVR5cGU7TAAIbWV0YWRhdGF0ACVMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvTWV0YWRhdGE7TAAEbmFtZXQAEkxqYXZhL2xhbmcvU3RyaW5nO3hwAXNyACZvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5TdHJpbmdUeXBlJDSuWtcwJHrbAgAAeHBzcgAjb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuTWV0YWRhdGFtjWLvldkl+wIAA0kACV9oYXNoQ29kZVoACGJpdG1hcCQwTAADbWFwdAAgTHNjYWxhL2NvbGxlY3Rpb24vaW1tdXRhYmxlL01hcDt4cKATnrgBc3IAKHNjYWxhLmNvbGxlY3Rpb24uaW1tdXRhYmxlLk1hcCRFbXB0eU1hcCSx6xuFbkKAywIAAHhwdAAEbmFtZXNxAH4ABwFzcgAnb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuSW50ZWdlclR5cGUk+Cyhq8nkf6YCAAB4cHEAfgAQdAADYWdlc3EAfgAHAXEAfgANcQB+ABB0AAdhZGRyZXNzc3EAfgAHAXNyACZvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5Eb3VibGVUeXBlJPPB5nk9S1n2AgAAeHBxAH4AEHQABnNhbGFyeXNxAH4ABwFxAH4ADXEAfgAQdAAFdGl0bGVwcA==",
+        "javaSerialized": {
+          "class": "org.apache.spark.sql.types.StructType",
+          "sparkSchema": {
+            "type": "struct",
+            "fields": [
+              {"name": "name", "type": "string", "nullable": true, "metadata": {}},
+              {"name": "age", "type": "integer", "nullable": true, "metadata": {}},
+              {"name": "address", "type": "string", "nullable": true, "metadata": {}},
+              {"name": "salary", "type": "double", "nullable": true, "metadata": {}},
+              {"name": "title", "type": "string", "nullable": true, "metadata": {}}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "golden_df_binary_overwrite:John",
+      "type": "string",
+      "ttl": "none",
+      "value": {
+        "base64": "rO0ABXVyABNbTGphdmEubGFuZy5PYmplY3Q7kM5YnxBzKWwCAAB4cAAAAAV0AARKb2huc3IAEWphdmEubGFuZy5JbnRlZ2VyEuKgpPeBhzgCAAFJAAV2YWx1ZXhyABBqYXZhLmxhbmcuTnVtYmVyhqyVHQuU4IsCAAB4cAAAAB9wc3IAEGphdmEubGFuZy5Eb3VibGWAs8JKKWv7BAIAAUQABXZhbHVleHEAfgAEQGNgAAAAAAB0AANDRU8=",
+        "javaSerialized": {
+          "class": "[Ljava.lang.Object;",
+          "values": [
+            {"class": "java.lang.String", "value": "John"},
+            {"class": "java.lang.Integer", "value": "31"},
+            null,
+            {"class": "java.lang.Double", "value": "155.0"},
+            {"class": "java.lang.String", "value": "CEO"}
+          ]
+        }
+      }
+    },
+    {
+      "key": "golden_df_binary_overwrite:Mary",
+      "type": "string",
+      "ttl": "none",
+      "value": {
+        "base64": "rO0ABXVyABNbTGphdmEubGFuZy5PYmplY3Q7kM5YnxBzKWwCAAB4cAAAAAV0AARNYXJ5c3IAEWphdmEubGFuZy5JbnRlZ2VyEuKgpPeBhzgCAAFJAAV2YWx1ZXhyABBqYXZhLmxhbmcuTnVtYmVyhqyVHQuU4IsCAAB4cAAAABx0AA0xIE1haW4gU3RyZWV0c3IAEGphdmEubGFuZy5Eb3VibGWAs8JKKWv7BAIAAUQABXZhbHVleHEAfgAEQFj5mZmZmZp0AANDVE8=",
+        "javaSerialized": {
+          "class": "[Ljava.lang.Object;",
+          "values": [
+            {"class": "java.lang.String", "value": "Mary"},
+            {"class": "java.lang.Integer", "value": "28"},
+            {"class": "java.lang.String", "value": "1 Main Street"},
+            {"class": "java.lang.Double", "value": "99.9"},
+            {"class": "java.lang.String", "value": "CTO"}
+          ]
+        }
+      }
+    }
+  ]
+}

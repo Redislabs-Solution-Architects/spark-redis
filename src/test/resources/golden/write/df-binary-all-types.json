@@ -1,0 +1,86 @@
+{
+  "format": "spark-redis-keyspace-snapshot/1",
+  "keys": [
+    {
+      "key": "_spark:golden_df_binary_all_types:schema",
+      "type": "string",
+      "ttl": "none",
+      "value": {
+        "base64": "rO0ABXNyACVvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5TdHJ1Y3RUeXBlyZv7Aito4bMCAAZJAAlfaGFzaENvZGVCAAhiaXRtYXAkMEwADWZpZWxkTmFtZXNTZXR0ACBMc2NhbGEvY29sbGVjdGlvbi9pbW11dGFibGUvU2V0O1sABmZpZWxkc3QAKVtMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvU3RydWN0RmllbGQ7TAALbmFtZVRvRmllbGR0ABZMc2NhbGEvY29sbGVjdGlvbi9NYXA7TAALbmFtZVRvSW5kZXhxAH4AA3hwAAAAAABwdXIAKVtMb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuU3RydWN0RmllbGQ7tWPEaGAaDUcCAAB4cAAAAA1zcgAmb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuU3RydWN0RmllbGSgVijy4NwSMQIABFoACG51bGxhYmxlTAAIZGF0YVR5cGV0ACVMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvRGF0YVR5cGU7TAAIbWV0YWRhdGF0ACVMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvTWV0YWRhdGE7TAAEbmFtZXQAEkxqYXZhL2xhbmcvU3RyaW5nO3hwAXNyACZvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5TdHJpbmdUeXBlJDSuWtcwJHrbAgAAeHBzcgAjb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuTWV0YWRhdGFtjWLvldkl+wIAA0kACV9oYXNoQ29kZVoACGJpdG1hcCQwTAADbWFwdAAgTHNjYWxhL2NvbGxlY3Rpb24vaW1tdXRhYmxlL01hcDt4cKATnrgBc3IAKHNjYWxhLmNvbGxlY3Rpb24uaW1tdXRhYmxlLk1hcCRFbXB0eU1hcCSx6xuFbkKAywIAAHhwdAACaWRzcQB+AAcBcQB+AA1xAH4AEHQABnN0cmluZ3NxAH4ABwFzcgAkb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuQnl0ZVR5cGUkbKLET4ycQiMCAAB4cHEAfgAQdAAEYnl0ZXNxAH4ABwFzcgAlb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuU2hvcnRUeXBlJBu+R/oL9dp9AgAAeHBxAH4AEHQABXNob3J0c3EAfgAHAXNyACdvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5JbnRlZ2VyVHlwZST4LKGryeR/pgIAAHhwcQB+ABB0AANpbnRzcQB+AAcBc3IAJG9yZy5hcGFjaGUuc3Bhcmsuc3FsLnR5cGVzLkxvbmdUeXBlJK0CDVcLTPc7AgAAeHBxAH4AEHQABGxvbmdzcQB+AAcBc3IAJW9yZy5hcGFjaGUuc3Bhcmsuc3FsLnR5cGVzLkZsb2F0VHlwZSSAOb6kHy74CAIAAHhwcQB+ABB0AAVmbG9hdHNxAH4ABwFzcgAmb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuRG91YmxlVHlwZSTzweZ5PUtZ9gIAAHhwcQB+ABB0AAZkb3VibGVzcQB+AAcBc3IAJm9yZy5hcGFjaGUuc3Bhcmsuc3FsLnR5cGVzLkRlY2ltYWxUeXBlzw70jLO80gUCAAZJAAlwcmVjaXNpb25JAAVzY2FsZUwACmFzSW50ZWdyYWx0ADlMb3JnL2FwYWNoZS9zcGFyay9zcWwvdHlwZXMvRGVjaW1hbCREZWNpbWFsQXNJZkludGVncmFsJDtMAApmcmFjdGlvbmFsdAA5TG9yZy9hcGFjaGUvc3Bhcmsvc3FsL3R5cGVzL0RlY2ltYWwkRGVjaW1hbElzRnJhY3Rpb25hbCQ7TAAHbnVtZXJpY3EAfgAxTAAIb3JkZXJpbmdxAH4AMXhwAAAACgAAAAJzcgA3b3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuRGVjaW1hbCREZWNpbWFsQXNJZkludGVncmFsJNNL+aWc23pAAgAAeHBzcgA3b3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuRGVjaW1hbCREZWNpbWFsSXNGcmFjdGlvbmFsJO81wjb6B5FWAgAAeHBxAH4ANnEAfgA2cQB+ABB0AAdkZWNpbWFsc3EAfgAHAXNyACdvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5Cb29sZWFuVHlwZSRBjnG8Y6/qkwIAAHhwcQB+ABB0AAdib29sZWFuc3EAfgAHAXNyACRvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5EYXRlVHlwZSRwUSJ6HYauFAIAAHhwcQB+ABB0AARkYXRlc3EAfgAHAXNyAClvcmcuYXBhY2hlLnNwYXJrLnNxbC50eXBlcy5UaW1lc3RhbXBUeXBlJI/bt6IxH1YCAgAAeHBxAH4AEHQACXRpbWVzdGFtcHNxAH4ABwFzcgAmb3JnLmFwYWNoZS5zcGFyay5zcWwudHlwZXMuQmluYXJ5VHlwZSRO4Zpw9ySpPgIAAHhwcQB+ABB0AAZiaW5hcnlwcA==",
+        "javaSerialized": {
+          "class": "org.apache.spark.sql.types.StructType",
+          "sparkSchema": {
+            "type": "struct",
+            "fields": [
+              {"name": "id", "type": "string", "nullable": true, "metadata": {}},
+              {"name": "string", "type": "string", "nullable": true, "metadata": {}},
+              {"name": "byte", "type": "byte", "nullable": true, "metadata": {}},
+              {"name": "short", "type": "short", "nullable": true, "metadata": {}},
+              {"name": "int", "type": "integer", "nullable": true, "metadata": {}},
+              {"name": "long", "type": "long", "nullable": true, "metadata": {}},
+              {"name": "float", "type": "float", "nullable": true, "metadata": {}},
+              {"name": "double", "type": "double", "nullable": true, "metadata": {}},
+              {"name": "decimal", "type": "decimal(10,2)", "nullable": true, "metadata": {}},
+              {"name": "boolean", "type": "boolean", "nullable": true, "metadata": {}},
+              {"name": "date", "type": "date", "nullable": true, "metadata": {}},
+              {"name": "timestamp", "type": "timestamp", "nullable": true, "metadata": {}},
+              {"name": "binary", "type": "binary", "nullable": true, "metadata": {}}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "key": "golden_df_binary_all_types:a",
+      "type": "string",
+      "ttl": "none",
+      "value": {
+        "base64": "rO0ABXVyABNbTGphdmEubGFuZy5PYmplY3Q7kM5YnxBzKWwCAAB4cAAAAA10AAFhdAAEdGV4dHNyAA5qYXZhLmxhbmcuQnl0ZZxOYITuUPUcAgABQgAFdmFsdWV4cgAQamF2YS5sYW5nLk51bWJlcoaslR0LlOCLAgAAeHABc3IAD2phdmEubGFuZy5TaG9ydGhNNxM0YNpSAgABUwAFdmFsdWV4cQB+AAUAAnNyABFqYXZhLmxhbmcuSW50ZWdlchLioKT3gYc4AgABSQAFdmFsdWV4cQB+AAUAAAADc3IADmphdmEubGFuZy5Mb25nO4vkkMyPI98CAAFKAAV2YWx1ZXhxAH4ABQAAAADuaygAc3IAD2phdmEubGFuZy5GbG9hdNrtyaLbPPDsAgABRgAFdmFsdWV4cQB+AAU/wAAAc3IAEGphdmEubGFuZy5Eb3VibGWAs8JKKWv7BAIAAUQABXZhbHVleHEAfgAFQAIAAAAAAABzcgAUamF2YS5tYXRoLkJpZ0RlY2ltYWxUxxVX+YEoTwMAAkkABXNjYWxlTAAGaW50VmFsdAAWTGphdmEvbWF0aC9CaWdJbnRlZ2VyO3hxAH4ABQAAAAJzcgAUamF2YS5tYXRoLkJpZ0ludGVnZXKM/J8fqTv7HQMABkkACGJpdENvdW50SQAJYml0TGVuZ3RoSQATZmlyc3ROb256ZXJvQnl0ZU51bUkADGxvd2VzdFNldEJpdEkABnNpZ251bVsACW1hZ25pdHVkZXQAAltCeHEAfgAF///////////////+/////gAAAAF1cgACW0Ks8xf4BghU4AIAAHhwAAAAAgTSeHhzcgARamF2YS5sYW5nLkJvb2xlYW7NIHKA1Zz67gIAAVoABXZhbHVleHABc3IADWphdmEuc3FsLkRhdGUU+kZoPzVmlwIAAHhyAA5qYXZhLnV0aWwuRGF0ZWhqgQFLWXQZAwAAeHB3CAAAAXCOPhwAeHNyABJqYXZhLnNxbC5UaW1lc3RhbXAmGNXIAVO/ZQIAAUkABW5hbm9zeHEAfgAcdwgAAAFwkPFFgHgvBy9AdXEAfgAXAAAABAABAv8=",
+        "javaSerialized": {
+          "class": "[Ljava.lang.Object;",
+          "values": [
+            {"class": "java.lang.String", "value": "a"},
+            {"class": "java.lang.String", "value": "text"},
+            {"class": "java.lang.Byte", "value": "1"},
+            {"class": "java.lang.Short", "value": "2"},
+            {"class": "java.lang.Integer", "value": "3"},
+            {"class": "java.lang.Long", "value": "4000000000"},
+            {"class": "java.lang.Float", "value": "1.5"},
+            {"class": "java.lang.Double", "value": "2.25"},
+            {"class": "java.math.BigDecimal", "value": "12.34"},
+            {"class": "java.lang.Boolean", "value": "true"},
+            {"class": "java.sql.Date", "value": "2020-02-29T00:00:00Z"},
+            {"class": "java.sql.Timestamp", "value": "2020-02-29T12:34:56.789Z"},
+            {"class": "[B", "base64": "AAEC/w=="}
+          ]
+        }
+      }
+    },
+    {
+      "key": "golden_df_binary_all_types:b",
+      "type": "string",
+      "ttl": "none",
+      "value": {
+        "base64": "rO0ABXVyABNbTGphdmEubGFuZy5PYmplY3Q7kM5YnxBzKWwCAAB4cAAAAA10AAFidAAPw7xuw69jw7hkw6kg4pyTc3IADmphdmEubGFuZy5CeXRlnE5ghO5Q9RwCAAFCAAV2YWx1ZXhyABBqYXZhLmxhbmcuTnVtYmVyhqyVHQuU4IsCAAB4cP9zcgAPamF2YS5sYW5nLlNob3J0aE03EzRg2lICAAFTAAV2YWx1ZXhxAH4ABf/+c3IAEWphdmEubGFuZy5JbnRlZ2VyEuKgpPeBhzgCAAFJAAV2YWx1ZXhxAH4ABf////1zcgAOamF2YS5sYW5nLkxvbmc7i+SQzI8j3wIAAUoABXZhbHVleHEAfgAF//////////xzcgAPamF2YS5sYW5nLkZsb2F02u3Jots88OwCAAFGAAV2YWx1ZXhxAH4ABb8AAABzcgAQamF2YS5sYW5nLkRvdWJsZYCzwkopa/sEAgABRAAFdmFsdWV4cQB+AAVCAqBfIAAAAHNyABRqYXZhLm1hdGguQmlnRGVjaW1hbFTHFVf5gShPAwACSQAFc2NhbGVMAAZpbnRWYWx0ABZMamF2YS9tYXRoL0JpZ0ludGVnZXI7eHEAfgAFAAAAAnNyABRqYXZhLm1hdGguQmlnSW50ZWdlcoz8nx+pO/sdAwAGSQAIYml0Q291bnRJAAliaXRMZW5ndGhJABNmaXJzdE5vbnplcm9CeXRlTnVtSQAMbG93ZXN0U2V0Qml0SQAGc2lnbnVtWwAJbWFnbml0dWRldAACW0J4cQB+AAX///////////////7////+/////3VyAAJbQqzzF/gGCFTgAgAAeHAAAAABAXh4c3IAEWphdmEubGFuZy5Cb29sZWFuzSBygNWc+u4CAAFaAAV2YWx1ZXhwAHNyAA1qYXZhLnNxbC5EYXRlFPpGaD81ZpcCAAB4cgAOamF2YS51dGlsLkRhdGVoaoEBS1l0GQMAAHhwdwgAAAAAAAAAAHhzcgASamF2YS5zcWwuVGltZXN0YW1wJhjVyAFTv2UCAAFJAAVuYW5vc3hxAH4AHHcIAAAA3GrPqBh4AAAAAHVxAH4AFwAAAAA=",
+        "javaSerialized": {
+          "class": "[Ljava.lang.Object;",
+          "values": [
+            {"class": "java.lang.String", "value": "b"},
+            {"class": "java.lang.String", "value": "ünïcødé ✓"},
+            {"class": "java.lang.Byte", "value": "-1"},
+            {"class": "java.lang.Short", "value": "-2"},
+            {"class": "java.lang.Integer", "value": "-3"},
+            {"class": "java.lang.Long", "value": "-4"},
+            {"class": "java.lang.Float", "value": "-0.5"},
+            {"class": "java.lang.Double", "value": "1.0E10"},
+            {"class": "java.math.BigDecimal", "value": "-0.01"},
+            {"class": "java.lang.Boolean", "value": "false"},
+            {"class": "java.sql.Date", "value": "1970-01-01T00:00:00Z"},
+            {"class": "java.sql.Timestamp", "value": "1999-12-31T23:59:59Z"},
+            {"class": "[B", "base64": ""}
+          ]
+        }
+      }
+    }
+  ]
+}
