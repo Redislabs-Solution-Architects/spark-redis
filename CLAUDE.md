@@ -9,7 +9,8 @@ Redis 8.2+). We are in **Phase 0**: make the 3.x code safe to change before anyt
 JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B verify -Dredis.image=redis:$(scripts/redis-lines.sh required | head -n 1)
 ```
 
-- **JDK 8 only** for 3.x. A newer default `java` will not work, so always set `JAVA_HOME`.
+- **JDK 8 only** for 3.x. A newer default `java` will not work, so always set `JAVA_HOME`. Maven and the test JVM
+  both run on it, even when `java` on `PATH` is newer (a jenv shim, Homebrew `openjdk@17`).
 - **Docker must be running.** Testcontainers starts the Redis servers each test JVM needs, on free ports, so runs can
   overlap. No local `redis-server` (`-Dredis.containers=false` uses external servers on the old fixed ports).
 - **One suite:** add `-Dsuites=com.redislabs.provider.redis.df.standalone.HashDataframeStandaloneSuite`.
