@@ -157,5 +157,5 @@ upstream 3.x as well, and so is the fix for #90; the notes name the upstream PRs
 
 ## Sign-off
 
-- [ ] I have confirmed every row: the phase, the decline reasons and the duplicates.
-  Owner: ____________________  Date: ____________
+- [x] I have confirmed every row: the phase, the decline reasons and the duplicates.
+  Owner: Albert T. Wong  Date: 2026-11-23
