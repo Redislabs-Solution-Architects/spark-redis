@@ -6,7 +6,7 @@
 #   make test SUITES=com.example.FooSuite      # one suite, or a comma-separated list
 #   make benchmark                             # the benchmark suites (long)
 #
-# Requirements: Docker, and JAVA_HOME pointing at a JDK 8 for this 3.x build.
+# Requirements: Docker, and JAVA_HOME pointing at a JDK 8 for this 3.x build (the test JVM runs on it too).
 
 MVN ?= $(if $(wildcard ./mvnw),./mvnw,mvn)
 # By default, the first line PRs must pass, read from versions.yml, the only list of Redis lines.

@@ -33,8 +33,11 @@ suite=$(echo "$new" | sed -e 's#^src/test/scala/##' -e 's#\.scala$##' -e 's#/#.#
 next=com.redislabs.provider.redis.rdd.cluster.RedisRDDClusterSuite
 
 # Run the new suite, then an existing cluster suite in the same JVM, to show the slot was put back.
+# The next suite's results end at the next suite header or at the run summary ("Run completed"), whose
+# "*** 1 TEST FAILED ***" line counts the new test, not this suite.
 ./mvnw -B verify -Dsuites="$suite,$next" > "$TMPDIR/eval-08.log" 2>&1 || true
-awk '/^RedisRDDClusterSuite:/ { on = 1; next } on && /^[A-Za-z]+Suite:/ { on = 0 } on' "$TMPDIR/eval-08.log" |
+awk '/^RedisRDDClusterSuite:/ { on = 1; next } on && (/^[A-Za-z]+Suite:/ || /^Run completed/) { on = 0 } on' \
+  "$TMPDIR/eval-08.log" |
   grep -q 'FAILED' && { echo "the next cluster suite failed: the slot wasn't restored"; exit 1; }
 grep -q '^RedisRDDClusterSuite:' "$TMPDIR/eval-08.log"
 
