@@ -36,7 +36,9 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B v
 
 ## Rules
 
-1. **`src/main` does not change in Phase 0.** Phase 0 changes only tests, the build, CI, docs and agent config.
+1. **In Phase 0, `src/main` changes only to fix a bug or when the owner asks for the change.** A bug fix comes with
+   its failing-first test (rule 5). Everything else in Phase 0 is tests, the build, CI, docs and agent config, and
+   the golden layouts pass unchanged either way.
 2. **New code goes in `com.redis.sparkredis`** from Phase 2. **Nothing new under `org.apache.spark.*`**, and no new
    imports from `org.apache.spark.sql.catalyst` or `.execution` outside `scripts/spark-internal-allowlist.txt`.
 3. **No legacy Redis commands** (spec §2.14): no `KEYS`, `SMEMBERS`, `HMSET`, `SETEX`, `SETNX`, `GETSET`, `EVAL`,

@@ -136,7 +136,8 @@ the work up to each gate, and named humans pass the gates.
   - the one verify command
   - the module map
   - "new code goes in `com.redis.sparkredis`; nothing new under `org.apache.spark.*`"
-  - "`src/main/scala/com/redislabs/**` is frozen until Phase 2 deletes it"
+  - "`src/main/scala/com/redislabs/**` is frozen until Phase 2 deletes it", except for bug fixes with a
+    failing-first test and changes the owner asks for (amended in Phase 0)
   - "if a test fails, fix the code, not the test"
   - capability gating, not version checks
   - no legacy Redis commands or patterns (spec §2.14)

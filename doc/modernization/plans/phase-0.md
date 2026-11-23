@@ -17,6 +17,10 @@ Make the current 3.x codebase safe to change before anything is ported. At the e
 **Out of scope for Phase 0:** connector code under `src/main` stays unchanged, and nothing is ported to Spark 4.
 Every change here is to tests, the build, CI, docs or agent configuration.
 
+> **Amended by the owner on 2026-11-22:** `src/main` may also change to fix a bug, with the bug's failing-first test,
+> or when the owner asks for the change (CLAUDE.md rule 1). The golden layouts still pass unchanged. Step C1's
+> rule list below is as originally approved.
+
 ## Environment
 
 | Where | Setup |

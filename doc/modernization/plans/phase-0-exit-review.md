@@ -3,10 +3,11 @@
 > Reviews [`phase-0.md`](phase-0.md)'s exit criteria against what is merged on `spike/phase-0` at `88f9d67` and
 > what CI and the GitHub API report. Written by an agent on 2026-11-22. **The owner signs off below.**
 >
-> **Updated twice the same day:**
+> **Updated three times the same day:**
 >
 > - with the eval baseline (criterion 5);
-> - after PRs #14–#31 merged, up to `2dc56ba`: criteria 1 and 7, one measurement, and open items 4, 5 and 7–10.
+> - after PRs #14–#31 merged, up to `2dc56ba`: criteria 1 and 7, one measurement, and open items 4, 5 and 7–10;
+> - after the owner amended CLAUDE.md rule 1 (open item 7).
 
 ## Verdict
 
@@ -14,10 +15,9 @@
 
 Criterion 8 counts as met because the owner decided Redis Cloud doesn't need its own RESP3 check (see the table).
 
-Four non-blocking items also need follow-up:
+Three non-blocking items also need follow-up:
 
 - the published package hasn't been seen directly (criterion 6)
-- `src/main` has changed in Phase 0, which the plan and CLAUDE.md rule 1 don't allow (open item 7)
 - the redirected-write cluster tests are flaky on Redis 8.8 and 8.12-rc3 in CI (open item 8)
 - the Redis password is written to the logs (open item 9)
 
@@ -73,17 +73,23 @@ These are the measures the playbook asks for (see `phase-0.md`, "Measurement").
 6. **The test TLS certificate: fixed in this PR**, at the owner's request. `redis.crt` expired in 2021. It is now
    re-issued by the same test CA and valid until 2030-05-13, with subject alternative names `localhost`,
    `127.0.0.1` and `::1`, ready for Phase 1's hostname verification. See finding 3.
-7. **`src/main` changed during Phase 0.** After this review, the owner merged connector changes, most of which grew
-   out of the evals:
+7. **Done: `src/main` changed during Phase 0, and rule 1 now allows it.** After this review, the owner merged
+   connector changes, most of which grew out of the evals:
    - `client.name` (#398, PR #21)
    - parse errors that name the key, field, value and type (#358, PR #20)
    - `write.mode` (#351, PR #23)
    - `MSETEX` for binary rows with a TTL, where the server has it (PR #26)
    - every writer following `MOVED` and `ASK` (#347): `toRedisKV` in PRs #19 and #22, the others in PR #29
 
-   The plan and CLAUDE.md rule 1 say `src/main` doesn't change in Phase 0. **Owner:** either record these as
-   approved exceptions, or amend rule 1. Still open from #347: `write.mode = replace` and binary rows with a TTL
-   don't follow redirects yet. They fail the job instead of losing rows.
+   The plan and CLAUDE.md rule 1 said `src/main` doesn't change in Phase 0. **The owner amended rule 1**: in Phase 0,
+   `src/main` now changes only to fix a bug, with its failing-first test, or when the owner asks for the change, and
+   the golden layouts pass unchanged either way. The plan and roadmap note the amendment, and REVIEW.md asks each PR
+   which case applies. The merged changes fit the amended rule:
+   - **Bug fixes with failing-first tests:** #20, #22 and #29, plus the `toRedisKV` part of #19.
+   - **Requested by the owner:** #21, #23 and #26 came from eval tasks the owner set, and the owner merged them.
+
+   Still open from #347: `write.mode = replace` and binary rows with a TTL don't follow redirects yet. They fail the
+   job instead of losing rows.
 
    Also, `redisFunctions.scala` and `PipelineUtils.scala` were reformatted whole, in a commit of their own (PRs #19
    and #22). The after-edit hook formats every Scala file an agent touches, so the first edit to a file that was
@@ -108,7 +114,6 @@ These are the measures the playbook asks for (see `phase-0.md`, "Measurement").
 
 ## Sign-off
 
-When items 2 and 3 are done, and the owner has decided item 7, the owner signs here to close Phase 0 and approve
-starting the Phase 1 plan.
+When items 2 and 3 are done, the owner signs here to close Phase 0 and approve starting the Phase 1 plan.
 
   Owner: ____________________  Date: ____________
