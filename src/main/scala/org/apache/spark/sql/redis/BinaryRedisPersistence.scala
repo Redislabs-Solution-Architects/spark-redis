@@ -43,13 +43,15 @@ class BinaryRedisPersistence extends RedisPersistence[Array[Byte]] {
     * @param ttl          seconds, more than 0
     * @param capabilities what the server can do, probed once per write
     */
-  def saveWithTtl(conn: Jedis, rows: Seq[(String, Array[Byte])], ttl: Int, capabilities: WriteCapabilities)(
-      implicit readWriteConfig: ReadWriteConfig): Unit = {
+  def saveWithTtl(conn: Jedis, rows: Seq[(String, Array[Byte])], ttl: Int, capabilities: WriteCapabilities)
+                 (implicit readWriteConfig: ReadWriteConfig): Unit = {
     require(ttl > 0, s"ttl must be more than 0, got $ttl")
     if (capabilities.msetex) {
-      val groups =
-        if (capabilities.slotScoped) rows.groupBy { case (key, _) => JedisClusterCRC16.getSlot(key) }.values.toSeq
-        else Seq(rows)
+      val groups = if (capabilities.slotScoped) {
+        rows.groupBy { case (key, _) => JedisClusterCRC16.getSlot(key) }.values.toSeq
+      } else {
+        Seq(rows)
+      }
       val replies = mapWithPipeline(conn, groups.filter(_.nonEmpty)) { (pipeline, group) =>
         msetex(pipeline, group, ttl)
       }
@@ -108,7 +110,7 @@ object BinaryRedisPersistence {
     if (rejected.nonEmpty) {
       val (detail, cause) = rejected.head match {
         case e: JedisDataException => (e.getMessage, e)
-        case other => (s"unexpected reply $other", null)
+        case other: Any => (s"unexpected reply $other", null)
       }
       val node = s"${conn.getClient.getHost}:${conn.getClient.getPort}"
       throw new JedisDataException(

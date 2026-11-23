@@ -43,11 +43,17 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<java.version>1.8</java.version>
+		<!-- Like Spark 3.x, the library is built for Scala 2.12 (the default) and 2.13. Keep these in line with the
+		     Scala versions that spark.version below is built with (2.12.18 and 2.13.8 for Spark 3.5.x).
+		     dev/change-scala-version.sh switches the build and the artifact name (spark-redis_<scala>) between them. -->
+		<scala.2.12.version>2.12.18</scala.2.12.version>
+		<scala.2.13.version>2.13.8</scala.2.13.version>
 		<scala.major.version>2.12</scala.major.version>
-		<scala.complete.version>${scala.major.version}.0</scala.complete.version>
+		<scala.complete.version>${scala.2.12.version}</scala.complete.version>
 		<jedis.version>3.9.0</jedis.version>
-		<spark.version>3.2.1</spark.version>
-		<!-- 2.1.0 or later: the plugin starts the test JVM from ${java.home}, the JDK that runs Maven (JAVA_HOME).
+		<!-- the latest Spark 3.x; upstream's CI also tests older Spark versions, which this fork's ci.yml does not yet -->
+		<spark.version>3.5.10</spark.version>
+		<!-- 2.0.0 or later: the plugin starts the test JVM from ${java.home}, the JDK that runs Maven (JAVA_HOME).
 		     1.0 ran whatever `java` came first on PATH, so a jenv or Homebrew JDK 17 there broke the tests. -->
 		<plugins.scalatest.version>2.2.0</plugins.scalatest.version>
 		<testcontainers.version>1.21.4</testcontainers.version>
@@ -85,16 +91,15 @@
 						<goals>
 							<goal>prepare-agent</goal>
 						</goals>
-						<!-- The scalatest plugin sets its own <argLine>, which replaces the argLine property this goal
-						     sets by default, so the agent never loaded and coverage was never recorded. Expose the agent
-						     under its own property and reference it from the scalatest argLine below. -->
 						<configuration>
+							<!-- scalatest-maven-plugin sets its own argLine, which would replace the default
+							     'argLine' property; expose the agent under its own name and reference it there -->
 							<propertyName>jacocoArgLine</propertyName>
 						</configuration>
 					</execution>
 					<execution>
 						<id>report</id>
-						<!-- verify, not test: in the test phase this ran before the scalatest plugin had produced any data. -->
+						<!-- must run after scalatest (bound to 'test') has written target/jacoco.exec -->
 						<phase>verify</phase>
 						<goals>
 							<goal>report</goal>
@@ -219,30 +224,6 @@
 					</execution>
 				</executions>
 			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-site-plugin</artifactId>
-				<version>3.4</version>
-				<inherited>false</inherited>
-				<dependencies>
-					<dependency>
-						<groupId>org.apache.maven.doxia</groupId>
-						<artifactId>doxia-module-markdown</artifactId>
-						<version>1.6</version>
-					</dependency>
-					<dependency>
-						<groupId>lt.velykis.maven.skins</groupId>
-						<artifactId>reflow-velocity-tools</artifactId>
-						<version>1.1.1</version>
-					</dependency>
-					<!-- Reflow skin requires Velocity >= 1.7  -->
-					<dependency>
-						<groupId>org.apache.velocity</groupId>
-						<artifactId>velocity</artifactId>
-						<version>1.7</version>
-					</dependency>
-				</dependencies>
-			</plugin>
 			<!-- disable surefire -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -281,6 +262,18 @@
 			</plugin>
 		</plugins>
 	</build>
+	<dependencyManagement>
+		<dependencies>
+			<!-- Testcontainers talks to Docker through JNA and is built with JNA 5.13.0. Spark brings an older JNA in
+			     the Scala 2.13 builds (5.3.1 with Spark 3.2), which would win and has no Apple Silicon library, so
+			     the tests couldn't start Redis on an arm64 Mac. This sets the version only, not the scope. -->
+			<dependency>
+				<groupId>net.java.dev.jna</groupId>
+				<artifactId>jna</artifactId>
+				<version>5.13.0</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
         <dependency>
             <groupId>redis.clients</groupId>

@@ -17,7 +17,7 @@ import org.testcontainers.utility.MountableFile
   * The env traits read their ports from here (see `Env.redisPort`), so suites never hard-code a port.
   *
   * System properties:
-  *  - `redis.image`: the Redis image to run (default `redis:8.2`)
+  *  - `redis.image`: the Redis image to run, Redis 7.4 or later (default `redis:8.2`, see `pom.xml`)
   *  - `redis.containers`: set to `false` to use Redis servers started outside the tests instead, on the old
   *    fixed ports (6379 standalone, 6380 TLS, 7379-7381 cluster)
   */
@@ -84,6 +84,7 @@ object RedisContainers {
   private def startCluster(ports: Seq[Int]): RedisClusterContainer = {
     val c = new RedisClusterContainer
     copy(c, "containers/users-cluster.acl", s"$ConfDir/users-cluster.acl")
+    copy(c, "containers/version-options.sh", s"$ConfDir/version-options.sh")
     copy(c, "containers/start-cluster.sh", s"$ConfDir/start-cluster.sh", Executable)
     ports.foreach(port => c.withFixedExposedPort(port, port))
     c.withCommand(Seq("sh", s"$ConfDir/start-cluster.sh") ++ ports.map(_.toString): _*)

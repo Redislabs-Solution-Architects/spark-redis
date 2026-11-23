@@ -25,7 +25,7 @@ class RedisBenchmarksCsvSuite extends FunSuite with Matchers {
   }
 
   private def lines(file: File): Seq[String] =
-    Files.readAllLines(file.toPath, StandardCharsets.UTF_8).asScala
+    Files.readAllLines(file.toPath, StandardCharsets.UTF_8).asScala.toSeq
 
   test("a new file gets the header, then one row per call") {
     withCsvFile { file =>

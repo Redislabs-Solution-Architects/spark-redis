@@ -1,15 +1,18 @@
 package com.redislabs.provider.redis.df
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
 import java.util.UUID
 
 import com.redislabs.provider.redis.toRedisContext
+import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
 import com.redislabs.provider.redis.util.Person.{data, _}
 import com.redislabs.provider.redis.util.TestUtils._
 import com.redislabs.provider.redis.util.{EntityId, Logging, Person}
+import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.redis.RedisSourceRelation.tableDataKeyPattern
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.redis.RedisSourceRelation.{dataKey, schemaKey, tableDataKeyPattern}
 import org.apache.spark.sql.redis._
 import org.apache.spark.sql.types.{StructField, _}
 import org.scalatest.Matchers
@@ -30,6 +33,33 @@ trait HashDataframeSuite extends RedisDataframeSuite with Matchers with Logging 
     df.write.format(RedisFormat).
       option(SqlOptionTableName, tableName)
       .save()
+    val loadedDf = spark.read.format(RedisFormat)
+      .option(SqlOptionTableName, tableName)
+      .load()
+      .cache()
+    verifyDf(loadedDf)
+  }
+
+  test("the table schema is stored as Spark's schema JSON, which every Spark version reads") {
+    val tableName = generateTableName(TableNamePrefix)
+    val df = spark.createDataFrame(data)
+    df.write.format(RedisFormat)
+      .option(SqlOptionTableName, tableName)
+      .save()
+    val key = schemaKey(tableName)
+    val stored = withConnection(redisConfig.connectionForKey(key))(_.get(key.getBytes(UTF_8)))
+    DataType.fromJson(new String(stored, UTF_8)) shouldBe df.schema
+  }
+
+  test("a table whose schema an earlier version stored Java-serialized can still be read") {
+    val tableName = generateTableName(TableNamePrefix)
+    val df = spark.createDataFrame(data)
+    df.write.format(RedisFormat)
+      .option(SqlOptionTableName, tableName)
+      .save()
+    val key = schemaKey(tableName)
+    val javaSerialized = SerializationUtils.serialize(df.schema)
+    withConnection(redisConfig.connectionForKey(key))(_.set(key.getBytes(UTF_8), javaSerialized))
     val loadedDf = spark.read.format(RedisFormat)
       .option(SqlOptionTableName, tableName)
       .load()
@@ -337,6 +367,20 @@ trait HashDataframeSuite extends RedisDataframeSuite with Matchers with Logging 
 
     df.show()
     df.count() should be (0)
+  }
+
+  test("save fails when a row's key holds a non-hash value") {
+    val tableName = generateTableName(TableNamePrefix)
+    // HMSET on a String answers WRONGTYPE; the write must fail rather than drop the row (issue #33)
+    sc.toRedisKV(sc.parallelize(Seq((dataKey(tableName, "John"), "a string"))))
+    val err = interceptSparkErr[SparkException] {
+      spark.createDataFrame(data).write.format(RedisFormat)
+        .mode(SaveMode.Append)
+        .option(SqlOptionTableName, tableName)
+        .option(SqlOptionKeyColumn, "name")
+        .save()
+    }
+    err.getMessage should include("WRONGTYPE")
   }
 
   test("a value that can't be parsed names the key, the field, the value and the type (#358)") {

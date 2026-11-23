@@ -21,11 +21,14 @@ Spark-Redis also supports Spark Streaming (DStreams) and Structured Streaming.
 ## Version compatibility and branching
 
 The library has several branches, each corresponds to a different supported Spark version. For example, 'branch-2.3' works with any Spark 2.3.x version.
-The master branch contains the recent development for the next release.
+The master branch contains the recent development for the next release. It is built with the latest Spark 3.5.x, and CI
+also tests it with Spark 3.2, 3.3 and 3.4. Like Spark 3.x, it is built for Scala 2.12 (`spark-redis_2.12`) and Scala 2.13
+(`spark-redis_2.13`), see [Getting the library](doc/getting-started.md#getting-the-library).
 
 | Spark-Redis                                                               | Spark | Redis            | Supported Scala Versions | 
 |---------------------------------------------------------------------------|-------| ---------------- | ------------------------ |
-| [master](https://github.com/RedisLabs/spark-redis/)                       | 3.2.x | >=2.9.0          | 2.12                     | 
+| [master](https://github.com/RedisLabs/spark-redis/)                       | 3.2.x - 3.5.x (built with 3.5.x) | >=7.4            | 2.12, 2.13               | 
+| [3.1](https://github.com/RedisLabs/spark-redis/tree/v3.1.0)               | 3.2.x | >=2.9.0          | 2.12                     | 
 | [3.0](https://github.com/RedisLabs/spark-redis/tree/branch-3.0)           | 3.0.x | >=2.9.0          | 2.12                     | 
 | [2.4, 2.5, 2.6](https://github.com/RedisLabs/spark-redis/tree/branch-2.4) | 2.4.x | >=2.9.0          | 2.11, 2.12               | 
 | [2.3](https://github.com/RedisLabs/spark-redis/tree/branch-2.3)           | 2.3.x | >=2.9.0          | 2.11                     | 
@@ -34,7 +37,12 @@ The master branch contains the recent development for the next release.
 
 ## Known limitations
 
-* Java, Python and R API bindings are not provided at this time
+* The API is written in Scala. Java can use it through Scala/Java interoperability, see [Java](doc/java.md).
+* Python supports the DataFrame API, Spark SQL and Structured Streaming only. The RDD and DStream functions are not available from Python, see [Python](doc/python.md).
+* There is no R API.
+* Redis Sentinel is not supported, see [Redis server requirements](doc/configuration.md#redis-server-requirements).
+* `master` requires Redis 7.4 or later; CI tests 7.4 and 8.6. Earlier releases (see the table above) work with older
+  Redis versions.
 
 ## Additional considerations
 This library is a work in progress so the API may change before the official release.
@@ -52,6 +60,7 @@ Please make sure you use documentation from the correct branch ([2.4](https://gi
   - [Java](doc/java.md)
   - [Python](doc/python.md)
   - [Configuration](doc/configuration.md)
+  - [Troubleshooting](doc/troubleshooting.md)
   - [Dev environment](doc/dev.md)
 
 ## Contributing
