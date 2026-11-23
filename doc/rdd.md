@@ -1,5 +1,8 @@
-
 # RDD
+
+> **Deprecated in 4.0.0-M1.** The RDD API (`sc.fromRedis*`, `sc.toRedis*` and the `RedisContext` they come from) still
+> works in 4.0.0-M1, but compiling against it shows deprecation warnings, and 4.0.0-M2 removes it. Use the
+> [DataFrame source](dataframe.md) instead.
 
   - [The keys RDD](#the-keys-rdd)
   - [Reading data](#reading-data)

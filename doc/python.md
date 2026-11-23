@@ -74,7 +74,7 @@ From Python you can use everything that goes through the DataFrame API:
 * reading and writing DataFrames and Spark SQL tables, see [DataFrame](dataframe.md),
 * reading Redis Streams with Structured Streaming, see [Structured Streaming](structured-streaming.md).
 
-The RDD functions (`sc.fromRedisKV`, `sc.toRedisKV`, `sc.toRedisHASH`, ...) and the DStream functions are Scala methods
+The RDD functions (`sc.fromRedisKV`, `sc.toRedisKV`, `sc.toRedisHASH`, ...) are Scala methods
 added to `SparkContext` by `import com.redislabs.provider.redis._`. They are not available from Python, and there is no
 Python module to import.
 

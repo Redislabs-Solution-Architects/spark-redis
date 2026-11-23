@@ -16,7 +16,7 @@ Spark-Redis provides access to all of Redis' data structures - String, Hash, Lis
 
 The library can be used both with Redis stand-alone as well as clustered databases. When used with Redis cluster, Spark-Redis is aware of its partitioning scheme and adjusts in response to resharding and node failure events.
 
-Spark-Redis also supports Spark Streaming (DStreams) and Structured Streaming.
+Spark-Redis also supports Structured Streaming. The DStream API (Spark Streaming) was removed in 4.0.0-M1, and the RDD API is deprecated.
 
 ## Version compatibility and branching
 
@@ -39,7 +39,7 @@ also tests it with Spark 3.2, 3.3 and 3.4. Like Spark 3.x, it is built for Scala
 ## Known limitations
 
 * The API is written in Scala. Java can use it through Scala/Java interoperability, see [Java](doc/java.md).
-* Python supports the DataFrame API, Spark SQL and Structured Streaming only. The RDD and DStream functions are not available from Python, see [Python](doc/python.md).
+* Python supports the DataFrame API, Spark SQL and Structured Streaming only. The RDD functions are not available from Python, see [Python](doc/python.md).
 * There is no R API.
 * Redis Sentinel is not supported, see [Redis server requirements](doc/configuration.md#redis-server-requirements).
 * `master` requires Redis 7.4 or later; CI tests 7.4 and 8.6. Earlier releases (see the table above) work with older
@@ -55,7 +55,6 @@ Please make sure you use documentation from the correct branch ([2.4](https://gi
   - [Getting Started](doc/getting-started.md)
   - [RDD](doc/rdd.md)
   - [Dataframe](doc/dataframe.md)
-  - [Streaming](doc/streaming.md)
   - [Structured Streaming](doc/structured-streaming.md)
   - [Cluster](doc/cluster.md)
   - [Java](doc/java.md)
