@@ -68,13 +68,19 @@ Each row of DataFrame is written as a [Redis Hash](https://redislabs.com/ebook/p
 4) "45"
 ```
 
-Spark-Redis also writes serialized DataFrame schema:
+Spark-Redis also writes the DataFrame schema:
 ```bash
 127.0.0.1:6379> keys _spark:person:schema
 1) "_spark:person:schema"
 ``` 
 
-It is used by Spark-Redis internally when reading DataFrame back to Spark memory.
+It is used by Spark-Redis internally when reading DataFrame back to Spark memory. The schema is stored as Spark's
+schema JSON (`StructType.json`), so any Spark and Scala version can read the table back.
+
+Earlier versions of Spark-Redis stored a Java-serialized `StructType` instead. Those schemas can only be read with the
+Spark minor version and the Scala version that wrote them: reading one with another version fails with an error that
+names the schema key. To read such a table, pass the schema with `.schema(...)`, or read it with the versions that wrote
+it. Saving the table again stores its schema as JSON.
 
 ### Specifying Redis key
 
@@ -133,10 +139,10 @@ The table's rows are the keys that match `<table>:*`.
 
 Please note:
 
-* With `SaveMode.Append`, when a row's key already exists, the new row is merged into the existing Redis hash with `HSET`.
-  Fields of the new row replace the existing fields, but fields that exist only in Redis are kept, for example a column that
-  isn't in the new DataFrame or a value that is `null` in the new row (see [Null values](#null-values)). To replace whole
-  rows, use `write.mode = replace` (see [Replacing rows](#replacing-rows)), `SaveMode.Overwrite`, or delete the keys first.
+* With `SaveMode.Append`, when a row's key already exists, the new row is merged into the existing Redis hash with `HSET`
+  by default. Fields of the new row replace the existing fields, but fields that exist only in Redis are kept, for example a
+  column that isn't in the new DataFrame or a value that is `null` in the new row (see [Null values](#null-values)). To
+  replace whole rows, set `write.mode` to `replace` (see [Write mode](#write-mode)), or use `SaveMode.Overwrite`.
 * `SaveMode.Overwrite` isn't atomic: the existing keys are deleted first and the new rows are written afterwards, so readers
   can see an empty or partially written table while the job runs. If the job fails after the delete, the table stays
   incomplete. To switch to new data without a gap, write it to a new table name and switch the readers to it.
@@ -144,7 +150,7 @@ Please note:
   long time on a large database. Use `SaveMode.Append` when you don't need these checks, and see
   [Tuning reads and writes](configuration.md#tuning-reads-and-writes).
 
-### Replacing rows
+### Write mode
 
 When a row's key is already stored and `SaveMode.Append` is set, the `write.mode` option decides what happens to the
 stored hash:
@@ -222,7 +228,7 @@ CREATE TEMPORARY VIEW person (name STRING, age INT)
 
 If you want to expire your data after a certain period of time, you can specify its time to live in `seconds`. Redis will use 
 [Expire](https://redis.io/commands/expire) command to cleanup data. With `write.mode` `replace`, the TTL is set in the same
-transaction as the row (see [Save Modes](#save-modes)).
+transaction as the row (see [Write mode](#write-mode)).
 
 With the Binary persistence model each value is written together with its TTL. Where every primary has
 [MSETEX](https://redis.io/commands/msetex) (Redis 8.4 and later), each batch of rows is one `MSETEX`, or one per hash slot
@@ -493,7 +499,7 @@ sc.toRedisKV(kvRdd)
 | partitions.number      | number of partitions (applies only when reading DataFrame)                                                                                                  | `Int`                 | `3`     |
 | key.column             | when writing - specifies unique column used as a Redis key, by default a key is auto-generated <br/> when reading - specifies column name to store hash key | `String`              | -       |
 | ttl                    | data time to live in `seconds`. Data doesn't expire if `ttl` is less than `1`                                                                               | `Int`                 | `0`     |
-| write.mode             | what a hash-model write does to a hash already stored under the row's key: `merge` keeps fields the new row doesn't have, `replace` removes them, see [Save Modes](#save-modes) | `enum [merge, replace]` | `merge` |
+| write.mode             | what a hash-model write does to a hash already stored under the row's key: `merge` keeps fields the new row doesn't have, `replace` removes them, see [Write mode](#write-mode) | `enum [merge, replace]` | `merge` |
 | infer.schema           | infer schema from random row, all columns will have `String` type                                                                                           | `Boolean`             | `false` |
 | max.pipeline.size      | maximum number of commands per pipeline (used to batch commands)                                                                                            | `Int`                 | 100     |
 | scan.count             | count option of SCAN command (used to iterate over keys)                                                                                                    | `Int`                 | 100     |
@@ -505,12 +511,12 @@ sc.toRedisKV(kvRdd)
 | ssl                    | overrides `spark.redis.ssl`                                                                                                                                 | `Boolean`             | `false`        |
 | dbNum                  | overrides `spark.redis.db`                                                                                                                                  | `Int`                 | `0`            |
 | timeout                | overrides `spark.redis.timeout`                                                                                                                             | `Int`                 | `2000`         |
-| client.name            | overrides `spark.redis.client.name` configured in SparkSession: the name this source's connections set with `CLIENT SETNAME`. Empty means no name | `String`              | -              |
+| client.name            | overrides `spark.redis.client.name`: the name this source's connections set with `CLIENT SETNAME`. Empty means no name | `String`              | -              |
 
 `max.pipeline.size`, `scan.count` and `iterator.grouping.size` are explained in
 [Tuning reads and writes](configuration.md#tuning-reads-and-writes).
 
-Each connection option (`host`, `port`, `user`, `auth`, `ssl`, `dbNum`, `timeout`) overrides only its own `spark.redis.*`
+Each connection option (`host`, `port`, `user`, `auth`, `ssl`, `dbNum`, `timeout`, `client.name`) overrides only its own `spark.redis.*`
 parameter. The others still come from the Spark configuration. The option names don't have the `spark.redis.` prefix,
 see [Configuration](configuration.md#overriding-the-connection-for-a-dataframe-stream-or-rdd).
 

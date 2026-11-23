@@ -1,5 +1,7 @@
 package org.apache.spark.sql.redis
 
+import java.io.InvalidClassException
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import java.util.{List => JList}
 
@@ -7,25 +9,24 @@ import com.redislabs.provider.redis.rdd.Keys
 import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
 import com.redislabs.provider.redis.util.{FieldParseException, Logging, RedisCapabilities, WriteCapabilities}
 import com.redislabs.provider.redis.util.PipelineUtils._
-import com.redislabs.provider.redis.{
-  ReadWriteConfig, RedisConfig, RedisDataTypeHash, RedisDataTypeString, RedisEndpoint, RedisNode, toRedisContext
-}
-import org.apache.commons.lang3.SerializationUtils
+import com.redislabs.provider.redis.{ReadWriteConfig, RedisConfig, RedisDataTypeHash, RedisDataTypeString, RedisEndpoint, RedisNode, toRedisContext}
+import org.apache.commons.lang3.{SerializationException, SerializationUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.redis.RedisSourceRelation._
 import org.apache.spark.sql.sources.{BaseRelation, Filter, InsertableRelation, PrunedFilteredScan}
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import redis.clients.jedis.exceptions.JedisDataException
 import redis.clients.jedis.{Pipeline, PipelineBase, Protocol}
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 class RedisSourceRelation(override val sqlContext: SQLContext,
                           parameters: Map[String, String],
                           userSpecifiedSchema: Option[StructType])
-    extends BaseRelation
+  extends BaseRelation
     with InsertableRelation
     with PrunedFilteredScan
     with Keys
@@ -67,7 +68,6 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
   private val tableNameOpt: Option[String] = parameters.get(SqlOptionTableName)
   private val ttl = parameters.get(SqlOptionTTL).map(_.toInt).getOrElse(0)
   private val writeMode = parseWriteMode(parameters)
-
   /** `write.mode = replace` on the hash model. A binary-model row is one value, which a write always replaces. */
   private val replaceHashes = writeMode == SqlOptionWriteModeReplace && persistenceModel != SqlOptionModelBinary
   private val persistence =
@@ -119,17 +119,7 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
     // write schema, so that we can load dataframe back
     currentSchema = saveSchema(schema)
     if (overwrite) {
-      // Truncate the table. The topology is read again for this: the relation's copy can be out of date, and a key
-      // scan finds nothing on a slot's old owner once the slot has moved. The deletes follow MOVED and ASK (#347).
-      val currentConfig = new RedisConfig(redisConfig.initialHost)
-      sc.fromRedisKeyPattern(dataKeyPattern)(currentConfig, readWriteConfig).foreachPartition { partition =>
-        partition.grouped(iteratorGroupingSize).foreach { keys =>
-          writeWithRedirects(keys.map(key => (currentConfig.getHost(key).endpoint, key))) { key =>
-            // the type ascription fixes an ambiguous reference to an overloaded definition
-            List((pipeline: Pipeline) => (pipeline: PipelineBase).del(key))
-          }
-        }
-      }
+      truncate()
     }
 
     // write data
@@ -139,31 +129,7 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
         // the following can be optimized to not create a map
         val rowsWithKey: Map[String, Row] = batch.map(row => dataKeyId(row) -> row).toMap
         groupKeysByNode(redisConfig.hosts, rowsWithKey.keysIterator).foreach { case (node, keys) =>
-          binaryTtlWrite match {
-            case Some((binary, capabilities)) =>
-              // one MSETEX per batch (per slot on a cluster), or SET ... EX per row; a rejected write fails the task
-              val conn = node.connect()
-              try {
-                val encodedRows = keys.map(key => key -> binary.encodeRow(keyName, rowsWithKey(key)))
-                binary.saveWithTtl(conn, encodedRows, ttl, capabilities)
-              } finally conn.close()
-            case None if replaceHashes =>
-              // a replace that Redis refused fails the task instead of leaving the old row in place silently
-              val conn = node.connect()
-              val save = (pipeline: Pipeline, key: String) =>
-                persistence.save(pipeline, key, persistence.encodeRow(keyName, rowsWithKey(key)), ttl)
-              try failOnErrorReplies(mapWithPipeline(conn, keys)(save))
-              finally conn.close()
-            case None =>
-              // Follows MOVED and ASK to each key's current owner, since the relation's topology can be out of date,
-              // and fails on any other error reply instead of dropping the row (#347).
-              val encodedRows = keys.toList.map { key =>
-                (node.endpoint, (key, persistence.encodeRow(keyName, rowsWithKey(key))))
-              }
-              writeWithRedirects(encodedRows) { case (key, encodedRow) =>
-                persistence.saveCommands(key, encodedRow, ttl)
-              }
-          }
+          saveRows(node, keys, rowsWithKey, binaryTtlWrite)
         }
       }
     }
@@ -173,6 +139,51 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
       logInfo(s"Dataframe only contains key.column specified in options. No data was writen to redis.")
     }
   }
+
+  /**
+    * Deletes the table's rows. The topology is read again for this: the relation's copy can be out of date, and a key
+    * scan finds nothing on a slot's old owner once the slot has moved. The deletes follow MOVED and ASK (#347).
+    */
+  private def truncate(): Unit = {
+    val currentConfig = new RedisConfig(redisConfig.initialHost)
+    sc.fromRedisKeyPattern(dataKeyPattern)(currentConfig, readWriteConfig).foreachPartition { partition =>
+      partition.grouped(iteratorGroupingSize).foreach { keys =>
+        writeWithRedirects(keys.map(key => (currentConfig.getHost(key).endpoint, key))) { key =>
+          // the type ascription fixes an ambiguous reference to an overloaded definition
+          List((pipeline: Pipeline) => (pipeline: PipelineBase).del(key))
+        }
+      }
+    }
+  }
+
+  /** Writes the rows of `keys`, which the relation's topology puts on `node`. */
+  private def saveRows(node: RedisNode, keys: Array[String], rowsWithKey: Map[String, Row],
+                       binaryTtlWrite: Option[(BinaryRedisPersistence, WriteCapabilities)]): Unit =
+    binaryTtlWrite match {
+      case Some((binary, capabilities)) =>
+        // one MSETEX per batch (per slot on a cluster), or SET ... EX per row; a rejected write fails the task
+        withConnection(node.connect()) { conn =>
+          val encodedRows = keys.map(key => key -> binary.encodeRow(keyName, rowsWithKey(key)))
+          binary.saveWithTtl(conn, encodedRows, ttl, capabilities)
+        }
+      case None if replaceHashes =>
+        // A replace that Redis refused fails the task instead of leaving the old row in place silently. Unlike
+        // foreachWithPipeline, this also sees the errors inside each EXEC reply.
+        withConnection(node.connect()) { conn =>
+          val save = (pipeline: Pipeline, key: String) =>
+            persistence.save(pipeline, key, persistence.encodeRow(keyName, rowsWithKey(key)), ttl)
+          failOnErrorReplies(mapWithPipeline(conn, keys)(save))
+        }
+      case None =>
+        // Follows MOVED and ASK to each key's current owner, since the relation's topology can be out of date, and
+        // fails on any other error reply instead of dropping the row (#347).
+        val encodedRows = keys.toList.map { key =>
+          (node.endpoint, (key, persistence.encodeRow(keyName, rowsWithKey(key))))
+        }
+        writeWithRedirects(encodedRows) { case (key, encodedRow) =>
+          persistence.saveCommands(key, encodedRow, ttl)
+        }
+    }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     logInfo("build scan")
@@ -268,7 +279,7 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
     val key = schemaKey(tableName())
     logInfo(s"saving schema $key")
     val schemaNode = getMasterNode(redisConfig.hosts, key)
-    val schemaBytes = SerializationUtils.serialize(schema)
+    val schemaBytes = encodeSchema(schema)
     withConnection(schemaNode.connect()) { conn =>
       conn.set(key.getBytes, schemaBytes)
     }
@@ -290,7 +301,7 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
         s"If dataframe was not persisted by Spark, provide a schema explicitly with .schema() " +
         s"or use 'infer.schema' option. ")
     }
-    SerializationUtils.deserialize[StructType](schemaBytes)
+    decodeSchema(key, schemaBytes)
   }
 
   /**
@@ -338,6 +349,54 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
 object RedisSourceRelation {
 
   def schemaKey(tableName: String): String = s"_spark:$tableName:schema"
+
+  /**
+    * A table's schema, as it is stored in its schema key: Spark's schema JSON (`StructType.json`), which every Spark
+    * version reads.
+    *
+    * Earlier versions stored a Java-serialized `StructType`. Those bytes can only be read with the Spark minor version
+    * and the Scala version that wrote them: `StructType` doesn't declare a `serialVersionUID`, and the one the JVM
+    * computes differs between Spark 3.2, 3.3, 3.4 and 3.5, and a schema's metadata holds Scala collection classes.
+    * [[decodeSchema]] still reads them.
+    */
+  private[redis] def encodeSchema(schema: StructType): Array[Byte] = schema.json.getBytes(UTF_8)
+
+  /**
+    * Reads a schema stored by [[encodeSchema]], or a Java-serialized one written by an earlier version of the
+    * library.
+    *
+    * @param key   the schema key, for error messages
+    * @param bytes the key's value
+    * @throws IllegalStateException if the value is a Java-serialized schema from another Spark version, or isn't a
+    *                               schema at all
+    */
+  private[redis] def decodeSchema(key: String, bytes: Array[Byte]): StructType =
+    if (isJavaSerialized(bytes)) {
+      try {
+        SerializationUtils.deserialize[StructType](bytes)
+      } catch {
+        case e: SerializationException if e.getCause.isInstanceOf[InvalidClassException] =>
+          throw new IllegalStateException(s"The schema in '$key' was written by an earlier version of spark-redis " +
+            "with another Spark or Scala version, and can't be read with this one. Read the table with an explicit " +
+            ".schema(), or with the Spark and Scala versions that wrote it; saving the table again stores its " +
+            "schema in a format every version reads.", e)
+      }
+    } else {
+      val parsed = try DataType.fromJson(new String(bytes, UTF_8)) catch {
+        case NonFatal(e) =>
+          throw new IllegalStateException(
+            s"The value of '$key' is neither a schema JSON nor a Java-serialized schema", e)
+      }
+      parsed match {
+        case struct: StructType => struct
+        case dataType: DataType =>
+          throw new IllegalStateException(s"The value of '$key' is a ${dataType.typeName} type, not a table schema")
+      }
+    }
+
+  /** Java serialization streams start with the magic number 0xACED (`java.io.ObjectStreamConstants`). */
+  private def isJavaSerialized(bytes: Array[Byte]): Boolean =
+    bytes.length >= 2 && bytes(0) == 0xAC.toByte && bytes(1) == 0xED.toByte
 
   def dataKey(tableName: String, id: String = uuid()): String = {
     s"$tableName:$id"

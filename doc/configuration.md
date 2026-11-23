@@ -148,8 +148,7 @@ master, for example resolved with `SENTINEL get-master-addr-by-name <master-name
 the job runs isn't handled. If `spark.redis.host` points at a replica, Spark-Redis follows `master_host` and `master_port`
 from `INFO replication` and sends all reads and writes to the master.
 
-Redis Streams, used by `createRedisXStream` and Structured Streaming, require Redis 5.0 or later. Writes need Redis 4.0 or
-later: the hash writers set several fields with one `HSET`, and `write.mode = replace` uses `UNLINK`.
+Spark-Redis requires Redis 7.4 or later.
 
 ## Tuning reads and writes
 

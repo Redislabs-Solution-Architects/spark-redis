@@ -8,20 +8,19 @@
 # redirects. The cluster bus uses fixed internal ports (17001-17003) that are never published.
 # The slot ranges match the old Makefile, so slot-dependent tests behave the same.
 #
-# The bus runs without TLS, so `cluster-bus-port-protected-mode no` is set explicitly. Redis 8.12 defaults it to
-# `yes` and then refuses to start a node whose bus has no TLS; 8.2 through 8.10 already know the option and default
-# it to `no`. That is safe here because the bus ports never leave the container.
+# Needs Redis 7.4 or later. The options that depend on the version come from version-options.sh.
 set -e
 [ "$#" -eq 3 ] || { echo "usage: $0 <port1> <port2> <port3>" >&2; exit 2; }
 P1=$1; P2=$2; P3=$3
 CONF_DIR=/usr/local/etc/redis
+. "$CONF_DIR/version-options.sh"
 mkdir -p /data/cluster
 
 bus=17001
 for port in "$P1" "$P2" "$P3"; do
   redis-server --port "$port" --bind 0.0.0.0 --protected-mode no \
     --cluster-enabled yes --cluster-config-file "/data/cluster/nodes-$port.conf" \
-    --cluster-port "$bus" --cluster-announce-ip 127.0.0.1 --cluster-bus-port-protected-mode no \
+    --cluster-port "$bus" --cluster-announce-ip 127.0.0.1 $CLUSTER_VERSION_OPTIONS \
     --aclfile "$CONF_DIR/users-cluster.acl" \
     --save "" --appendonly no \
     --dir /data/cluster --logfile "/data/cluster/redis-$port.log" --daemonize yes

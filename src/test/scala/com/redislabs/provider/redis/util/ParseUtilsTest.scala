@@ -68,7 +68,7 @@ class ParseUtilsTest extends FunSuite with Matchers {
     }
   }
 
-  // Upstream's #358 tests: ISO-8601 timestamps parse, and an unparseable one names its value.
+  // ISO-8601 timestamps parse, and an unparseable one names its value.
 
   private val timestampSchema = StructType(Array(StructField("time", TimestampType)))
 

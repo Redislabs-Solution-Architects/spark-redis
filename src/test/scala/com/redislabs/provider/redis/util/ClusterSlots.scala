@@ -4,7 +4,7 @@ import scala.collection.JavaConverters._
 
 import com.redislabs.provider.redis.RedisEndpoint
 import org.scalatest.Assertions
-import redis.clients.jedis.Jedis
+import redis.clients.jedis.{Jedis, Protocol}
 import redis.clients.jedis.params.MigrateParams
 
 /**
@@ -19,9 +19,14 @@ object ClusterSlots {
   private val MigrateBatch = 100
   private val MigrateTimeoutMs = 5000
   private val AgreeTimeoutMs = 10000
+  private val StableMs = 500
+  private val PollMs = 50
 
-  /** A primary, from `CLUSTER NODES`. `slots` holds the ranges it owns, without importing or migrating slots. */
-  case class Primary(id: String, host: String, port: Int, slots: Seq[(Int, Int)]) {
+  /**
+    * A primary, from `CLUSTER NODES`. `slots` holds the ranges it owns, without importing or migrating slots.
+    * `epoch` is its config epoch: when two primaries claim the same slot, the cluster gives it to the higher one.
+    */
+  case class Primary(id: String, host: String, port: Int, epoch: Long, slots: Seq[(Int, Int)]) {
     def owns(slot: Int): Boolean = slots.exists { case (start, end) => start <= slot && slot <= end }
   }
 
@@ -52,7 +57,9 @@ object ClusterSlots {
         }
       }
       if (fields(2).split(",").contains("master")) {
-        Some(Primary(fields(0), address.substring(0, colon), address.substring(colon + 1).toInt, slots.toSeq))
+        val host = address.substring(0, colon)
+        val port = address.substring(colon + 1).toInt
+        Some(Primary(fields(0), host, port, fields(6).toLong, slots.toSeq))
       } else {
         None
       }
@@ -72,7 +79,10 @@ object ClusterSlots {
     if (ownsItself(from, slot)) withNode(from)(_.clusterSetSlotMigrating(slot, to.id))
   }
 
-  /** Finishes moving `slot`: migrates the keys still on `from`, then assigns the slot to `to` on every primary. */
+  /**
+    * Finishes moving `slot`: migrates the keys still on `from`, assigns the slot to `to` on every primary, then waits
+    * until that assignment can no longer be undone by the cluster bus (see [[awaitOwner]]).
+    */
   def finishMove(slot: Int, from: Primary, to: Primary, all: Seq[Primary]): Unit = {
     withNode(from) { conn =>
       var keys = conn.clusterGetKeysInSlot(slot, MigrateBatch).asScala
@@ -82,9 +92,17 @@ object ClusterSlots {
       }
     }
     // The new owner first, so a node that redirects a client there finds it already knows it owns the slot.
-    (to +: all.filterNot(_.id == to.id)).foreach(node => withNode(node)(_.clusterSetSlotNode(slot, to.id)))
+    assign(slot, to, to +: all.filterNot(_.id == to.id))
+    withNode(to)(bumpEpoch)
     awaitOwner(slot, to, all)
   }
+
+  /** `CLUSTER SETSLOT slot NODE owner` on each of `nodes`, in order. */
+  private def assign(slot: Int, owner: Primary, nodes: Seq[Primary]): Unit =
+    nodes.foreach(node => withNode(node)(_.clusterSetSlotNode(slot, owner.id)))
+
+  /** `CLUSTER BUMPEPOCH`: gives the node a config epoch higher than any it knows of, unless it already has one. */
+  private def bumpEpoch(node: Jedis): Unit = node.sendCommand(Protocol.Command.CLUSTER, "BUMPEPOCH")
 
   /** Moves `slot` and all of its keys from `from` to `to`. Safe to run again, part way through or after it ends. */
   def moveSlot(slot: Int, from: Primary, to: Primary, all: Seq[Primary]): Unit = {
@@ -92,17 +110,47 @@ object ClusterSlots {
     finishMove(slot, from, to, all)
   }
 
-  /** Waits until every primary says `owner` holds `slot`. */
+  /**
+    * Waits until the move of `slot` to `owner` is settled, and stays settled for [[StableMs]].
+    *
+    * Every primary saying `owner` holds the slot is not enough. `SETSLOT … NODE` sets each node's slot table
+    * directly, but the cluster bus still settles conflicting claims by config epoch: a ping the old owner sent before
+    * it learned of the move claims the slot with the old owner's epoch, and a node that knows a lower epoch for
+    * `owner` gives the slot back. That node then answers `owner`'s own claim with an `UPDATE`, and `owner` drops the
+    * slot too. Each node then redirects writes to the other, until the writer runs out of redirects.
+    *
+    * So the move is settled only once `owner` has the highest config epoch of all the primaries, and every primary
+    * sees `owner`, and only `owner`, holding the slot at that epoch. From then on, no other primary's claim can win.
+    * Until then, each round bumps `owner`'s epoch if another primary's is as high, and assigns the slot again on each
+    * node that sees another holder. The stable period lets messages already on the bus arrive.
+    */
   private def awaitOwner(slot: Int, owner: Primary, all: Seq[Primary]): Unit = {
     val deadline = System.currentTimeMillis() + AgreeTimeoutMs
-    def agreed: Boolean = all.forall { node =>
-      withNode(node)(conn => primaries(conn).exists(p => p.id == owner.id && p.owns(slot)))
-    }
-    while (!agreed) {
-      if (System.currentTimeMillis() > deadline) {
-        Assertions.fail(s"the primaries did not agree within ${AgreeTimeoutMs}ms that slot $slot is on ${owner.port}")
+    def holders(view: Seq[Primary]): Seq[Primary] = view.filter(_.owns(slot))
+    var stableSince = Option.empty[Long]
+    while (stableSince.forall(since => System.currentTimeMillis() - since < StableMs)) {
+      val views = all.map(node => node -> withNode(node)(primaries))
+      val epochs = views.map { case (node, view) => node -> view.find(_.id == node.id).fold(-1L)(_.epoch) }
+      val ownerEpoch = epochs.collectFirst { case (node, epoch) if node.id == owner.id => epoch }.getOrElse(-1L)
+      val highest = epochs.forall { case (node, epoch) => node.id == owner.id || epoch < ownerEpoch }
+      val wrongHolder = views.collect { case (node, view) if holders(view).map(_.id) != Seq(owner.id) => node }
+      val agreed = views.forall { case (_, view) => holders(view).map(_.epoch) == Seq(ownerEpoch) }
+      if (highest && wrongHolder.isEmpty && agreed) {
+        if (stableSince.isEmpty) stableSince = Some(System.currentTimeMillis())
+      } else {
+        stableSince = None
+        if (System.currentTimeMillis() > deadline) {
+          val seen = views.map { case (node, view) =>
+            s"${node.port} sees [${holders(view).map(p => s"${p.port} at epoch ${p.epoch}").mkString(", ")}]"
+          }
+          val own = epochs.map { case (node, epoch) => s"${node.port}: $epoch" }
+          Assertions.fail(s"slot $slot did not settle on ${owner.port} within ${AgreeTimeoutMs}ms: " +
+            s"${seen.mkString("; ")}; own config epochs ${own.mkString(", ")}")
+        }
+        if (!highest) withNode(owner)(bumpEpoch)
+        assign(slot, owner, wrongHolder.sortBy(_.id != owner.id))
       }
-      Thread.sleep(50)
+      Thread.sleep(PollMs)
     }
   }
 }

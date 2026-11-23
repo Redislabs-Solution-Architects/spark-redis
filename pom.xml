@@ -53,7 +53,7 @@
 		<jedis.version>3.9.0</jedis.version>
 		<!-- the latest Spark 3.x; upstream's CI also tests older Spark versions, which this fork's ci.yml does not yet -->
 		<spark.version>3.5.10</spark.version>
-		<!-- 2.1.0 or later: the plugin starts the test JVM from ${java.home}, the JDK that runs Maven (JAVA_HOME).
+		<!-- 2.0.0 or later: the plugin starts the test JVM from ${java.home}, the JDK that runs Maven (JAVA_HOME).
 		     1.0 ran whatever `java` came first on PATH, so a jenv or Homebrew JDK 17 there broke the tests. -->
 		<plugins.scalatest.version>2.2.0</plugins.scalatest.version>
 		<testcontainers.version>1.21.4</testcontainers.version>
@@ -286,6 +286,18 @@
 			</plugin>
 		</plugins>
 	</build>
+	<dependencyManagement>
+		<dependencies>
+			<!-- Testcontainers talks to Docker through JNA and is built with JNA 5.13.0. Spark brings an older JNA in
+			     the Scala 2.13 builds (5.3.1 with Spark 3.2), which would win and has no Apple Silicon library, so
+			     the tests couldn't start Redis on an arm64 Mac. This sets the version only, not the scope. -->
+			<dependency>
+				<groupId>net.java.dev.jna</groupId>
+				<artifactId>jna</artifactId>
+				<version>5.13.0</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 	<dependencies>
         <dependency>
             <groupId>redis.clients</groupId>

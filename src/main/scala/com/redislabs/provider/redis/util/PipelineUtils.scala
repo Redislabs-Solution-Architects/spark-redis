@@ -4,13 +4,8 @@ import java.util.{List => JList}
 
 import com.redislabs.provider.redis.{ReadWriteConfig, RedisEndpoint}
 import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
-import redis.clients.jedis.exceptions.{
-  JedisAskDataException,
-  JedisClusterOperationException,
-  JedisDataException,
-  JedisMovedDataException,
-  JedisRedirectionException
-}
+import redis.clients.jedis.exceptions.{JedisAskDataException, JedisClusterOperationException, JedisDataException}
+import redis.clients.jedis.exceptions.{JedisMovedDataException, JedisRedirectionException}
 import redis.clients.jedis.{Jedis, Pipeline, Response}
 
 import scala.collection.JavaConverters._
@@ -30,8 +25,8 @@ object PipelineUtils {
     * @param f               function to applied for each item in the sequence
     * @return response from the server
     */
-  def mapWithPipeline[A](conn: Jedis, items: TraversableOnce[A])(f: (Pipeline, A) => Unit)(
-      implicit readWriteConfig: ReadWriteConfig): Seq[AnyRef] = {
+  def mapWithPipeline[A](conn: Jedis, items: TraversableOnce[A])(f: (Pipeline, A) => Unit)
+                        (implicit readWriteConfig: ReadWriteConfig): Seq[AnyRef] = {
     val totalResp = mutable.ListBuffer[JList[AnyRef]]()
 
     // iterate over items and create new pipelines periodically
@@ -68,8 +63,8 @@ object PipelineUtils {
     * @param f               function to applied for each item in the sequence
     * @throws JedisDataException if Redis replies with an error to any of the commands, see [[syncAndCheck]]
     */
-  def foreachWithPipeline[A](conn: Jedis, items: TraversableOnce[A])(f: (Pipeline, A) => Unit)(
-      implicit readWriteConfig: ReadWriteConfig): Unit = {
+  def foreachWithPipeline[A](conn: Jedis, items: TraversableOnce[A])(f: (Pipeline, A) => Unit)
+                            (implicit readWriteConfig: ReadWriteConfig): Unit = {
     // iterate over items and create new pipelines periodically
     var i = 0
     var pipeline = conn.pipelined()
@@ -104,8 +99,8 @@ object PipelineUtils {
     * @throws JedisDataException if Redis replies with an error to any of the commands synced so far,
     *                            see [[syncAndCheck]]
     */
-  def foreachWithPipelineNoLastSync[A](conn: Jedis, items: TraversableOnce[A])(f: (Pipeline, A) => Unit)(
-      implicit readWriteConfig: ReadWriteConfig): Pipeline = {
+  def foreachWithPipelineNoLastSync[A](conn: Jedis, items: TraversableOnce[A])(f: (Pipeline, A) => Unit)
+                                      (implicit readWriteConfig: ReadWriteConfig): Pipeline = {
     // iterate over items and create new pipelines periodically
     var i = 0
     var pipeline = conn.pipelined()
@@ -238,7 +233,6 @@ object PipelineUtils {
   /** The endpoint a redirect names, with the same user, password, timeout and TLS settings as `from`. */
   private def redirected(from: RedisEndpoint, e: JedisRedirectionException): RedisEndpoint =
     from.copy(host = e.getTargetNode.getHost, port = e.getTargetNode.getPort)
-
 
   /**
     * Sends the pipelined commands, reads all their replies and fails if Redis replied with an error to any of them.

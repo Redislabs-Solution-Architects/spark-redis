@@ -21,8 +21,8 @@ case class WriteCapabilities(msetex: Boolean, slotScoped: Boolean)
 
 /**
   * Asks Redis what it can do. A command is probed with `COMMAND INFO <name>`, never inferred from the server's
-  * version (spec §1): Redis Open Source, Redis Software and Redis Cloud number their versions differently, and the
-  * last two can disable commands.
+  * version: Redis Open Source, Redis Software and Redis Cloud number their versions differently, and the last two can
+  * disable commands.
   */
 object RedisCapabilities extends Logging {
 
@@ -80,7 +80,7 @@ object RedisCapabilities extends Logging {
     try {
       conn.sendCommand(HelloCommand, Seq.empty[Array[Byte]]: _*) match {
         case reply: JList[_] =>
-          // toList: on Scala 2.13, grouped chunks of a Java list are mutable Buffers, which `case Seq(...)` doesn't match
+          // toList: on Scala 2.13, grouped chunks of a Java list are mutable Buffers, which `case Seq(...)` misses
           reply.asScala.toList.grouped(2).exists {
             case List(name: Array[Byte], value: Array[Byte]) =>
               SafeEncoder.encode(name) == "mode" && SafeEncoder.encode(value) == "standalone"

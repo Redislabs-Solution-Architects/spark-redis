@@ -7,7 +7,8 @@ You need the following. Building with JDK 11 or newer is known to fail with the 
 uses (for example with `NoClassDefFoundError: javax/tools/ToolProvider`), so check the Java version that `mvn -version`
 reports.
 
-- **A JDK 8** for this 3.x build, with `JAVA_HOME` pointing at it.
+- **A JDK 8** for this 3.x build, with `JAVA_HOME` pointing at it. The tests run on the same JDK, whatever `java`
+  comes first on your `PATH`.
 - **Docker.** The tests start their own Redis servers in containers through Testcontainers, on free ports chosen at
   run time, so no local `redis-server` is needed, and several test runs can happen at once.
 
