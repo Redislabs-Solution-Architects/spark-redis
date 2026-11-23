@@ -262,6 +262,8 @@ the work up to each gate, and named humans pass the gates.
 
 ## Phase 1: platform lift → 4.0.0-M1
 
+**Plan:** [`plans/phase-1.md`](plans/phase-1.md) (draft, for the owner's approval).
+
 **Goal.** Run **today's feature set unchanged** on supported versions, with nothing new. This unblocks the
 most-requested issue family quickly:
 [#390](https://github.com/RedisLabs/spark-redis/issues/390),
