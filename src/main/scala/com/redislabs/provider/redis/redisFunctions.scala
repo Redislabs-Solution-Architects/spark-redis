@@ -5,7 +5,7 @@ import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
 import com.redislabs.provider.redis.util.PipelineUtils._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import scala.collection.JavaConversions.mapAsJavaMap
+import scala.collection.JavaConverters._
 
 /**
   * RedisContext extends sparkContext's functionality with redis functions
@@ -470,13 +470,13 @@ object RedisContext extends Serializable {
   def setHash(hashName: String, arr: Iterator[(String, String)], ttl: Int, redisConfig: RedisConfig,
               readWriteConfig: ReadWriteConfig) {
     implicit val rwConf: ReadWriteConfig = readWriteConfig
-    val conn = redisConfig.connectionForKey(hashName)
-    val pipeline = foreachWithPipelineNoLastSync(conn, arr) { case (pipeline, (k, v)) =>
-      pipeline.hset(hashName, k, v)
+    withConnection(redisConfig.connectionForKey(hashName)) { conn =>
+      val pipeline = foreachWithPipelineNoLastSync(conn, arr) { case (pipeline, (k, v)) =>
+        pipeline.hset(hashName, k, v)
+      }
+      if (ttl > 0) pipeline.expire(hashName, ttl.toLong)
+      syncAndCheck(pipeline)
     }
-    if (ttl > 0) pipeline.expire(hashName, ttl.toLong)
-    pipeline.sync()
-    conn.close()
   }
 
   /**
@@ -499,7 +499,7 @@ object RedisContext extends Serializable {
         withConnection(node.endpoint.connect()) { conn =>
           foreachWithPipeline(conn, arr) { (pipeline, a) =>
             val (key, hashFields) = a._2
-            pipeline.hmset(key, hashFields)
+            pipeline.hmset(key, hashFields.asJava)
             if (ttl > 0) pipeline.expire(key, ttl.toLong)
           }
         }
@@ -529,7 +529,7 @@ object RedisContext extends Serializable {
             withConnection(node.endpoint.connect()) { conn =>
               foreachWithPipeline(conn, arr) { (pipeline, a) =>
                 val (key, hashFields) = a._2
-                pipeline.hmset(key, hashFields)
+                pipeline.hmset(key, hashFields.asJava)
                 if (ttl > 0) pipeline.expire(key, ttl.toLong)
               }
             }
@@ -546,13 +546,13 @@ object RedisContext extends Serializable {
   def setZset(zsetName: String, arr: Iterator[(String, String)], ttl: Int, redisConfig: RedisConfig,
               readWriteConfig: ReadWriteConfig) {
     implicit val rwConf: ReadWriteConfig = readWriteConfig
-    val conn = redisConfig.connectionForKey(zsetName)
-    val pipeline = foreachWithPipelineNoLastSync(conn, arr) { case (pipeline, (k, v)) =>
-      pipeline.zadd(zsetName, v.toDouble, k)
+    withConnection(redisConfig.connectionForKey(zsetName)) { conn =>
+      val pipeline = foreachWithPipelineNoLastSync(conn, arr) { case (pipeline, (k, v)) =>
+        pipeline.zadd(zsetName, v.toDouble, k)
+      }
+      if (ttl > 0) pipeline.expire(zsetName, ttl.toLong)
+      syncAndCheck(pipeline)
     }
-    if (ttl > 0) pipeline.expire(zsetName, ttl.toLong)
-    pipeline.sync()
-    conn.close()
   }
 
   /**
@@ -564,13 +564,13 @@ object RedisContext extends Serializable {
   def setSet(setName: String, arr: Iterator[String], ttl: Int, redisConfig: RedisConfig,
              readWriteConfig: ReadWriteConfig) {
     implicit val rwConf: ReadWriteConfig = readWriteConfig
-    val conn = redisConfig.connectionForKey(setName)
-    val pipeline = foreachWithPipelineNoLastSync(conn, arr) { (pipeline, v) =>
-      pipeline.sadd(setName, v)
+    withConnection(redisConfig.connectionForKey(setName)) { conn =>
+      val pipeline = foreachWithPipelineNoLastSync(conn, arr) { (pipeline, v) =>
+        pipeline.sadd(setName, v)
+      }
+      if (ttl > 0) pipeline.expire(setName, ttl.toLong)
+      syncAndCheck(pipeline)
     }
-    if (ttl > 0) pipeline.expire(setName, ttl.toLong)
-    pipeline.sync()
-    conn.close()
   }
 
   /**
@@ -585,13 +585,13 @@ object RedisContext extends Serializable {
               redisConfig: RedisConfig,
               readWriteConfig: ReadWriteConfig) {
     implicit val rwConf: ReadWriteConfig = readWriteConfig
-    val conn = redisConfig.connectionForKey(listName)
-    val pipeline = foreachWithPipelineNoLastSync(conn, arr) { (pipeline, v) =>
-      pipeline.rpush(listName, v)
+    withConnection(redisConfig.connectionForKey(listName)) { conn =>
+      val pipeline = foreachWithPipelineNoLastSync(conn, arr) { (pipeline, v) =>
+        pipeline.rpush(listName, v)
+      }
+      if (ttl > 0) pipeline.expire(listName, ttl.toLong)
+      syncAndCheck(pipeline)
     }
-    if (ttl > 0) pipeline.expire(listName, ttl.toLong)
-    pipeline.sync()
-    conn.close()
   }
 
 
@@ -653,15 +653,15 @@ object RedisContext extends Serializable {
                    redisConfig: RedisConfig,
                    readWriteConfig: ReadWriteConfig) {
     implicit val rwConf: ReadWriteConfig = readWriteConfig
-    val conn = redisConfig.connectionForKey(key)
-    val pipeline = foreachWithPipelineNoLastSync(conn, arr) { (pipeline, v) =>
-      pipeline.lpush(key, v)
+    withConnection(redisConfig.connectionForKey(key)) { conn =>
+      val pipeline = foreachWithPipelineNoLastSync(conn, arr) { (pipeline, v) =>
+        pipeline.lpush(key, v)
+      }
+      if (listSize > 0) {
+        pipeline.ltrim(key, 0, listSize - 1)
+      }
+      syncAndCheck(pipeline)
     }
-    if (listSize > 0) {
-      pipeline.ltrim(key, 0, listSize - 1)
-    }
-    pipeline.sync()
-    conn.close()
   }
 }
 

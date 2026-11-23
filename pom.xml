@@ -43,10 +43,16 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<java.version>1.8</java.version>
+		<!-- Like Spark 3.x, the library is built for Scala 2.12 (the default) and 2.13. Keep these in line with the
+		     Scala versions that spark.version below is built with (2.12.18 and 2.13.8 for Spark 3.5.x).
+		     dev/change-scala-version.sh switches the build and the artifact name (spark-redis_<scala>) between them. -->
+		<scala.2.12.version>2.12.18</scala.2.12.version>
+		<scala.2.13.version>2.13.8</scala.2.13.version>
 		<scala.major.version>2.12</scala.major.version>
-		<scala.complete.version>${scala.major.version}.0</scala.complete.version>
+		<scala.complete.version>${scala.2.12.version}</scala.complete.version>
 		<jedis.version>3.9.0</jedis.version>
-		<spark.version>3.2.1</spark.version>
+		<!-- the latest Spark 3.x; CI also tests older Spark versions, see .github/workflows/integration.yml -->
+		<spark.version>3.5.10</spark.version>
 		<plugins.scalatest.version>1.0</plugins.scalatest.version>
 	</properties>
 
@@ -72,10 +78,16 @@
 						<goals>
 							<goal>prepare-agent</goal>
 						</goals>
+						<configuration>
+							<!-- scalatest-maven-plugin sets its own argLine, which would replace the default
+							     'argLine' property; expose the agent under its own name and reference it there -->
+							<propertyName>jacocoArgLine</propertyName>
+						</configuration>
 					</execution>
 					<execution>
 						<id>report</id>
-						<phase>test</phase>
+						<!-- must run after scalatest (bound to 'test') has written target/jacoco.exec -->
+						<phase>verify</phase>
 						<goals>
 							<goal>report</goal>
 						</goals>
@@ -241,7 +253,7 @@
 					<reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
 					<junitxml>.</junitxml>
 					<filereports>WDF TestSuite.txt</filereports>
-					<argLine>-XX:MaxPermSize=256m -Xmx2g -Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</argLine>
+					<argLine>${jacocoArgLine} -Xmx2g -Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</argLine>
 					<tagsToExclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToExclude>
 				</configuration>
 				<executions>

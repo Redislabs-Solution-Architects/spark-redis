@@ -6,10 +6,12 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04 has Temurin 8 in its tool cache; ubuntu-latest (Ubuntu 26.04) has no Java 8, so setup-java would
+    # download it from GitHub releases, and the jdk8u514-b01 download fails its checksum.
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
 
       - name: get version from tag
         id: get_version
@@ -17,13 +19,13 @@ jobs:
           realversion="${GITHUB_REF/refs\/tags\//}"
           realversion="${realversion//v/}"
           realversion=`echo ${realversion}|cut -d '-' -f 2-2`
-          echo "::set-output name=VERSION::$realversion"
+          echo "VERSION=$realversion" >> "$GITHUB_OUTPUT"
 
       - name: Set up publishing to maven central
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v6
         with:
           java-version: '8'
-          distribution: 'adopt'
+          distribution: 'temurin'
           server-id: ossrh
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
@@ -36,12 +38,25 @@ jobs:
           cat <(echo -e "${{ secrets.OSSH_GPG_SECRET_KEY }}") | gpg --batch --import
           gpg --list-secret-keys --keyid-format LONG
 
-      - name: Publish
+      - name: Publish for Scala 2.12 (spark-redis_2.12)
         run: |
           mvn --no-transfer-progress \
             --batch-mode \
             -Dgpg.passphrase='${{ secrets.OSSH_GPG_SECRET_KEY_PASSWORD }}' \
             -DskipTests deploy -P release
+        env:
+          MAVEN_USERNAME: ${{secrets.OSSH_USERNAME}}
+          MAVEN_PASSWORD: ${{secrets.OSSH_TOKEN}}
+
+      - name: Publish for Scala 2.13 (spark-redis_2.13)
+        # Like Spark 3.x, the same release is also published for Scala 2.13. 'clean' so that no class compiled
+        # for Scala 2.12 by the previous step ends up in the Scala 2.13 jar.
+        run: |
+          dev/change-scala-version.sh 2.13
+          mvn --no-transfer-progress \
+            --batch-mode \
+            -Dgpg.passphrase='${{ secrets.OSSH_GPG_SECRET_KEY_PASSWORD }}' \
+            -DskipTests clean deploy -P release
         env:
           MAVEN_USERNAME: ${{secrets.OSSH_USERNAME}}
           MAVEN_PASSWORD: ${{secrets.OSSH_TOKEN}}
