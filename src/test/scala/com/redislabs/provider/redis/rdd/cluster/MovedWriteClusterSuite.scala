@@ -99,7 +99,7 @@ class MovedWriteClusterSuite extends SparkRedisSuite with RedisClusterEnv with M
     withNode(from) { conn =>
       var keys = conn.clusterGetKeysInSlot(slot, MigrateBatch).asScala
       while (keys.nonEmpty) {
-        conn.migrate(to.host, to.port, 0, MigrateTimeoutMs, MigrateParams.migrateParams(), keys: _*)
+        conn.migrate(to.host, to.port, 0, MigrateTimeoutMs, MigrateParams.migrateParams(), keys.toSeq: _*)
         keys = conn.clusterGetKeysInSlot(slot, MigrateBatch).asScala
       }
     }

@@ -78,7 +78,7 @@ trait RedirectedWrites extends Assertions { this: Env =>
     ClusterSlots.moveSlot(move.slot, move.to, move.from, move.all)
     withNode(move.from) { conn =>
       val keys = conn.clusterGetKeysInSlot(move.slot, CleanupBatch).asScala.filter(_.contains(hashTag))
-      if (keys.nonEmpty) conn.del(keys: _*)
+      if (keys.nonEmpty) conn.del(keys.toSeq: _*)
     }
   }
 }

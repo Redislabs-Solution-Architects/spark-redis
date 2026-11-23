@@ -150,7 +150,7 @@ object KeyspaceSnapshot {
       cursor = text(reply.get(0))
       members ++= list(reply.get(1)).asScala.map(bytes)
     } while (cursor != "0")
-    members
+    members.toSeq
   }
 
   /** Sorted sets: ordered by score and then member, with the score as the text Redis returns. */
