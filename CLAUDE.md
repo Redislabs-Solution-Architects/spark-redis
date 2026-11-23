@@ -61,8 +61,11 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B v
 
 - **PRs** go to the `spike/phase-0` branch of `Redislabs-Solution-Architects/spark-redis`, and the owner approves
   every merge. Each PR cites the plan step or spec section it implements and lists its proof.
-- **Upstream (`RedisLabs/spark-redis`) is read-only:** no comments or labels, and don't link its issues from PR
-  bodies. Inside the repo, write issue numbers as plain `#123`.
+- **Upstream (`RedisLabs/spark-redis`, remote `origin`):** a fix or improvement from this work that also helps 3.x
+  goes upstream as a PR of its own, at the owner's request, and the owner merges it. An upstream PR carries none of
+  the fork's files (`.claude/`, `doc/modernization/`, `evals/`), no Phase labels and no links to fork PRs. Upstream
+  changes come into the fork by merging upstream `master`, never by rebasing. Don't comment on or label upstream
+  issues. Inside the fork, write issue numbers as plain `#123`.
 - **Review rubric:** [`REVIEW.md`](REVIEW.md). **Skills:** [`golden-layout`](.claude/skills/golden-layout/SKILL.md),
   and drafts [`redis-capabilities`](.claude/skills/redis-capabilities/SKILL.md) and
   [`dsv2-connector`](.claude/skills/dsv2-connector/SKILL.md).
