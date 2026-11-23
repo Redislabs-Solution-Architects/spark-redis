@@ -7,10 +7,13 @@
 #   src/test/resources/quarantine.txt tests skipped on Redis 8, each linked to a findings entry
 #   tests listed in .claude/failing-first.txt, which were committed failing ahead of their fix
 #
-# Also blocks removing lines from .claude/failing-first.txt (agents may add lines), and running
-# -Dgolden.update=true. Edit, Write, MultiEdit and NotebookEdit are checked by path. Bash commands are checked on a
-# best-effort basis: a command that names a protected path and writes (a redirect, cp, mv, rm, sed -i, tee,
-# git checkout or restore, ...) is blocked.
+# A test stays protected while it is listed in .claude/failing-first.txt in the working tree or at HEAD. The PR that
+# fixes the bug removes the test's line; removing it in the working tree doesn't unprotect the test, and CI
+# (scripts/check-failing-first.sh) fails a PR that removes a line and also changes or deletes its test.
+#
+# Also blocks running -Dgolden.update=true. Edit, Write, MultiEdit and NotebookEdit are checked by path. Bash
+# commands are checked on a best-effort basis: a command that names a protected path and writes (a redirect, cp,
+# mv, rm, sed -i, tee, git checkout or restore, ...) is blocked.
 #
 # A block exits 2 with a message naming the rule, which Claude Code shows to the agent. Each block is also appended
 # to .claude/hook-blocks.log (ignored by git), for the Phase 0 measurement.
@@ -49,6 +52,15 @@ block() { # rule, path, explanation
 # Entries of failing-first.txt: the first word of each line that isn't blank or a comment.
 entries() { sed -e 's/#.*//' | awk 'NF { print $1 }' | sort -u; }
 
+# The tests listed in failing-first.txt in the working tree or at HEAD. A line removed in the working tree still
+# protects its test until the removal is committed.
+listed() {
+  {
+    [ -f "$list" ] && entries <"$list"
+    git -C "$project" show HEAD:.claude/failing-first.txt 2>/dev/null | entries
+  } | sort -u
+}
+
 # Prints "rule<TAB>explanation" if the path is protected.
 rule_for() {
   local path=$1 entry
@@ -66,14 +78,13 @@ rule_for() {
       printf 'quarantine\tQuarantine entries change only with the owner'"'"'s approval (CLAUDE.md rule 6). Write the findings entry, propose the exact quarantine line, and stop.\n'
       return ;;
   esac
-  [ -f "$list" ] || return
   while IFS= read -r entry; do
     case "$path" in
       "$entry" | */"$entry")
         printf 'failing-first\tThis test was committed failing ahead of its fix (.claude/failing-first.txt). Fix the code, not the test (CLAUDE.md rule 5).\n'
         return ;;
     esac
-  done < <(entries <"$list")
+  done < <(listed)
 }
 
 check_path() {
@@ -86,36 +97,6 @@ check_path() {
   hit=$(rule_for "$path")
   [ -n "$hit" ] && block "${hit%%	*}" "$path" "${hit#*	}"
   return 0
-}
-
-# failing-first.txt is append-only for agents: every entry before the change must still be there after it.
-check_failing_first() {
-  local path=$1 before after removed
-  case "$path" in
-    */.claude/failing-first.txt | .claude/failing-first.txt) ;;
-    *) return 0 ;;
-  esac
-  case "$tool" in
-    Write)
-      before=$([ -f "$path" ] && entries <"$path")
-      after=$(json .tool_input.content | entries) ;;
-    Edit)
-      before=$(json .tool_input.old_string | entries)
-      after=$(json .tool_input.new_string | entries) ;;
-    MultiEdit)
-      if command -v jq >/dev/null 2>&1; then
-        before=$(printf '%s' "$input" | jq -r '.tool_input.edits[]?.old_string' | entries)
-        after=$(printf '%s' "$input" | jq -r '.tool_input.edits[]?.new_string' | entries)
-      else
-        before=$(printf '%s' "$input" | python3 -c 'import json,sys; [print(e.get("old_string","")) for e in json.load(sys.stdin)["tool_input"].get("edits",[])]' | entries)
-        after=$(printf '%s' "$input" | python3 -c 'import json,sys; [print(e.get("new_string","")) for e in json.load(sys.stdin)["tool_input"].get("edits",[])]' | entries)
-      fi ;;
-    *) return 0 ;;
-  esac
-  removed=$(comm -23 <(printf '%s\n' "$before" | sed '/^$/d') <(printf '%s\n' "$after" | sed '/^$/d'))
-  if [ -n "$removed" ]; then
-    block "failing-first" "$path" "Agents may add tests to .claude/failing-first.txt but not remove them. The owner removes an entry once its fix merges. Would remove: $(echo $removed)"
-  fi
 }
 
 check_bash() {
@@ -141,23 +122,19 @@ check_bash() {
   done
   case "$hay" in
     *failing-first.txt*)
-      block "failing-first" ".claude/failing-first.txt" "Change .claude/failing-first.txt with Edit or Write, which check that no entry is removed." ;;
+      block "failing-first" ".claude/failing-first.txt" "Change .claude/failing-first.txt with Edit or Write, not a shell command." ;;
   esac
-  if [ -f "$list" ]; then
-    while IFS= read -r entry; do
-      case "$hay" in
-        *"$entry"* | *"$(basename "$entry")"*) check_path "$project/$entry" ;;
-      esac
-    done < <(entries <"$list")
-  fi
+  while IFS= read -r entry; do
+    case "$hay" in
+      *"$entry"* | *"$(basename "$entry")"*) check_path "$project/$entry" ;;
+    esac
+  done < <(listed)
 }
 
 tool=$(json .tool_name)
 case "$tool" in
   Edit | Write | MultiEdit)
-    path=$(json .tool_input.file_path)
-    check_path "$path"
-    check_failing_first "$path" ;;
+    check_path "$(json .tool_input.file_path)" ;;
   NotebookEdit)
     check_path "$(json .tool_input.notebook_path)" ;;
   Bash)
