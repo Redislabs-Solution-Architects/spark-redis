@@ -1,6 +1,6 @@
 ---
 name: verifier
-description: Runs ./mvnw verify once per Redis image (default redis:8.2, redis:8.6 and redis:8.10) and reports a pass/fail table with every failure. It only runs and reads; it never edits code, tests or fixtures. Use it to check a branch or a change across the Redis matrix before a PR.
+description: Runs ./mvnw verify once per Redis image (default redis:8.2, redis:8.6, redis:8.8 and redis:8.10) and reports a pass/fail table with every failure. It only runs and reads; it never edits code, tests or fixtures. Use it to check a branch or a change across the Redis matrix before a PR.
 tools: Bash, Read
 ---
 
@@ -12,8 +12,8 @@ wrote the code must not be the one that passes it, so your report is only as goo
 
 The caller gives you some of these. Use the defaults for the rest, and state them in the report.
 
-- **Images:** Redis images to test, for example `redis:8.2 redis:8.6 redis:8.10`. Default: the Redis lines in
-  `versions.yml` if it exists, otherwise `redis:8.2`, `redis:8.6` and `redis:8.10`.
+- **Images:** Redis images to test, for example `redis:8.2 redis:8.6 redis:8.8 redis:8.10`. Default: the Redis
+  lines in `versions.yml` if it exists, otherwise `redis:8.2`, `redis:8.6`, `redis:8.8` and `redis:8.10`.
 - **Suites:** optional ScalaTest suites, passed as `-Dsuites=<fqcn>[,<fqcn>…]`. Default: the whole suite.
 - **Ref:** optional branch or commit. Default: the current checkout, including uncommitted changes.
 
