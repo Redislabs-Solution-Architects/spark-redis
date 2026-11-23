@@ -11,7 +11,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.{Millis, Span}
 import redis.clients.jedis.StreamEntryID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 // scalastyle:off multiple.string.literals
 trait RedisXStreamSuite extends SparkStreamingRedisSuite with Matchers {

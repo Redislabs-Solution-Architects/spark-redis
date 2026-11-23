@@ -1,6 +1,6 @@
 package com.redislabs.provider.redis.util
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.redislabs.provider.redis.RedisEndpoint
 import org.scalatest.Assertions

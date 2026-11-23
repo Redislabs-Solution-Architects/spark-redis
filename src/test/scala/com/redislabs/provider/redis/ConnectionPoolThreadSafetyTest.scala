@@ -7,7 +7,7 @@ import javax.management.ObjectName
 import org.scalatest.{FunSuite, Matchers}
 import redis.clients.jedis.JedisPool
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
   * Unit tests for the per-endpoint pool cache in ConnectionPool (issue #90).

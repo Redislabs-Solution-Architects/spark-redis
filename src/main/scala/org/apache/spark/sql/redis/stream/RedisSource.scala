@@ -8,13 +8,14 @@ import com.redislabs.provider.redis.util.StreamUtils.{
 }
 import com.redislabs.provider.redis.util.{FieldParseException, Logging, ParseUtils}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, Offset, Source}
+import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
 import org.apache.spark.sql.redis.stream.RedisSource._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, classic}
 import redis.clients.jedis.{StreamEntryID, Jedis}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 /**
@@ -115,7 +116,9 @@ class RedisSource(sqlContext: SQLContext, metadataPath: String,
           toCatalyst(Row.fromSeq(values)).asInstanceOf[InternalRow]
         }
       }
-    sqlContext.internalCreateDataFrame(internalRdd, schema, isStreaming = true)
+    // Spark 4 keeps internalCreateDataFrame only on the classic (non-Connect) SQLContext, which is what a
+    // streaming query's Source receives. DataSource V2 replaces this in Phase 3.
+    sqlContext.asInstanceOf[classic.SQLContext].internalCreateDataFrame(internalRdd, schema, isStreaming = true)
   }
 
   override def commit(end: Offset): Unit = {

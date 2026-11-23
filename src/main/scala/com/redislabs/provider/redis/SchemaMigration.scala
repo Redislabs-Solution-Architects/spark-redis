@@ -10,7 +10,7 @@ import org.apache.spark.sql.types.DataType
 import redis.clients.jedis.params.SetParams
 import redis.clients.jedis.{Jedis, ScanParams}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 

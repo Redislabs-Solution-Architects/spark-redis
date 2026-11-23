@@ -2,7 +2,7 @@ package com.redislabs.provider.redis.df.cluster
 
 import java.util.UUID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import com.redislabs.provider.redis.SparkRedisSuite
 import com.redislabs.provider.redis.env.RedisClusterEnv

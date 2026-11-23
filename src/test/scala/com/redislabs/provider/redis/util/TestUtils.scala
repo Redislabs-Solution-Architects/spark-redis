@@ -7,7 +7,7 @@ import com.redislabs.provider.redis.RedisConfig
 import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
 import org.scalatest.Assertions
 import redis.clients.jedis.{Jedis, ScanParams}
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 import scala.reflect.Manifest
 

@@ -7,7 +7,7 @@ import com.redislabs.provider.redis.util.StreamUtils.{EntryIdEarliest, nextEntry
 import org.apache.spark.sql.redis.stream.RedisSourceTypes.StreamEntry
 import redis.clients.jedis.StreamEntryID
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.math.Ordering.Implicits._
 
 /**

@@ -8,7 +8,7 @@ import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
 import org.scalatest.Assertions
 import redis.clients.jedis.{Jedis, JedisMonitor}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 /**

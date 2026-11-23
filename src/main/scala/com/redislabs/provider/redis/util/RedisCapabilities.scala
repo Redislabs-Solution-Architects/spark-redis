@@ -9,7 +9,7 @@ import redis.clients.jedis.commands.ProtocolCommand
 import redis.clients.jedis.exceptions.JedisDataException
 import redis.clients.jedis.util.SafeEncoder
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
   * What one write may send. Decided once per write, on the driver, by [[RedisCapabilities.forWrite]].

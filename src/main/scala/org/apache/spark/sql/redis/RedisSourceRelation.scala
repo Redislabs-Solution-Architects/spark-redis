@@ -19,7 +19,7 @@ import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import redis.clients.jedis.{Pipeline, PipelineBase, Protocol}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 class RedisSourceRelation(override val sqlContext: SQLContext,

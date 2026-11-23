@@ -10,7 +10,7 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.sparkproject.guava.util.concurrent.RateLimiter
 import redis.clients.jedis.{Jedis, StreamEntry, StreamEntryID}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
   * Receives messages from Redis Stream

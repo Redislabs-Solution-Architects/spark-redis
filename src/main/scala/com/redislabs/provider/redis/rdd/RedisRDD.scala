@@ -12,7 +12,7 @@ import org.apache.spark.rdd.RDD
 import redis.clients.jedis.{BuilderFactory, Jedis, Protocol, ScanParams}
 import redis.clients.jedis.util.{JedisClusterCRC16, SafeEncoder}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 import scala.reflect.{ClassTag, classTag}
 import scala.util.{Failure, Success, Try}
