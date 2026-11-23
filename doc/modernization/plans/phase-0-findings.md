@@ -154,4 +154,5 @@ about temporary checkpoint folders. There were no Redis error replies (`ERR`, `W
 
 `RedisBenchmarks.appendCsv` (B5) wrote the `name,millis` header only when `target/benchmarks.csv` did not exist. A
 file that exists but is empty, for example one truncated with `: > target/benchmarks.csv` to start a fresh baseline,
-got rows and no header, so its first row is read as the header. `RedisBenchmarksCsvSuite` covers it.
+got rows and no header, so its first row is read as the header. `RedisBenchmarksCsvSuite` covers it. The fix
+checks the file's size instead, under a file lock so two JVMs sharing `target/` can't both write the header.
