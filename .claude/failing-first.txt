@@ -10,15 +10,3 @@
 # The PR that fixes the bug removes the test's line and leaves the test as it is: scripts/check-failing-first.sh
 # fails a PR that removes a line and also changes or deletes its test, and the test jobs show that it passes. A
 # line removed in the working tree keeps protecting its test until the removal is committed.
-src/test/scala/com/redislabs/provider/redis/RedisBenchmarksCsvSuite.scala  # phase-0-findings.md, finding 6
-src/test/scala/com/redislabs/provider/redis/rdd/cluster/MovedWriteClusterSuite.scala  # #347 (writes after a slot moves are lost)
-src/test/scala/com/redislabs/provider/redis/rdd/cluster/AskWriteClusterSuite.scala  # #347 (writes during a slot migration are lost)
-src/test/scala/com/redislabs/provider/redis/df/HashWriteModeSuite.scala  # #351
-src/test/scala/com/redislabs/provider/redis/util/ParseUtilsTest.scala  # #358
-src/test/scala/com/redislabs/provider/redis/df/HashDataframeSuite.scala  # #358
-src/test/scala/org/apache/spark/sql/redis/stream/RedisStreamSourceSuite.scala  # #358
-src/test/scala/com/redislabs/provider/redis/util/RedirectedWrites.scala  # #347 (the fixture the *RedirectedWriteClusterSuite tests share)
-src/test/scala/com/redislabs/provider/redis/rdd/cluster/HashRedirectedWriteClusterSuite.scala  # #347 (hash writes lost after a slot moves or during its migration)
-src/test/scala/com/redislabs/provider/redis/rdd/cluster/SetRedirectedWriteClusterSuite.scala  # #347 (set and sorted-set writes lost after a slot moves or during its migration)
-src/test/scala/com/redislabs/provider/redis/rdd/cluster/ListRedirectedWriteClusterSuite.scala  # #347 (list writes lost after a slot moves or during its migration)
-src/test/scala/com/redislabs/provider/redis/df/cluster/DataframeRedirectedWriteClusterSuite.scala  # #347 (DataFrame rows lost, and overwrite keeps old rows, after a slot moves or during its migration)
