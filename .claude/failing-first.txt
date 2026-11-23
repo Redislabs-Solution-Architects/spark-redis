@@ -11,6 +11,7 @@
 src/test/scala/com/redislabs/provider/redis/RedisBenchmarksCsvSuite.scala  # phase-0-findings.md, finding 6
 src/test/scala/com/redislabs/provider/redis/rdd/cluster/MovedWriteClusterSuite.scala  # #347 (writes after a slot moves are lost)
 src/test/scala/com/redislabs/provider/redis/rdd/cluster/AskWriteClusterSuite.scala  # #347 (writes during a slot migration are lost)
+src/test/scala/com/redislabs/provider/redis/df/HashWriteModeSuite.scala  # #351
 src/test/scala/com/redislabs/provider/redis/util/ParseUtilsTest.scala  # #358
 src/test/scala/com/redislabs/provider/redis/df/HashDataframeSuite.scala  # #358
 src/test/scala/org/apache/spark/sql/redis/stream/RedisStreamSourceSuite.scala  # #358
