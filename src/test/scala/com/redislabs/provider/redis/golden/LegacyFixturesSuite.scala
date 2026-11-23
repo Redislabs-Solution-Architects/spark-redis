@@ -5,9 +5,13 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.util.Base64
 
+import com.redislabs.provider.redis.SchemaMigration
+import com.redislabs.provider.redis.SchemaMigration.{Outcome, Result}
 import com.redislabs.provider.redis.env.RedisStandaloneEnv
 import com.redislabs.provider.redis.golden.GoldenData._
 import com.redislabs.provider.redis.golden.KeyspaceSnapshot.{Entry, NoTtl, Snapshot}
+import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
+import com.redislabs.provider.redis.util.JavaSerializedSchema
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.redis._
@@ -18,13 +22,18 @@ import org.json4s._
 
 /**
   * Legacy fixtures for `spark-redis-migrate` (Phase 0, step B4): Java-serialized `_spark:<table>:schema` blobs and
-  * `binary` model rows in `src/test/resources/legacy/`, exactly as 3.x wrote them in the B2 captures. The suite checks
-  * that the current build deserializes every blob, that each file still matches its B2 capture, and that the 3.x
-  * connector reads them back as a table.
+  * `binary` model rows in `src/test/resources/legacy/`, exactly as 3.x wrote them in the B2 captures (Spark 3.2.1,
+  * Scala 2.12). The suite checks that the current build reads every blob, that each file still matches its B2 capture,
+  * and that after `SchemaMigration` the connector reads them back as a table.
+  *
+  * The schema blobs are read with `JavaSerializedSchema`, the version-independent reader the migration uses: Java
+  * deserialization reads them only on the Spark and Scala versions that wrote them. The `binary` rows hold JDK types
+  * only, so Java deserialization reads them on any version.
   *
   * A `binary` row must equal its capture byte for byte. A schema blob must decode to the same `StructType` as its
   * capture: the bytes of a serialized `StructType` depend on which of its lazy fields Spark evaluated before writing
-  * it, so a later capture of the same schema can differ (`df-hash-key-column` and `df-binary-key-column` do).
+  * it, so a later capture of the same schema can differ (`df-hash-key-column` and `df-binary-key-column` do), and
+  * since spark-redis writes schemas as JSON, a capture holds the schema's JSON.
   *
   * The files are frozen once written. With `-Dgolden.update=true` the suite only writes the files that are missing,
   * from the write fixtures; to capture one again, the owner deletes it first.
@@ -61,6 +70,13 @@ class LegacyFixturesSuite extends GoldenSuite with RedisStandaloneEnv {
 
   private def legacy(name: String): Array[Byte] = Files.readAllBytes(new File(Dir, name).toPath)
 
+  private def isJavaSerialized(bytes: Array[Byte]): Boolean =
+    bytes.length >= 2 && bytes(0) == 0xAC.toByte && bytes(1) == 0xED.toByte
+
+  /** A captured schema key's value: Java-serialized, as 3.x wrote it, or JSON, as spark-redis writes it now. */
+  private def capturedSchema(bytes: Array[Byte]): DataType =
+    if (isJavaSerialized(bytes)) JavaSerializedSchema.read(bytes) else DataType.fromJson(new String(bytes, UTF_8))
+
   private def values(row: Row): Seq[Any] = row.toSeq.map {
     case b: Array[Byte] => b.toSeq
     case other => other
@@ -73,12 +89,15 @@ class LegacyFixturesSuite extends GoldenSuite with RedisStandaloneEnv {
       val bytes = captured(scenario, key)
       val file = new File(Dir, name)
       if (GoldenSuite.UpdateMode && !file.exists()) {
+        assert(!name.startsWith("schema-") || isJavaSerialized(bytes),
+          s"write/$scenario.json holds $key as JSON, not Java-serialized as 3.x wrote it, so legacy/$name can't be " +
+            "captured from it")
         Dir.mkdirs()
         Files.write(file.toPath, bytes)
       }
       val matches =
         if (name.startsWith("schema-")) {
-          SerializationUtils.deserialize[StructType](legacy(name)) == SerializationUtils.deserialize[StructType](bytes)
+          JavaSerializedSchema.read(legacy(name)) == capturedSchema(bytes)
         } else {
           legacy(name).sameElements(bytes)
         }
@@ -86,10 +105,10 @@ class LegacyFixturesSuite extends GoldenSuite with RedisStandaloneEnv {
     }
   }
 
-  test("the schema blobs deserialize to their StructType") {
+  test("the schema blobs read as their StructType") {
     Seq("schema-flat.bin" -> FlatSchema, "schema-all-types.bin" -> AllTypesSchema, "schema-wide-50.bin" -> WideSchema)
       .foreach { case (name, expected) =>
-        assert(SerializationUtils.deserialize[StructType](legacy(name)) == expected, name)
+        assert(JavaSerializedSchema.read(legacy(name)) == expected, name)
       }
   }
 
@@ -105,7 +124,7 @@ class LegacyFixturesSuite extends GoldenSuite with RedisStandaloneEnv {
     }
   }
 
-  test("the 3.x connector reads the legacy blobs as a binary-model table") {
+  test("after SchemaMigration, the connector reads the legacy blobs as a binary-model table") {
     val table = "golden_legacy"
     val dataset = Snapshot(Seq(
       Entry(s"_spark:$table:schema", "string", NoTtl, KeyspaceSnapshot.stringValue(legacy("schema-all-types.bin"))),
@@ -115,6 +134,10 @@ class LegacyFixturesSuite extends GoldenSuite with RedisStandaloneEnv {
     KeyspaceSnapshot.delete(redisConfig, patterns)
     try {
       KeyspaceSnapshot.load(redisConfig, dataset)
+      val schemaKey = s"_spark:$table:schema"
+      assert(SchemaMigration.migrate(redisConfig, table) == Seq(Result(schemaKey, Outcome.Migrated)))
+      val migrated = withConnection(redisConfig.connectionForKey(schemaKey))(_.get(schemaKey))
+      assert(DataType.fromJson(migrated) == AllTypesSchema)
       val df = spark.read.format(RedisFormat)
         .option(SqlOptionModel, SqlOptionModelBinary)
         .option(SqlOptionTableName, table)
