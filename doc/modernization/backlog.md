@@ -125,7 +125,7 @@ upstream 3.x as well, and so is the fix for #90; the notes name the upstream PRs
 | #340 | How to flush table using spark-redis? | Phase 4 | #323 | closed | `DELETE FROM` / overwrite (spec §2.4, lane 4e) |
 | #341 | redis.clients.jedis.exceptions.JedisConnectionException: Could not get a resource from the pool | Phase 2 | #237 | closed | Connection pools (spec §2.1) |
 | #342 | Need to use custom command for save | Declined |  | closed | custom-command passthrough is out of scope until row-level operations ship; revisit then (spec §4) |
-| #347 | Not all the data from DataFrame got write to Redis | Phase 2 |  | closed | Loud failures; no silent partial writes (spec §2.4). **3.x, Phase 0:** writes follow `MOVED` and `ASK` (PRs #19, #22, #29), except `write.mode = replace` and binary rows with a TTL, which fail instead. Upstream: #424 |
+| #347 | Not all the data from DataFrame got write to Redis | Phase 2 |  | closed | Loud failures; no silent partial writes (spec §2.4). **3.x, Phase 0:** writes follow `MOVED` and `ASK` (PRs #19, #22, #29). `write.mode = replace` and binary rows with a TTL failed instead, until upstream #430. Upstream: #424, #430 |
 | #348 | RedisJSON support | Phase 2 |  | open | The `json` model (spec §2.2) |
 | #349 | add support to spark.redis.url | Phase 2 |  | open | Configuration and security (spec §2.9) |
 | #350 | pyspark.sql.utils.IllegalArgumentException when using infer.schema | Phase 2 |  | closed | Types, parse errors and schema inference (spec §2.8) |

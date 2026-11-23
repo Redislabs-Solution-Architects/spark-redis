@@ -12,6 +12,10 @@
 > **Updated again on 2026-11-23** at `b794947`, after PRs #32–#38 and upstream PRs #416–#429. The fork now merges
 > upstream (`RedisLabs/spark-redis`) instead of diverging from it, builds with Spark 3.5.10 on Scala 2.12 and 2.13,
 > and most of Phase 0's 3.x fixes are in upstream as well. "Since then" in each row marks what changed.
+>
+> **And at 21:20 UTC,** after upstream PRs #430–#434: the three 3.x fixes this review listed for a clean Phase 1
+> start are in upstream, and PR #40 merges them into `spike/phase-0`. See
+> [3.x fixes before Phase 1](#3x-fixes-before-phase-1).
 
 ## Verdict
 
@@ -19,12 +23,14 @@
 
 Criterion 8 counts as met because the owner decided Redis Cloud doesn't need its own RESP3 check (see the table).
 
-The earlier non-blocking items are settled: the flaky redirected-write tests are fixed (open item 8), and the
-password no longer reaches the logs (open item 9). Two remain:
+The earlier non-blocking items are settled:
+- the flaky redirected-write tests are fixed (open item 8);
+- the password no longer reaches the logs (open item 9);
+- the 3.x fixes the owner wanted before Phase 1 are in upstream, and in the fork with PR #40. The owner's goal is a
+  clean 3.x starting point, with today's features working and none added; see
+  [3.x fixes before Phase 1](#3x-fixes-before-phase-1).
 
-- the published package hasn't been seen directly, and predates the move to Spark 3.5 (criterion 6)
-- the owner's goal is a clean 3.x starting point for Phase 1, with today's features working and none added:
-  [3.x fixes left before Phase 1](#3x-fixes-left-before-phase-1) lists the fixes still open in the 3.x code
+One remains: the published package hasn't been seen directly, and predates the move to Spark 3.5 (criterion 6).
 
 ## Exit criteria
 
@@ -45,13 +51,13 @@ These are the measures the playbook asks for (see `phase-0.md`, "Measurement").
 
 | Measure | Value | Notes |
 |---|---|---|
-| Time from plan approval to exit sign-off | Not yet: **about 24 h 25 min** so far | The plan was approved at `72e5bbd` (2026-11-22 19:25 UTC). This review was first written at 23:17 UTC, and updated on 2026-11-23 at 19:50 UTC |
+| Time from plan approval to exit sign-off | Not yet: **about 25 h 55 min** so far | The plan was approved at `72e5bbd` (2026-11-22 19:25 UTC). This review was first written at 23:17 UTC, and updated on 2026-11-23 at 19:50 and 21:20 UTC |
 | First-pass merge rate of Phase 0 PRs | **10 of 11** merged PRs had no commits after opening | Only #6 was rebased after opening, to sit on top of #7. #5 was a throwaway proof PR and was closed. **Of #32–#38, 6 of 7** had no commits after opening; #35, the upstream merge, was refreshed twice as upstream moved |
 | Follow-up PRs that fixed earlier merged Phase 0 work | **3 of lane A's 7 PRs** | #2 changed A1's fixed ports to dynamic ports, at the owner's request. #3 fixed `-Dredis.image` never reaching the test JVM, a bug in A1's harness. #4 did the same for `golden.update`. (#9's JaCoCo fix repaired a pre-existing 3.x bug, not Phase 0 work) |
 | PRs merged after this review | **25** (#14–#38) | #14–#31 as before: 13 from the eval sessions and the sessions they started, at the owner's request, and 5 from this session (#18, #27, #29, #30, #31). Then #32–#38: this review, the CI lines, rule 1, the upstream merge, the slot-move fix, the legacy fixtures through the migration, and the golden re-capture |
 | Code-owner reviews on GitHub | **0 formal reviews** across 11 merged PRs | The owner approved each merge in chat. The median time from opening to merge was about 3 minutes. The playbook's code-owner gate was exercised, but not recorded on GitHub. **Since then:** still none, on the fork's PRs or on the upstream PRs, which the owner merged past upstream's required review |
 | Quarantined tests | **0** | 215 of 215 tests pass on every line. Still 0 |
-| Fixes sent upstream | **14 upstream PRs merged** (#416–#429) | Most port this fork's Phase 0 fixes to upstream 3.x: the Testcontainers harness and Redis 7.4+ floor (#417), `scalatest-maven-plugin` 2.2.0 (#418), `client.name` (#419), the TLS certificate (#420), parse-error context (#421), `write.mode` (#423), the redirect-aware writers and `MSETEX` (#424). New upstream work: JSON schemas (#416), the JNA pin (#422), the leak-test race (#425), docs (#426), the site plugin (#427), password redaction (#428) and the schema migration (#429) |
+| Fixes sent upstream | **19 upstream PRs merged** (#416–#434) | Most port this fork's Phase 0 fixes to upstream 3.x: the Testcontainers harness and Redis 7.4+ floor (#417), `scalatest-maven-plugin` 2.2.0 (#418), `client.name` (#419), the TLS certificate (#420), parse-error context (#421), `write.mode` (#423), the redirect-aware writers and `MSETEX` (#424). New upstream work: JSON schemas (#416), the JNA pin (#422), the leak-test race (#425), docs (#426), the site plugin (#427), password redaction (#428) and the schema migration (#429). **Since then:** the three 3.x fixes before Phase 1 (#430, #433, #434), the Central Publisher Portal release (#431) and the 3.1.1 install docs (#432) |
 | Eval baseline pass rate | **8 of 9** (89%) | Claude Opus 5.5 at `eval-base-phase-0`. Owner interventions: 0. See `evals/README.md` |
 | Hook blocks | **0** across the 9 eval runs | Each hook appends a block to `.claude/hook-blocks.log`; a test block confirmed that it does. No eval agent tried a blocked edit or command |
 
@@ -82,7 +88,8 @@ These are the measures the playbook asks for (see `phase-0.md`, "Measurement").
      `HashDataframeSuite`, and ScalaTest can't load a suite with duplicate test names, so the hash DataFrame suites
      aborted (fixed in `1a3f0a8`, in #35).
 
-   Also, "wait for CI" came up again: #38 and upstream #424 merged with their test jobs running.
+   Also, "wait for CI" came up again: #38 and upstream #424 merged with their test jobs running, and so did upstream
+   #430, #433 and #434, each about 5 minutes before its 9 jobs finished. All 9 passed on each.
 6. **Done: the test TLS certificate**, at the owner's request, and upstream in #420. `redis.crt` expired in 2021. It is now
    re-issued by the same test CA and valid until 2030-05-13, with subject alternative names `localhost`,
    `127.0.0.1` and `::1`, ready for Phase 1's hostname verification. See finding 3.
@@ -103,7 +110,7 @@ These are the measures the playbook asks for (see `phase-0.md`, "Measurement").
 
    Still open from #347: `write.mode = replace` and binary rows with a TTL don't follow redirects yet. They fail the
    job instead of losing rows. (Checked again at `b794947`: both still send to the node the relation's topology
-   names.)
+   names.) **Done:** upstream #430 makes both follow `MOVED` and `ASK`, and PR #40 brings it into the fork.
 
    **Since then:** all of these are in upstream 3.x too: #419, #421, #423 and #424.
 
@@ -141,17 +148,23 @@ These are the measures the playbook asks for (see `phase-0.md`, "Measurement").
     Spark 3.5.10 on Scala 2.12 and 2.13, which CI tests on every PR. Phase 1 starts from this code.
 12. **Done: the legacy fixtures go through the migration (#37)**, which upstream now has (#429). See criterion 3.
 
-## 3.x fixes left before Phase 1
+## 3.x fixes before Phase 1
 
 The owner wants a clean 3.x starting point for Phase 1: today's features keep working, with bugs fixed and no new
-features. These are the fixes still open in the 3.x code at `b794947`. None blocks the exit:
+features. These were the fixes still open in the 3.x code at `b794947`. None blocks the exit.
 
-| Fix | Where | Why it's a fix |
-|---|---|---|
-| Follow `MOVED`/`ASK` in the last two writers | `write.mode = replace`, and the binary model with a `ttl` (`RedisSourceRelation.saveRows`) | The rest of #347: after a slot moves, these writes fail the job, where every other writer follows the redirect |
-| Set values and TTLs in one step | The RDD writers with a `ttl`, and the hash model's default write, send `EXPIRE` after the write in the same pipeline | A reader, or a failure between the two, can leave a value without its TTL. Rule 3: `MULTI`/`EXEC` per key, as `write.mode = replace` does, or `SET … EX` for strings |
-| Replace the legacy reads | `RedisRDD.scala`: `SMEMBERS` (`fromRedisSet`), `ZRANGEBYSCORE` twice (`fromRedisZRangeByScore`, `…WithScore`) | Rule 3. Same results with `SSCAN` and `ZRANGE … BYSCORE` (Redis 6.2+; the floor is 7.4); `SSCAN` doesn't block Redis on a large set |
-| Optional: build on JDK 11+, and the Scaladoc warnings | #188, #293 | Build fixes, not features. Phase 1 moves to JDK 17 anyway |
+**Since then:** the three fixes went upstream as PRs of their own, and PR #40 merges them into `spike/phase-0`.
+
+- Each PR came with tests that failed on the code before it.
+- Each passed the full suite locally on Redis 8.6 and 7.4, and all 9 upstream CI jobs.
+- Only the optional build fixes are left.
+
+| Fix | Where | Why it's a fix | Status |
+|---|---|---|---|
+| Follow `MOVED`/`ASK` in the last two writers | `write.mode = replace`, and the binary model with a `ttl` (`RedisSourceRelation.saveRows`) | The rest of #347: after a slot moves, these writes fail the job, where every other writer follows the redirect | **Done: upstream #430.** Each row's transaction is sent again to the node a redirect names. `MSETEX` is split into `SET … EX` while its slot migrates |
+| Set values and TTLs in one step | The RDD writers with a `ttl`, and the hash model's default write, send `EXPIRE` after the write in the same pipeline | A reader, or a failure between the two, can leave a value without its TTL. Rule 3: `MULTI`/`EXEC` per key, as `write.mode = replace` does, or `SET … EX` for strings | **Done: upstream #433.** One `MULTI`/`EXEC` per key, per batch for the single-key writers, and per row for the hash model. Writes without a `ttl` are unchanged |
+| Replace the legacy reads | `RedisRDD.scala`: `SMEMBERS` (`fromRedisSet`), `ZRANGEBYSCORE` twice (`fromRedisZRangeByScore`, `…WithScore`) | Rule 3. Same results with `SSCAN` and `ZRANGE … BYSCORE` (Redis 6.2+; the floor is 7.4); `SSCAN` doesn't block Redis on a large set | **Done: upstream #434.** A set that changes during the read may or may not show the members added or removed meanwhile, where `SMEMBERS` gave one point-in-time copy |
+| Optional: build on JDK 11+, and the Scaladoc warnings | #188, #293 | Build fixes, not features. Phase 1 moves to JDK 17 anyway | Open |
 
 Not on the list, because they'd be new features: #45 (a configurable pool size), #264 (`MGET` for key-value reads)
 and #349 (`spark.redis.url`). Also left alone: `BLPOP` in the list DStream (rule 3, but nothing is broken, and
