@@ -23,6 +23,9 @@
 
 28 issues are marked as duplicates. 33 rows are proposals that the roadmap doesn't list yet.
 
+Six rows (#33, #267, #347, #351, #358, #398) also note a fix that merged into the 3.x code on `spike/phase-0`
+during Phase 0. Their phase is still the one that brings the behaviour to the 4.x connector.
+
 ## Issues
 
 | Issue | Title | Resolved by | Duplicate of | Notes |
@@ -31,7 +34,7 @@
 | #24 | Running the spark cluster with yarn | Phase 2 |  | Proposed: cluster detection fails on an endpoint that refuses `CLUSTER`; topology from `ROLE`/`CLUSTER SHARDS` and proxy support (spec §2.1) |
 | #26 | how to push spark streamint data into redis by spark-redis? | Phase 3 |  | Proposed: a streaming sink for every model; DStreams are removed (spec §2.5) |
 | #28 | Is there a tuning guide when using spark-redis? | Phase 5 |  | Proposed: a tuning guide in the rebuilt docs site (roadmap Phase 5) |
-| #33 | Fails silently when redis instance is full | Phase 2 |  | Proposed: write errors (OOM) must fail the job (spec §2.4, §2.12 fault injection) |
+| #33 | Fails silently when redis instance is full | Phase 2 |  | Proposed: write errors (OOM) must fail the job (spec §2.4, §2.12 fault injection). **3.x, Phase 0:** every writer now fails on an error reply (PRs #22, #29); not tested against a full instance |
 | #36 | Support for HINCRBY, LTRIM and LRANGE | Phase 2 |  | Proposed: `LRANGE` and `LTRIM` through the `list` model (spec §2.2). The `HINCRBY` part is declined: counters aren't a table write (see #342) |
 | #40 | data from redis all in one partition | Phase 2 |  | Proposed: list reads in bounded chunks across partitions (spec §2.2, §2.3) |
 | #44 | Remove/Update elements of an existing list in Redis | Declined |  | Proposed: in-place list edits (`LSET`, `LREM`) aren't a table operation; the `list` model appends or replaces (spec §2.2) |
@@ -82,7 +85,7 @@
 | #261 | Reading redis sets as Key Value Pair RDD | Phase 2 |  | RDD API question, answered by the table model that replaces the function (spec §2.11) |
 | #262 | New API Request: Write certain column of DataFrame as Strings in Redis | Phase 2 |  | Proposed: the `string` model writes `_key`, `value` (spec §2.2) |
 | #264 | Use mget instead of pipeline get to read kv from redis | Phase 2 |  | Key scan with `SCAN … TYPE`, slot-grouped `MGET` (spec §2.3) |
-| #267 | Can we get an error if an RDD insert fails ? | Phase 2 |  | Loud failures; no silent partial writes (spec §2.4) |
+| #267 | Can we get an error if an RDD insert fails ? | Phase 2 |  | Loud failures; no silent partial writes (spec §2.4). **3.x, Phase 0:** the RDD writers fail on an error reply (PRs #22, #29) |
 | #268 | How Can I tunning the config in changing table? | Declined |  | Proposed: re-reading a changing table is a Spark caching choice; for a change feed, use a stream (spec §2.5) |
 | #270 | Need help with redis sentinel configuration | Phase 2 | #207 | Sentinel (spec §2.1) |
 | #271 | Dataframe write for a wide table with millions of records is much slower than expected | Phase 2 |  | Slot-clustered write distribution (spec §2.4) |
@@ -115,14 +118,14 @@
 | #340 | How to flush table using spark-redis? | Phase 4 | #323 | `DELETE FROM` / overwrite (spec §2.4, lane 4e) |
 | #341 | redis.clients.jedis.exceptions.JedisConnectionException: Could not get a resource from the pool | Phase 2 | #237 | Connection pools (spec §2.1) |
 | #342 | Need to use custom command for save | Declined |  | custom-command passthrough is out of scope until row-level operations ship; revisit then (spec §4) |
-| #347 | Not all the data from DataFrame got write to Redis | Phase 2 |  | Loud failures; no silent partial writes (spec §2.4) |
+| #347 | Not all the data from DataFrame got write to Redis | Phase 2 |  | Loud failures; no silent partial writes (spec §2.4). **3.x, Phase 0:** writes follow `MOVED` and `ASK` (PRs #19, #22, #29), except `write.mode = replace` and binary rows with a TTL, which fail instead |
 | #348 | RedisJSON support | Phase 2 |  | The `json` model (spec §2.2) |
 | #349 | add support to spark.redis.url | Phase 2 |  | Configuration and security (spec §2.9) |
 | #350 | pyspark.sql.utils.IllegalArgumentException when using infer.schema | Phase 2 |  | Types, parse errors and schema inference (spec §2.8) |
-| #351 | Append mode doesn't replace entire row if key collision happens | Phase 2 |  | Write semantics: `write.mode`, overwrite strategies (spec §2.4) |
+| #351 | Append mode doesn't replace entire row if key collision happens | Phase 2 |  | Write semantics: `write.mode`, overwrite strategies (spec §2.4). **3.x, Phase 0:** `write.mode = replace` for the `hash` model (PR #23) |
 | #352 | How to use Spark redis RDD with PySpark | Phase 5 | #379 | Python and Spark Connect (spec §2.7) |
 | #357 | Cannot use in Databricks JedisConnectionException: Could not get a resource from the pool | Phase 2 | #237 | Connection pools (spec §2.1) |
-| #358 | Date & Timestamp parsing fails | Phase 2 |  | Types, parse errors and schema inference (spec §2.8) |
+| #358 | Date & Timestamp parsing fails | Phase 2 |  | Types, parse errors and schema inference (spec §2.8). **3.x, Phase 0:** the error names the key, field, value and type (PR #20) |
 | #359 | Data missing after reload | Phase 2 |  | Loud failures; no silent partial writes (spec §2.4) |
 | #360 | toRedisByteLISTs is not over writing the existing key in redis | Phase 2 |  | RDD API question, answered by the table model that replaces the function (spec §2.11) |
 | #362 | NOAUTH Authentication required PYSPARK/ SPARK | Phase 5 |  | Python and Spark Connect (spec §2.7) |
@@ -143,7 +146,7 @@
 | #393 | Will this repo be maintained anymore? | Phase 0 | #384 | Answered by naming a code owner and release manager (intent Q4, spec §3) |
 | #396 | Adding function toRedisByteZSET | Phase 2 |  | RDD API question, answered by the table model that replaces the function (spec §2.11) |
 | #397 | Read keys from List | Phase 2 |  | RDD API question, answered by the table model that replaces the function (spec §2.11) |
-| #398 | i cannot define clientName in configuration | Phase 2 |  | Configuration and security (spec §2.9) |
+| #398 | i cannot define clientName in configuration | Phase 2 |  | Configuration and security (spec §2.9). **3.x, Phase 0:** `spark.redis.client.name` and the `client.name` option (PR #21) |
 
 ## Sign-off
 
