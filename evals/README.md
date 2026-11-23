@@ -4,8 +4,8 @@ Ten tasks from this repo's real backlog and plan, used to measure how well an ag
 (`CLAUDE.md`, `.claude/`, `scripts/check-*.sh`). A guardrail change that lowers the pass rate doesn't merge
 (roadmap, "Eval suite").
 
-**Phase 0 runs them by hand**, once, to record the baseline below. Phase 2 automates the runner and grows the suite
-to 20–50 tasks.
+**Phase 0 ran them by hand**, once, to record the baseline below. Phase 1 runs them once more, from a Phase 1 base
+(see below). Phase 2 automates the runner and grows the suite to 20–50 tasks.
 
 | # | Task | What it tests |
 |---|---|---|
@@ -37,6 +37,11 @@ git tag eval-base-phase-0 <sha> && git push https://github.com/Redislabs-Solutio
 Some tasks add something that already exists at that commit. Their setup removes it first, and the removal
 becomes part of the starting state.
 
+**Phase 1 base.** Once Phase 1 plan step A1 merges, the owner tags that `spike/phase-1` commit **`eval-base-phase-1`**
+the same way. The Phase 1 baseline (plan step X1) runs every task from it, on JDK 17. Runs from `eval-base-phase-0`
+stay on JDK 8, because that commit is 3.x code. If a task's setup no longer applies on the Phase 1 base, its fix is a
+PR of its own, noted in the results table.
+
 ## Running one task
 
 ```bash
@@ -49,7 +54,7 @@ cd "$TMPDIR/eval-$N"
 # Run the task's Setup block here, then hide the evals from the agent and record the start:
 git rm -r -q evals && git commit -q -am "eval $N: starting state"
 START=$(git rev-parse HEAD)
-export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home   # zulu-17.jdk for eval-base-phase-1
 ```
 
 1. Open a **new** Claude Code session in the eval worktree, with no other context, and paste the task's prompt
