@@ -15,3 +15,4 @@ src/test/scala/com/redislabs/provider/redis/df/HashWriteModeSuite.scala  # #351
 src/test/scala/com/redislabs/provider/redis/util/RedirectedWrites.scala  # #347 (the fixture the *RedirectedWriteClusterSuite tests share)
 src/test/scala/com/redislabs/provider/redis/rdd/cluster/HashRedirectedWriteClusterSuite.scala  # #347 (hash writes lost after a slot moves or during its migration)
 src/test/scala/com/redislabs/provider/redis/rdd/cluster/SetRedirectedWriteClusterSuite.scala  # #347 (set and sorted-set writes lost after a slot moves or during its migration)
+src/test/scala/com/redislabs/provider/redis/rdd/cluster/ListRedirectedWriteClusterSuite.scala  # #347 (list writes lost after a slot moves or during its migration)
