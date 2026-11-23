@@ -1,6 +1,7 @@
 package com.redislabs.provider.redis
 
-import java.io.{File, FileWriter, PrintWriter}
+import java.io.{File, FileOutputStream, FileWriter, OutputStreamWriter, PrintWriter}
+import java.nio.charset.StandardCharsets
 import java.time.{Duration => JDuration}
 
 import com.redislabs.provider.redis.util.Logging
@@ -38,16 +39,26 @@ object RedisBenchmarks {
 
   val CsvFile = new File("target/benchmarks.csv")
 
-  /** Appends `name,millis`, writing the header first if the file is new. */
-  def appendCsv(name: String, millis: Long): Unit = synchronized {
-    val isNew = !CsvFile.exists()
-    CsvFile.getParentFile.mkdirs()
-    val writer = new PrintWriter(new FileWriter(CsvFile, true))
+  /** Appends `name,millis` to `target/benchmarks.csv`, writing the header first if the file is new or empty. */
+  def appendCsv(name: String, millis: Long): Unit = appendCsv(CsvFile, name, millis)
+
+  /**
+    * Appends `name,millis` to `file`, writing the header first if the file is new or empty. The file is UTF-8.
+    *
+    * The size check and the write run under this object's lock and a file lock, so writers in this JVM or in another
+    * one sharing `target/` can't both write the header or interleave their rows.
+    */
+  private[redis] def appendCsv(file: File, name: String, millis: Long): Unit = synchronized {
+    Option(file.getAbsoluteFile.getParentFile).foreach(_.mkdirs())
+    val stream = new FileOutputStream(file, true)
     try {
-      if (isNew) writer.write("name,millis\n")
+      stream.getChannel.lock()
+      val writer = new OutputStreamWriter(stream, StandardCharsets.UTF_8)
+      if (stream.getChannel.size() == 0) writer.write("name,millis\n")
       writer.write(s"${csvField(name)},$millis\n")
+      writer.flush()
     } finally {
-      writer.close()
+      stream.close() // also releases the lock
     }
   }
 
