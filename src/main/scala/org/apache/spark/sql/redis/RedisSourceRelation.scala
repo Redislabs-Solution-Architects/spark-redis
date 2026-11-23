@@ -5,9 +5,11 @@ import java.util.{List => JList}
 
 import com.redislabs.provider.redis.rdd.Keys
 import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
-import com.redislabs.provider.redis.util.Logging
+import com.redislabs.provider.redis.util.{FieldParseException, Logging}
 import com.redislabs.provider.redis.util.PipelineUtils._
-import com.redislabs.provider.redis.{ReadWriteConfig, RedisConfig, RedisDataTypeHash, RedisDataTypeString, RedisEndpoint, RedisNode, toRedisContext}
+import com.redislabs.provider.redis.{
+  ReadWriteConfig, RedisConfig, RedisDataTypeHash, RedisDataTypeString, RedisEndpoint, RedisNode, toRedisContext
+}
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -23,7 +25,7 @@ import scala.collection.JavaConverters._
 class RedisSourceRelation(override val sqlContext: SQLContext,
                           parameters: Map[String, String],
                           userSpecifiedSchema: Option[StructType])
-  extends BaseRelation
+    extends BaseRelation
     with InsertableRelation
     with PrunedFilteredScan
     with Keys
@@ -297,7 +299,9 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
 
       filteredKeysAndValues.map { case (key, value) =>
         val keyMap = keyName -> tableKey(keysPrefixPattern, key)
-        persistence.decodeRow(keyMap, value, schema, requiredColumns)
+        FieldParseException.withKey(key) {
+          persistence.decodeRow(keyMap, value, schema, requiredColumns)
+        }
       }
     }
   }

@@ -4,7 +4,7 @@ import com.redislabs.provider.redis.RedisConfig
 import com.redislabs.provider.redis.util.CollectionUtils.RichCollection
 import com.redislabs.provider.redis.util.ConnectionUtils.{JedisExt, XINFO, withConnection}
 import com.redislabs.provider.redis.util.StreamUtils.{createConsumerGroupIfNotExist, resetConsumerGroup}
-import com.redislabs.provider.redis.util.{Logging, ParseUtils}
+import com.redislabs.provider.redis.util.{FieldParseException, Logging, ParseUtils}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.streaming.{Offset, Source}
 import org.apache.spark.sql.redis.stream.RedisSource._
@@ -94,16 +94,21 @@ class RedisSource(sqlContext: SQLContext, metadataPath: String,
     // if 'start' is set, reset consumer group offset to read this batch
     resetConsumerGroupsIfHasOffset(offsetRanges)
 
-    // read data
+    // read data. Partition i of RedisSourceRdd reads offsetRanges(i).
+    val streamKeys = offsetRanges.map(_.config.streamKey)
     val internalRdd = new RedisSourceRdd(sc, redisConfig, offsetRanges)
-      .map { case (id, fields) =>
-        val fieldMap = fields.asScala.toMap + ("_id" -> id.toString)
-        val values = ParseUtils.parseFields(fieldMap, localSchema)
-          .map {
+      .mapPartitionsWithIndex { case (partition, entries) =>
+        val streamKey = streamKeys(partition)
+        entries.map { case (id, fields) =>
+          val fieldMap = fields.asScala.toMap + ("_id" -> id.toString)
+          val values = FieldParseException.withKey(streamKey, Some(id.toString)) {
+            ParseUtils.parseFields(fieldMap, localSchema)
+          }.map {
             case str: String => UTF8String.fromString(str)
             case other: Any => other
           }
-        InternalRow(values: _*)
+          InternalRow(values: _*)
+        }
       }
     sqlContext.internalCreateDataFrame(internalRdd, schema, isStreaming = true)
   }
