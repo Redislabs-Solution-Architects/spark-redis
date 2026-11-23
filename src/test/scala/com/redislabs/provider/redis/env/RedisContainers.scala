@@ -56,7 +56,11 @@ object RedisContainers {
     try sockets.map(_.getLocalPort) finally sockets.foreach(_.close())
   }
 
-  private lazy val standalone: RedisContainer = {
+  // Each server is started once per JVM, and the outcome is kept even when the start failed. A plain lazy val would
+  // run its initializer again on every access after a failure, so each suite would wait out StartupTimeout (and the
+  // cluster's retries) again: with 22 cluster suites that turned a broken image into a run of about 100 minutes.
+
+  private lazy val standalone: Try[RedisContainer] = Try {
     val c = new RedisContainer
     copy(c, "containers/standalone.conf", s"$ConfDir/redis.conf")
     copy(c, "containers/users.acl", s"$ConfDir/users.acl")
@@ -65,7 +69,7 @@ object RedisContainers {
     startedWhen(c, "Ready to accept connections")
   }
 
-  private lazy val tls: RedisContainer = {
+  private lazy val tls: Try[RedisContainer] = Try {
     val c = new RedisContainer
     copy(c, "containers/standalone-tls.conf", s"$ConfDir/redis.conf")
     copy(c, "containers/users.acl", s"$ConfDir/users.acl")
@@ -87,7 +91,7 @@ object RedisContainers {
   }
 
   /** The cluster's node ports, with a few attempts in case another process takes a chosen port first. */
-  private lazy val cluster: (RedisClusterContainer, Seq[Int]) = {
+  private lazy val cluster: Try[(RedisClusterContainer, Seq[Int])] = {
     def attempt(left: Int): (RedisClusterContainer, Seq[Int]) = {
       val ports = freePorts(ClusterNodes)
       Try(startCluster(ports)) match {
@@ -96,15 +100,15 @@ object RedisContainers {
         case Failure(e) => throw e
       }
     }
-    attempt(ClusterStartAttempts)
+    Try(attempt(ClusterStartAttempts))
   }
 
   /** Standalone Redis, with ACL users `default`/`passwd` and `alice`/`p1pp0`. */
-  def standalonePort: Int = if (Enabled) standalone.getMappedPort(StandalonePort) else StandalonePort
+  def standalonePort: Int = if (Enabled) standalone.get.getMappedPort(StandalonePort) else StandalonePort
 
   /** TLS-only Redis with the same ACL users, using the certificates in `src/test/resources/tls`. */
-  def tlsPort: Int = if (Enabled) tls.getMappedPort(TlsPort) else TlsPort
+  def tlsPort: Int = if (Enabled) tls.get.getMappedPort(TlsPort) else TlsPort
 
   /** Port of the first of three cluster primaries, with `default` (no password) and `alice`/`p1pp0`. */
-  def clusterPort: Int = if (Enabled) cluster._2.head else 7379
+  def clusterPort: Int = if (Enabled) cluster.get._2.head else 7379
 }
