@@ -44,20 +44,16 @@ SBT and `--packages` examples on this page use 3.1.0. To use 3.1.1, download its
 with `--jars`, as shown below.
 
 ### Build from source
-You can download the library's source and build it. The build requires JDK 8 and Maven:
+You can download the library's source and build it. This branch builds the 4.x connector for Spark 4, which requires
+JDK 17 and Maven:
 ```
 git clone https://github.com/RedisLabs/spark-redis.git
 cd spark-redis
 mvn clean package -DskipTests
 ```
 
-The build produces `target/spark-redis_2.12-<version>.jar` and `target/spark-redis_2.12-<version>-jar-with-dependencies.jar`.
-To build for Scala 2.13 instead, switch the build first:
-
-```
-dev/change-scala-version.sh 2.13
-mvn clean package -DskipTests
-```
+The build produces `target/spark-redis_2.13-<version>.jar` and `target/spark-redis_2.13-<version>-jar-with-dependencies.jar`.
+The 3.x build, for Spark 3.5 on Scala 2.12 or 2.13 and JDK 8, is on `branch-3.x`.
 
 See [Dev environment](dev.md) to run the tests.
 

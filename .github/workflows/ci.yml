@@ -8,7 +8,7 @@ name: CI
 
 on:
   push:
-    branches: [master, 'spike/phase-0']
+    branches: [master, 'spike/phase-0', 'spike/phase-1']
     paths-ignore: ['doc/**', '**/*.md']
   pull_request:
     paths-ignore: ['doc/**', '**/*.md']
@@ -33,7 +33,6 @@ jobs:
       redis: ${{ steps.read.outputs.redis }}
       secondary: ${{ steps.read.outputs.secondary }}
       jdk: ${{ steps.read.outputs.jdk }}
-      scala: ${{ steps.read.outputs.scala }}
       preview: ${{ steps.read.outputs.preview }}
       benchmark_redis: ${{ steps.read.outputs.benchmark_redis }}
     steps:
@@ -45,7 +44,6 @@ jobs:
           echo "redis=$(yq -o=json -I=0 '.redis' versions.yml)" >> "$GITHUB_OUTPUT"
           echo "secondary=$(yq -o=json -I=0 '.redis_secondary // []' versions.yml)" >> "$GITHUB_OUTPUT"
           echo "jdk=$(yq -o=json -I=0 '.jdk' versions.yml)" >> "$GITHUB_OUTPUT"
-          echo "scala=$(yq -o=json -I=0 '.scala // ["2.12"]' versions.yml)" >> "$GITHUB_OUTPUT"
           echo "benchmark_redis=$(yq '.benchmark_redis' versions.yml)" >> "$GITHUB_OUTPUT"
           tags=()
           for line in $(yq '.redis_preview[]' versions.yml); do
@@ -62,7 +60,7 @@ jobs:
           echo "preview=$(printf '%s\n' "${tags[@]+"${tags[@]}"}" | jq -R . | jq -cs 'map(select(length > 0))')" >> "$GITHUB_OUTPUT"
 
   test:
-    name: Test (Redis ${{ matrix.redis }}, JDK ${{ matrix.jdk }}, Scala ${{ matrix.scala }})
+    name: Test (Redis ${{ matrix.redis }}, JDK ${{ matrix.jdk }})
     needs: matrix
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -71,7 +69,6 @@ jobs:
       matrix:
         redis: ${{ fromJSON(needs.matrix.outputs.redis) }}
         jdk: ${{ fromJSON(needs.matrix.outputs.jdk) }}
-        scala: ${{ fromJSON(needs.matrix.outputs.scala) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -79,8 +76,6 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.jdk }}
           cache: maven
-      - name: Switch the build to Scala ${{ matrix.scala }}
-        run: dev/change-scala-version.sh "${{ matrix.scala }}"
       - name: Show the Redis version under test
         run: docker run --rm "redis:${{ matrix.redis }}" redis-server --version
       - name: Test
@@ -89,7 +84,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: reports-redis-${{ matrix.redis }}-jdk-${{ matrix.jdk }}-scala-${{ matrix.scala }}
+          name: reports-redis-${{ matrix.redis }}-jdk-${{ matrix.jdk }}
           path: |
             target/surefire-reports/
             target/site/jacoco/
@@ -97,7 +92,7 @@ jobs:
 
   secondary:
     # The other supported lines. They never run on pull requests, so a PR waits only on the `test` job. After a
-    # merge (a push to master or spike/phase-0) they show whether that merge broke one of them.
+    # merge (a push to master, spike/phase-0 or spike/phase-1) they show whether that merge broke one of them.
     name: Secondary (Redis ${{ matrix.redis }}, JDK ${{ matrix.jdk }}, allowed to fail)
     needs: matrix
     if: github.event_name != 'pull_request' && needs.matrix.outputs.secondary != '[]'

@@ -2,7 +2,7 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.redislabs</groupId>
-	<artifactId>spark-redis_2.12</artifactId>
+	<artifactId>spark-redis_2.13</artifactId>
 	<version>3.1.0-SNAPSHOT</version>
 	<name>Spark-Redis</name>
 	<description>A Spark library for Redis</description>
@@ -42,17 +42,15 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-		<java.version>1.8</java.version>
-		<!-- Like Spark 3.x, the library is built for Scala 2.12 (the default) and 2.13. Keep these in line with the
-		     Scala versions that spark.version below is built with (2.12.18 and 2.13.8 for Spark 3.5.x).
-		     dev/change-scala-version.sh switches the build and the artifact name (spark-redis_<scala>) between them. -->
-		<scala.2.12.version>2.12.18</scala.2.12.version>
-		<scala.2.13.version>2.13.8</scala.2.13.version>
-		<scala.major.version>2.12</scala.major.version>
-		<scala.complete.version>${scala.2.12.version}</scala.complete.version>
+		<!-- Spark 4 needs JDK 17 or later. javac and scalac both compile with release 17 (Phase 1 plan, step A1). -->
+		<java.version>17</java.version>
+		<!-- Spark 4 is built for Scala 2.13 only. Keep this the Scala version spark.version is built with (2.13.17 for
+		     Spark 4.1.x), read from <scala.version> in spark-parent_2.13-<spark.version>.pom. -->
+		<scala.major.version>2.13</scala.major.version>
+		<scala.complete.version>2.13.17</scala.complete.version>
 		<jedis.version>3.9.0</jedis.version>
-		<!-- the latest Spark 3.x; upstream's CI also tests older Spark versions, which this fork's ci.yml does not yet -->
-		<spark.version>3.5.10</spark.version>
+		<!-- The Spark 4.1 floor (spec 1). Plan step B1 builds one artifact per Spark minor. -->
+		<spark.version>4.1.4</spark.version>
 		<!-- 2.0.0 or later: the plugin starts the test JVM from ${java.home}, the JDK that runs Maven (JAVA_HOME).
 		     1.0 ran whatever `java` came first on PATH, so a jenv or Homebrew JDK 17 there broke the tests. -->
 		<plugins.scalatest.version>2.2.0</plugins.scalatest.version>
@@ -63,6 +61,9 @@
 		<redis.containers>true</redis.containers>
 		<!-- Set to true (-Dgolden.update=true) to regenerate golden fixtures. Only the owner does that. -->
 		<golden.update>false</golden.update>
+		<!-- The JVM options Spark 4 needs on JDK 17+: the module options spark-submit adds itself, copied from
+		     org.apache.spark.launcher.JavaModuleOptions in spark-launcher 4.1.4. The test JVM gets them below. -->
+		<spark.test.jvm.options>-XX:+IgnoreUnrecognizedVMOptions --add-modules=jdk.incubator.vector --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false -Dio.netty.tryReflectionSetAccessible=true -Dio.netty.allocator.type=pooled -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE --enable-native-access=ALL-UNNAMED</spark.test.jvm.options>
 	</properties>
 
 	<!-- GitHub Packages in the spike's fork (Phase 0 plan, step C9). OSSRH has been shut down (spec 2.13).
@@ -85,7 +86,8 @@
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.8.5</version>
+				<!-- 0.8.7 or later reads Java 17 class files -->
+				<version>0.8.16</version>
 				<executions>
 					<execution>
 						<goals>
@@ -110,15 +112,11 @@
 			<plugin>
 				<groupId>net.alchim31.maven</groupId>
 				<artifactId>scala-maven-plugin</artifactId>
-				<version>3.4.6</version>
+				<version>4.10.0</version>
 				<configuration>
 					<scalaVersion>${scala.complete.version}</scalaVersion>
-					<javacArgs>
-						<javacArg>-source</javacArg>
-						<javacArg>${java.version}</javacArg>
-						<javacArg>-target</javacArg>
-						<javacArg>${java.version}</javacArg>
-					</javacArgs>
+					<!-- passes -release to scalac and release to javac -->
+					<release>${java.version}</release>
 				</configuration>
 				<executions>
 					<execution>
@@ -242,7 +240,7 @@
 					<reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
 					<junitxml>.</junitxml>
 					<filereports>WDF TestSuite.txt</filereports>
-					<argLine>${jacocoArgLine} -Xmx2g -Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</argLine>
+					<argLine>${jacocoArgLine} ${spark.test.jvm.options} -Xmx2g -Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</argLine>
 					<tagsToExclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToExclude>
 					<!-- The plugin does not pass Maven's -D properties to the forked test JVM, so forward them here. -->
 					<systemProperties>
@@ -324,8 +322,7 @@
 			<version>3.0.8</version>
 			<scope>test</scope>
 		</dependency>
-		<!-- Runs the Redis servers the test suites need in Docker (src/test/scala/.../env/RedisContainers.scala).
-		     Testcontainers 1.x still supports Java 8, which this 3.x build targets. -->
+		<!-- Runs the Redis servers the test suites need in Docker (src/test/scala/.../env/RedisContainers.scala). -->
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers</artifactId>
@@ -345,7 +342,7 @@
 						<configuration combine.self="override">
 							<tagsToInclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToInclude>
 							<!-- This profile replaces the whole plugin configuration, so repeat what the tests need. -->
-							<argLine>-Xmx2g -Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</argLine>
+							<argLine>${spark.test.jvm.options} -Xmx2g -Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</argLine>
 							<systemProperties>
 								<redis.image>${redis.image}</redis.image>
 								<redis.containers>${redis.containers}</redis.containers>

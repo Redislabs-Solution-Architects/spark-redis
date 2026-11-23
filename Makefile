@@ -7,7 +7,7 @@
 #   make test MVN_ARGS="-Dspark.version=3.3.3 -Dscala.complete.version=2.12.15"   # another Spark version
 #   make benchmark                             # the benchmark suites (long)
 #
-# Requirements: Docker, and JAVA_HOME pointing at a JDK 8 for this 3.x build (the test JVM runs on it too).
+# Requirements: Docker, and JAVA_HOME pointing at a JDK 17 for this 4.x build (the test JVM runs on it too).
 
 MVN ?= $(if $(wildcard ./mvnw),./mvnw,mvn)
 # By default, the first line PRs must pass, read from versions.yml, the only list of Redis lines.
