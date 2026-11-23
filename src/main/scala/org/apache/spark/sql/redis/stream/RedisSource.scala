@@ -2,8 +2,10 @@ package org.apache.spark.sql.redis.stream
 
 import com.redislabs.provider.redis.RedisConfig
 import com.redislabs.provider.redis.util.ConnectionUtils.{JedisExt, XINFO, withConnection}
-import com.redislabs.provider.redis.util.StreamUtils.{EntryIdEarliest, createConsumerGroupIfNotExist, nextEntryId,
-  resetConsumerGroup}
+import com.redislabs.provider.redis.util.StreamUtils.{
+  EntryIdEarliest, createConsumerGroupIfNotExist, nextEntryId,
+  resetConsumerGroup
+}
 import com.redislabs.provider.redis.util.{FieldParseException, Logging, ParseUtils}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, Offset, Source}
@@ -20,7 +22,7 @@ import scala.util.Try
   */
 class RedisSource(sqlContext: SQLContext, metadataPath: String,
                   userDefinedSchema: Option[StructType], parameters: Map[String, String])
-  extends Source with Logging {
+    extends Source with Logging {
 
   private val sc = sqlContext.sparkContext
 
@@ -44,7 +46,8 @@ class RedisSource(sqlContext: SQLContext, metadataPath: String,
       val groupName = consumerConfig.groupName
       val configOffsetOption = offsetsByStreamKey.get(streamKey).map(_.offset).map(new StreamEntryID(_))
       withConnection(streamKey) { conn =>
-        createConsumerGroupIfNotExist(conn, streamKey, groupName, configOffsetOption.getOrElse(StreamEntryID.LAST_ENTRY))
+        createConsumerGroupIfNotExist(conn, streamKey, groupName,
+          configOffsetOption.getOrElse(StreamEntryID.LAST_ENTRY))
         // if config offset is defined, reset to its value
         configOffsetOption.foreach { offset =>
           resetConsumerGroup(conn, streamKey, groupName, offset)
@@ -122,8 +125,7 @@ class RedisSource(sqlContext: SQLContext, metadataPath: String,
          |""".stripMargin)
   }
 
-  override def stop(): Unit = {
-  }
+  override def stop(): Unit = {}
 
   /**
     * The start of the first batch, for which Spark passes no start offset: the positions of the consumer groups
