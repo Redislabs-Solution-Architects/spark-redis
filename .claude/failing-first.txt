@@ -12,3 +12,5 @@ src/test/scala/com/redislabs/provider/redis/RedisBenchmarksCsvSuite.scala  # pha
 src/test/scala/com/redislabs/provider/redis/rdd/cluster/MovedWriteClusterSuite.scala  # #347 (writes after a slot moves are lost)
 src/test/scala/com/redislabs/provider/redis/rdd/cluster/AskWriteClusterSuite.scala  # #347 (writes during a slot migration are lost)
 src/test/scala/com/redislabs/provider/redis/df/HashWriteModeSuite.scala  # #351
+src/test/scala/com/redislabs/provider/redis/util/RedirectedWrites.scala  # #347 (the fixture the *RedirectedWriteClusterSuite tests share)
+src/test/scala/com/redislabs/provider/redis/rdd/cluster/HashRedirectedWriteClusterSuite.scala  # #347 (hash writes lost after a slot moves or during its migration)
