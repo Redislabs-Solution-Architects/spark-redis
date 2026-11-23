@@ -6,7 +6,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import redis.clients.jedis.Pipeline
 import redis.clients.jedis.params.SetParams
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
   * RedisContext extends sparkContext's functionality with redis functions

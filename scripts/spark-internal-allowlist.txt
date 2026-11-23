@@ -11,5 +11,11 @@ org.apache.spark.sql.catalyst.InternalRow
 org.apache.spark.sql.catalyst.expressions.GenericRow
 org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 org.apache.spark.sql.execution.streaming.Offset
-org.apache.spark.sql.execution.streaming.SerializedOffset
 org.apache.spark.sql.execution.streaming.Source
+# Phase 1, step A1. RedisSource has always used these two, but they were never listed, because the check looks only
+# at added lines: it converts rows with CatalystTypeConverters, and keeps its first offset in an HDFSMetadataLog.
+# Spark 4.1 moved HDFSMetadataLog and SerializedOffset into these subpackages (4.1.4, 4.2.1 and 4.3.0 all have
+# them), so the imports follow. Phase 3's DSv2 source removes all of them. Approved by the owner on 2026-11-23.
+org.apache.spark.sql.catalyst.CatalystTypeConverters
+org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
+org.apache.spark.sql.execution.streaming.runtime.SerializedOffset

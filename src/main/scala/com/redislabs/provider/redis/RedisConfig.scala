@@ -9,7 +9,7 @@ import org.apache.spark.SparkConf
 import redis.clients.jedis.util.{JedisClusterCRC16, JedisURIHelper, SafeEncoder}
 import redis.clients.jedis.{Jedis, Protocol}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 
 /**

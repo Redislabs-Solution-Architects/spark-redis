@@ -6,7 +6,7 @@ import com.redislabs.provider.redis._
 import com.redislabs.provider.redis.util.TestUtils
 import redis.clients.jedis.exceptions.JedisConnectionException
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
  * More RDD tests

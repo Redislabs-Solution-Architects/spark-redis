@@ -4,7 +4,7 @@ import com.redislabs.provider.redis.df.HashDataframeSuite
 import com.redislabs.provider.redis.env.RedisClusterEnv
 import redis.clients.jedis.{HostAndPort, JedisCluster}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
   * @author The Viet Nguyen

@@ -4,7 +4,7 @@ import com.redislabs.provider.redis.ReadWriteConfig
 import org.scalatest.Matchers
 import redis.clients.jedis.util.JedisClusterCRC16
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 trait RedisKeysSuite extends RedisRddSuite with Keys with Matchers {
 

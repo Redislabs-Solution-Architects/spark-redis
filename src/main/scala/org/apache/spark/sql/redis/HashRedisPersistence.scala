@@ -9,7 +9,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types._
 import redis.clients.jedis.{Pipeline, PipelineBase}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
   * @param replace `write.mode = replace`: each row replaces the hash stored under its key, instead of being merged

@@ -2,17 +2,20 @@ package org.apache.spark.sql.redis.stream
 
 import com.redislabs.provider.redis.RedisConfig
 import com.redislabs.provider.redis.util.ConnectionUtils.{JedisExt, XINFO, withConnection}
-import com.redislabs.provider.redis.util.StreamUtils.{EntryIdEarliest, createConsumerGroupIfNotExist, nextEntryId,
-  resetConsumerGroup}
+import com.redislabs.provider.redis.util.StreamUtils.{
+  EntryIdEarliest, createConsumerGroupIfNotExist, nextEntryId,
+  resetConsumerGroup
+}
 import com.redislabs.provider.redis.util.{FieldParseException, Logging, ParseUtils}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, Offset, Source}
+import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
 import org.apache.spark.sql.redis.stream.RedisSource._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext, classic}
 import redis.clients.jedis.{StreamEntryID, Jedis}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 /**
@@ -20,7 +23,7 @@ import scala.util.Try
   */
 class RedisSource(sqlContext: SQLContext, metadataPath: String,
                   userDefinedSchema: Option[StructType], parameters: Map[String, String])
-  extends Source with Logging {
+    extends Source with Logging {
 
   private val sc = sqlContext.sparkContext
 
@@ -44,7 +47,8 @@ class RedisSource(sqlContext: SQLContext, metadataPath: String,
       val groupName = consumerConfig.groupName
       val configOffsetOption = offsetsByStreamKey.get(streamKey).map(_.offset).map(new StreamEntryID(_))
       withConnection(streamKey) { conn =>
-        createConsumerGroupIfNotExist(conn, streamKey, groupName, configOffsetOption.getOrElse(StreamEntryID.LAST_ENTRY))
+        createConsumerGroupIfNotExist(conn, streamKey, groupName,
+          configOffsetOption.getOrElse(StreamEntryID.LAST_ENTRY))
         // if config offset is defined, reset to its value
         configOffsetOption.foreach { offset =>
           resetConsumerGroup(conn, streamKey, groupName, offset)
@@ -112,7 +116,9 @@ class RedisSource(sqlContext: SQLContext, metadataPath: String,
           toCatalyst(Row.fromSeq(values)).asInstanceOf[InternalRow]
         }
       }
-    sqlContext.internalCreateDataFrame(internalRdd, schema, isStreaming = true)
+    // Spark 4 keeps internalCreateDataFrame only on the classic (non-Connect) SQLContext, which is what a
+    // streaming query's Source receives. DataSource V2 replaces this in Phase 3.
+    sqlContext.asInstanceOf[classic.SQLContext].internalCreateDataFrame(internalRdd, schema, isStreaming = true)
   }
 
   override def commit(end: Offset): Unit = {
@@ -122,8 +128,7 @@ class RedisSource(sqlContext: SQLContext, metadataPath: String,
          |""".stripMargin)
   }
 
-  override def stop(): Unit = {
-  }
+  override def stop(): Unit = {}
 
   /**
     * The start of the first batch, for which Spark passes no start offset: the positions of the consumer groups

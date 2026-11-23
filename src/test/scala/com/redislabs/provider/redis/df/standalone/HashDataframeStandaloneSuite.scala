@@ -4,7 +4,7 @@ import com.redislabs.provider.redis.df.HashDataframeSuite
 import com.redislabs.provider.redis.env.RedisStandaloneEnv
 import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
   * @author The Viet Nguyen

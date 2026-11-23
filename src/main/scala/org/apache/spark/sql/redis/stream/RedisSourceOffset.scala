@@ -1,7 +1,8 @@
 package org.apache.spark.sql.redis.stream
 
 import com.redislabs.provider.redis.util.JsonUtils
-import org.apache.spark.sql.execution.streaming.{Offset, SerializedOffset}
+import org.apache.spark.sql.execution.streaming.Offset
+import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
 import org.json4s.jackson.Serialization
 import org.json4s.{Formats, NoTypeHints}
 

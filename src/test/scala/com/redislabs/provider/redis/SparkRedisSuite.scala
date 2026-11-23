@@ -2,7 +2,7 @@ package com.redislabs.provider.redis
 
 import com.redislabs.provider.redis.env.Env
 import com.redislabs.provider.redis.rdd.Keys
-import org.apache.spark.sql.{SQLContext, SQLImplicits, SparkSession}
+import org.apache.spark.sql.{SparkSession, classic}
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 /**
@@ -21,9 +21,11 @@ trait SparkRedisSuite extends FunSuite with Env with Keys with BeforeAndAfterAll
     System.clearProperty("spark.driver.port")
   }
 
-  object TestSqlImplicits extends SQLImplicits {
+  /** `spark.implicits`, for suites to import: `spark` is a `var`, so `import spark.implicits._` doesn't compile. */
+  object TestSqlImplicits extends classic.SQLImplicits {
 
-    override protected def _sqlContext: SQLContext = spark.sqlContext
+    // Spark 4's implicits take the classic SparkSession, which is what the tests run on.
+    override protected def session: classic.SparkSession = spark.asInstanceOf[classic.SparkSession]
   }
 
 }

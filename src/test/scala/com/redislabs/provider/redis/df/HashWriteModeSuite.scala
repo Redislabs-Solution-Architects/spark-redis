@@ -11,7 +11,7 @@ import org.apache.spark.sql.{Row, SaveMode}
 import org.scalatest.Matchers
 import redis.clients.jedis.Jedis
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 // scalastyle:off multiple.string.literals magic.number
 
