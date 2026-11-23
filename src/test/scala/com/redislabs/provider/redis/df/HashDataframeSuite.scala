@@ -1,15 +1,18 @@
 package com.redislabs.provider.redis.df
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
 import java.util.UUID
 
 import com.redislabs.provider.redis.toRedisContext
+import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
 import com.redislabs.provider.redis.util.Person.{data, _}
 import com.redislabs.provider.redis.util.TestUtils._
 import com.redislabs.provider.redis.util.{EntityId, Logging, Person}
+import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
-import org.apache.spark.sql.redis.RedisSourceRelation.{dataKey, tableDataKeyPattern}
+import org.apache.spark.sql.redis.RedisSourceRelation.{dataKey, schemaKey, tableDataKeyPattern}
 import org.apache.spark.sql.redis._
 import org.apache.spark.sql.types.{StructField, _}
 import org.scalatest.Matchers
@@ -30,6 +33,33 @@ trait HashDataframeSuite extends RedisDataframeSuite with Matchers with Logging 
     df.write.format(RedisFormat).
       option(SqlOptionTableName, tableName)
       .save()
+    val loadedDf = spark.read.format(RedisFormat)
+      .option(SqlOptionTableName, tableName)
+      .load()
+      .cache()
+    verifyDf(loadedDf)
+  }
+
+  test("the table schema is stored as Spark's schema JSON, which every Spark version reads") {
+    val tableName = generateTableName(TableNamePrefix)
+    val df = spark.createDataFrame(data)
+    df.write.format(RedisFormat)
+      .option(SqlOptionTableName, tableName)
+      .save()
+    val key = schemaKey(tableName)
+    val stored = withConnection(redisConfig.connectionForKey(key))(_.get(key.getBytes(UTF_8)))
+    DataType.fromJson(new String(stored, UTF_8)) shouldBe df.schema
+  }
+
+  test("a table whose schema an earlier version stored Java-serialized can still be read") {
+    val tableName = generateTableName(TableNamePrefix)
+    val df = spark.createDataFrame(data)
+    df.write.format(RedisFormat)
+      .option(SqlOptionTableName, tableName)
+      .save()
+    val key = schemaKey(tableName)
+    val javaSerialized = SerializationUtils.serialize(df.schema)
+    withConnection(redisConfig.connectionForKey(key))(_.set(key.getBytes(UTF_8), javaSerialized))
     val loadedDf = spark.read.format(RedisFormat)
       .option(SqlOptionTableName, tableName)
       .load()
@@ -351,6 +381,44 @@ trait HashDataframeSuite extends RedisDataframeSuite with Matchers with Logging 
         .save()
     }
     err.getMessage should include("WRONGTYPE")
+  }
+
+  test("a value that can't be parsed names the key, the field, the value and the type (#358)") {
+    val tableName = generateTableName("person")
+    saveMap(tableName, "John", Map("birthday" -> "2022/10/14"))
+    val schema = StructType(Array(StructField("name", StringType), StructField("birthday", DateType)))
+    val e = interceptSparkErr[SparkException] {
+      spark.read.format(RedisFormat)
+        .option(SqlOptionKeysPattern, tableDataKeyPattern(tableName))
+        .option(SqlOptionKeyColumn, "name")
+        .schema(schema)
+        .load()
+        .collect()
+    }
+    val parseError = findCause[IllegalArgumentException](e)
+    parseError.getMessage should include(s"'$tableName:John'")
+    parseError.getMessage should include("'birthday'")
+    parseError.getMessage should include("'2022/10/14'")
+    parseError.getMessage should include("date")
+  }
+
+  test("a key column that can't be parsed names the key, the field, the value and the type (#358)") {
+    val tableName = generateTableName("person")
+    saveMap(tableName, "John", Map("age" -> "30"))
+    val schema = StructType(Array(StructField("person_id", IntegerType), StructField("age", IntegerType)))
+    val e = interceptSparkErr[SparkException] {
+      spark.read.format(RedisFormat)
+        .option(SqlOptionKeysPattern, tableDataKeyPattern(tableName))
+        .option(SqlOptionKeyColumn, "person_id")
+        .schema(schema)
+        .load()
+        .collect()
+    }
+    val parseError = findCause[NumberFormatException](e)
+    parseError.getMessage should include(s"'$tableName:John'")
+    parseError.getMessage should include("'person_id'")
+    parseError.getMessage should include("'John'")
+    parseError.getMessage should include("integer")
   }
 
   def saveMap(tableName: String): Unit = {

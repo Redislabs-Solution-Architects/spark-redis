@@ -3,24 +3,63 @@ package org.apache.spark.sql.redis
 import java.util.{List => JList}
 
 import com.redislabs.provider.redis.util.ParseUtils
+import com.redislabs.provider.redis.util.PipelineUtils.WriteCommand
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types._
-import redis.clients.jedis.Pipeline
+import redis.clients.jedis.{Pipeline, PipelineBase}
 
 import scala.collection.JavaConverters._
 
 /**
+  * @param replace `write.mode = replace`: each row replaces the hash stored under its key, instead of being merged
+  *                into it. See `save`.
   * @author The Viet Nguyen
   */
-class HashRedisPersistence extends RedisPersistence[Any] {
+class HashRedisPersistence(replace: Boolean) extends RedisPersistence[Any] {
 
-  override def save(pipeline: Pipeline, key: String, value: Any, ttl: Int): Unit = {
-    val javaValue = value.asInstanceOf[Map[String, String]].asJava
-    pipeline.hmset(key, javaValue)
-    if (ttl > 0) {
-      pipeline.expire(key, ttl.toLong)
+  /** `write.mode = merge`, the 3.x behaviour. */
+  def this() = this(replace = false)
+
+  /**
+    * `merge`, the default: sets the row's fields, so fields the row doesn't have stay in the hash, then the TTL.
+    *
+    * `replace`: one `MULTI`/`EXEC` on the key, so a reader sees the old row or the new one, never a mix. It unlinks
+    * the key, sets the row's fields, and sets the TTL when `ttl` is given. The key keeps no TTL from the hash it
+    * replaces. A row with no non-null fields leaves no key, because Redis has no empty hashes.
+    */
+  override def save(pipeline: Pipeline, key: String, value: Any, ttl: Int): Unit =
+    if (replace) saveReplacing(pipeline, key, value, ttl) else saveMerging(pipeline, key, value, ttl)
+
+  private def saveMerging(pipeline: Pipeline, key: String, value: Any, ttl: Int): Unit =
+    saveCommands(key, value, ttl).foreach(command => command(pipeline))
+
+  /**
+    * The `merge` commands: `HSET` of the row's fields, then `EXPIRE` when `ttl` is given. A row with no non-null
+    * fields sends no `HSET`, which Redis would reject. A `replace` is one `MULTI`/`EXEC`, so it isn't split into
+    * commands: [[save]] sends it.
+    */
+  override def saveCommands(key: String, value: Any, ttl: Int): List[WriteCommand] = {
+    require(!replace, "write.mode = replace writes each row in one MULTI/EXEC, which save sends")
+    val fields = value.asInstanceOf[Map[String, String]]
+    val set: List[WriteCommand] =
+      if (fields.nonEmpty) List((pipeline: Pipeline) => pipeline.hset(key, fields.asJava)) else Nil
+    val expire: List[WriteCommand] =
+      if (ttl > 0) List((pipeline: Pipeline) => pipeline.expire(key, ttl.toLong)) else Nil
+    set ++ expire
+  }
+
+  private def saveReplacing(pipeline: Pipeline, key: String, value: Any, ttl: Int): Unit = {
+    val fields = value.asInstanceOf[Map[String, String]]
+    pipeline.multi()
+    (pipeline: PipelineBase).unlink(key) // fix ambiguous reference to overloaded definition
+    if (fields.nonEmpty) {
+      pipeline.hset(key, fields.asJava)
+      if (ttl > 0) {
+        pipeline.expire(key, ttl.toLong)
+      }
     }
+    pipeline.exec()
   }
 
   override def load(pipeline: Pipeline, key: String, requiredColumns: Seq[String]): Unit = {
