@@ -118,7 +118,28 @@ val df = spark.read
 Spark-Redis supports all DataFrame [SaveMode](https://spark.apache.org/docs/latest/sql-programming-guide.html#save-modes)'s: `Append`, 
 `Overwrite`, `ErrorIfExists` and `Ignore`.
 
-Please note, when key collision happens and `SaveMode.Append` is set, the former row is replaced with a new one. 
+When a row's key is already stored and `SaveMode.Append` is set, the `write.mode` option decides what happens to the
+stored hash:
+
+- `merge` (the default) writes the new row's fields over the stored ones. Fields that the new row doesn't have, or has
+  as `null`, keep their stored values.
+- `replace` makes the stored hash exactly the new row, so fields that the new row doesn't have, or has as `null`, are
+  removed. Each key is replaced in one `MULTI`/`EXEC` transaction (`UNLINK`, `HSET`, and `EXPIRE` when `ttl` is set),
+  so a reader sees the old row or the new one, never a mix. The key keeps no TTL from the row it replaces, and a row
+  whose values are all `null` leaves no key. If Redis refuses a transaction, the write fails.
+
+```scala
+df.write
+  .format("org.apache.spark.sql.redis")
+  .option("table", "person")
+  .option("key.column", "name")
+  .option("write.mode", "replace")
+  .mode(SaveMode.Append)
+  .save()
+```
+
+Any other `write.mode` value fails the write before anything is written. `write.mode` applies to the hash model. The
+binary model stores a row as one value, so a write always replaces it.
 
 ### Spark SQL
 
@@ -142,7 +163,8 @@ spark.sql(
 ### Time to live
 
 If you want to expire your data after a certain period of time, you can specify its time to live in `seconds`. Redis will use 
-[Expire](https://redis.io/commands/expire) command to cleanup data. 
+[Expire](https://redis.io/commands/expire) command to cleanup data. With `write.mode` `replace`, the TTL is set in the same
+transaction as the row (see [Save Modes](#save-modes)).
 
 For example, to expire data after 30 seconds:
 
@@ -337,6 +359,7 @@ root
 | partitions.number      | number of partitions (applies only when reading DataFrame)                                                                                                  | `Int`                 | `3`     |
 | key.column             | when writing - specifies unique column used as a Redis key, by default a key is auto-generated <br/> when reading - specifies column name to store hash key | `String`              | -       |
 | ttl                    | data time to live in `seconds`. Data doesn't expire if `ttl` is less than `1`                                                                               | `Int`                 | `0`     |
+| write.mode             | what a hash-model write does to a hash already stored under the row's key: `merge` keeps fields the new row doesn't have, `replace` removes them, see [Save Modes](#save-modes) | `enum [merge, replace]` | `merge` |
 | infer.schema           | infer schema from random row, all columns will have `String` type                                                                                           | `Boolean`             | `false` |
 | max.pipeline.size      | maximum number of commands per pipeline (used to batch commands)                                                                                            | `Int`                 | 100     |
 | scan.count             | count option of SCAN command (used to iterate over keys)                                                                                                    | `Int`                 | 100     |
