@@ -7,11 +7,11 @@ redis: ["8.6"]
 
 # The other supported Redis lines. CI runs them after each merge to master or spike/phase-0, nightly and on
 # manual dispatch, never on pull requests. These jobs may fail without failing the build.
-redis_secondary: ["8.2", "8.8", "8.10"]
+redis_secondary: ["8.2"]
 
 # Upcoming Redis lines. CI tests the newest release-candidate tag of each (for example 8.12-rc3).
-# These jobs may fail without failing the build.
-redis_preview: ["8.12"]
+# These jobs may fail without failing the build. With an empty list, CI skips the preview job.
+redis_preview: []
 
 # JDKs for this 3.x build. Phase 1 adds 17, 21 and 25 together with the Spark lines.
 jdk: ["8"]
