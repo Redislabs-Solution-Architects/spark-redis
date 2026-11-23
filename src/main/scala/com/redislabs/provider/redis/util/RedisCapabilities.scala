@@ -80,8 +80,9 @@ object RedisCapabilities extends Logging {
     try {
       conn.sendCommand(HelloCommand, Seq.empty[Array[Byte]]: _*) match {
         case reply: JList[_] =>
-          reply.asScala.grouped(2).exists {
-            case Seq(name: Array[Byte], value: Array[Byte]) =>
+          // toList: on Scala 2.13, grouped chunks of a Java list are mutable Buffers, which `case Seq(...)` doesn't match
+          reply.asScala.toList.grouped(2).exists {
+            case List(name: Array[Byte], value: Array[Byte]) =>
               SafeEncoder.encode(name) == "mode" && SafeEncoder.encode(value) == "standalone"
             case _ => false
           }
