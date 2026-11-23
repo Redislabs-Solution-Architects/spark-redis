@@ -1,22 +1,24 @@
 # spark-redis: agent guide
 
-The Spark ↔ Redis connector, being modernized from 3.x (Spark 3.2, Scala 2.12, Jedis 3.9) to 4.x (Spark 4.1+,
-Redis 8.2+). We are in **Phase 0**: make the 3.x code safe to change before anything is ported.
+The Spark ↔ Redis connector, being modernized from 3.x (Spark 3.5, Scala 2.12, Jedis 3.9) to 4.x (Spark 4.1+,
+Redis 8.2+). We are in **Phase 1**: today's features, unchanged, on Spark 4, Scala 2.13, JDK 17, Jedis 8 and RESP3
+([plan](doc/modernization/plans/phase-1.md)).
 
 ## Build and test
 
 ```bash
-JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B verify -Dredis.image=redis:$(scripts/redis-lines.sh required | head -n 1)
+JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home ./mvnw -B verify -Dredis.image=redis:$(scripts/redis-lines.sh required | head -n 1)
 ```
 
-- **JDK 8 only** for 3.x. A newer default `java` will not work, so always set `JAVA_HOME`. Maven and the test JVM
-  both run on it, even when `java` on `PATH` is newer (a jenv shim, Homebrew `openjdk@17`).
+- **JDK 17** for `spike/phase-1`. `branch-3.x` and upstream 3.x PRs build on JDK 8
+  (`/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home`). Always set `JAVA_HOME`: `java` on `PATH` is a jenv
+  shim, and Maven and the test JVM both run on `JAVA_HOME`.
 - **Docker must be running.** Testcontainers starts the Redis servers each test JVM needs, on free ports, so runs can
   overlap. No local `redis-server` (`-Dredis.containers=false` uses external servers on the old fixed ports).
 - **One suite:** add `-Dsuites=com.redislabs.provider.redis.df.standalone.HashDataframeStandaloneSuite`.
 - **Redis lines:** `versions.yml` is the only list of them, so don't copy that list into docs, commands or agents.
   `scripts/redis-lines.sh required` prints the lines every PR must pass, and the command above runs the first.
-  `supported` adds the other supported lines, which CI runs after each merge and nightly, allowed to fail. To run
+  `supported` adds the other supported lines, which CI runs after each merge, allowed to fail. To run
   several, use the `verifier` agent. Without `-Dredis.image`, the tests use `redis:8.2`, the floor.
 - **Shorthand:** `make test SUITES=<fqcn>,…` runs the same command (`JAVA_HOME` still applies).
   `REDIS_IMAGE=redis:<line>` picks another line.
@@ -36,9 +38,9 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B v
 
 ## Rules
 
-1. **In Phase 0, `src/main` changes only to fix a bug or when the owner asks for the change.** A bug fix comes with
-   its failing-first test (rule 5). Everything else in Phase 0 is tests, the build, CI, docs and agent config, and
-   the golden layouts pass unchanged either way.
+1. **In Phase 1, `src/main` changes only to port today's features to Spark 4, Jedis 8 and RESP3, or to fix a bug.**
+   No new features or options, except `ssl.verify.hostname` (plan, Goal). A bug fix comes with its failing-first
+   test (rule 5). The golden layouts pass unchanged.
 2. **New code goes in `com.redis.sparkredis`** from Phase 2. **Nothing new under `org.apache.spark.*`**, and no new
    imports from `org.apache.spark.sql.catalyst` or `.execution` outside `scripts/spark-internal-allowlist.txt`.
 3. **No legacy Redis commands** (spec §2.14): no `KEYS`, `SMEMBERS`, `HMSET`, `SETEX`, `SETNX`, `GETSET`, `EVAL`,
@@ -47,7 +49,8 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B v
 4. **Gate on capabilities, not versions.** Probe with `COMMAND INFO` / `MODULE LIST`, keep a fallback, test both.
 5. **If a test fails, fix the code, not the test.** Never weaken an assertion, skip a test or widen a tolerance to
    get green. A bug's test is committed failing before its fix and listed in `.claude/failing-first.txt`. The PR
-   with the fix removes that line and leaves the test unchanged; CI checks both.
+   with the fix removes that line and leaves the test unchanged; CI checks both. Never merge failing tests on their
+   own: the test and its fix land together.
 6. **Golden fixtures and quarantine entries change only with the owner's approval.** Agents never edit
    `src/test/resources/{golden,legacy,tls}/` or `quarantine.txt`, and never run `-Dgolden.update=true`. A hook
    blocks it; propose the change and stop. See the `golden-layout` skill.
@@ -56,19 +59,23 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B v
    print a password, token or credentialed URL.
 9. **Never hard-code a Redis port in a test.** Ports are chosen at run time: use `redisPort` from the env traits, or
    `RedisContainers.standalonePort`, `tlsPort` and `clusterPort`.
+10. **A new `-D` test property** goes in both `systemProperties` blocks of the pom, or it never reaches the test JVM.
 
 ## Working on this repo
 
-- **PRs** go to the `spike/phase-0` branch of `Redislabs-Solution-Architects/spark-redis`, and the owner approves
-  every merge. Each PR cites the plan step or spec section it implements and lists its proof.
+- **PRs** go to `spike/phase-1` (lanes X, A and B) or `branch-3.x` (lane C) of `Redislabs-Solution-Architects/spark-redis`,
+  and the owner approves every merge. Each PR cites the plan step or spec section it implements and lists its proof.
+  **Wait for CI to finish before merging,** and check that a PR is still open before pushing to its branch.
 - **Upstream (`RedisLabs/spark-redis`, remote `origin`):** a fix or improvement from this work that also helps 3.x
   goes upstream as a PR of its own, at the owner's request, and the owner merges it. An upstream PR carries none of
   the fork's files (`.claude/`, `doc/modernization/`, `evals/`), no Phase labels and no links to fork PRs. Upstream
-  changes come into the fork by merging upstream `master`, never by rebasing. Don't comment on or label upstream
+  changes come into `branch-3.x` by merging upstream `master`, never by rebasing; after each merge, look for tests
+  that both sides added. `spike/phase-1` doesn't merge upstream (plan, D5). Don't comment on or label upstream
   issues. Inside the fork, write issue numbers as plain `#123`.
 - **Review rubric:** [`REVIEW.md`](REVIEW.md). **Skills:** [`golden-layout`](.claude/skills/golden-layout/SKILL.md),
-  and drafts [`redis-capabilities`](.claude/skills/redis-capabilities/SKILL.md) and
+  and drafts [`new-spark-line`](.claude/skills/new-spark-line/SKILL.md),
+  [`redis-capabilities`](.claude/skills/redis-capabilities/SKILL.md) and
   [`dsv2-connector`](.claude/skills/dsv2-connector/SKILL.md).
 - **Docs:** [intent](doc/modernization/intent.md), [spec](doc/modernization/spec.md),
-  [roadmap](doc/modernization/roadmap.md), [Phase 0 plan](doc/modernization/plans/phase-0.md),
-  [backlog](doc/modernization/backlog.md).
+  [roadmap](doc/modernization/roadmap.md), [Phase 1 plan](doc/modernization/plans/phase-1.md),
+  [Phase 0 exit review](doc/modernization/plans/phase-0-exit-review.md), [backlog](doc/modernization/backlog.md).

@@ -21,8 +21,11 @@ Run every pass. A pass with nothing to report says "no findings".
    - Does the diff do what the cited section says, all of it, and nothing outside it?
    - Does the stated proof show that, and could the owner rerun it?
    - Files outside the lane's ownership table (plan) need a reason in the description.
-   - A Phase 0 change to `src/main` is a bug fix with its failing-first test, or a change the owner asked for
-     (CLAUDE.md rule 1). The description says which.
+   - A Phase 1 change to `src/main` ports today's features to Spark 4, Jedis 8 and RESP3, or fixes a bug with its
+     failing-first test (CLAUDE.md rule 1). The description says which.
+   - **Does the PR add behaviour that 3.x doesn't have?** A new feature, option, default or API is an Important
+     finding, unless the plan names it (`ssl.verify.hostname`). So is a 3.x behaviour that changes without the plan
+     saying so (plan, Goal).
    - Tests: fix the code, not the test. Flag any weakened assertion, new skip or `ignore`, widened tolerance,
      edited test listed in `.claude/failing-first.txt` (or removed from it in this PR), or quarantine entry
      without a findings link.

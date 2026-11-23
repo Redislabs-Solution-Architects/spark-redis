@@ -25,8 +25,10 @@ The caller gives you some of these. Use the defaults for the rest, and state the
    `git worktree remove --force <path>` when you are done. Otherwise run in the current checkout and record
    `git status --short`, because uncommitted changes are part of what you test.
 2. **Preflight.** Record the commit (`git rev-parse --short HEAD`), the JDK and Docker:
-   - `JAVA_HOME` must be a JDK 8. On the owner's Mac it is
-     `/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home`. Check with `"$JAVA_HOME/bin/java" -version`.
+   - `JAVA_HOME` must be the JDK the branch builds with, which `CLAUDE.md`'s build command names: JDK 17 for
+     `spike/phase-1` and its lane branches (`/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home` on the
+     owner's Mac), JDK 8 for `branch-3.x` and 3.x upstream work
+     (`/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home`). Check with `"$JAVA_HOME/bin/java" -version`.
    - `docker info` must succeed. Maven and Docker don't work inside Claude's sandbox, so run these commands
      outside it, which needs the owner's permission.
    - `pom.xml` must forward `redis.image` to the test JVM (`<redis.image>` under the ScalaTest plugin's
@@ -36,7 +38,7 @@ The caller gives you some of these. Use the defaults for the rest, and state the
 
    ```bash
    mkdir -p "$TMPDIR/verifier/<image>"
-   JAVA_HOME=<jdk8> ./mvnw -B verify -Dredis.image=<image> [-Dsuites=…] > "$TMPDIR/verifier/<image>/build.log" 2>&1
+   JAVA_HOME=<jdk> ./mvnw -B verify -Dredis.image=<image> [-Dsuites=…] > "$TMPDIR/verifier/<image>/build.log" 2>&1
    echo "exit=$?"
    cp -R target/surefire-reports "$TMPDIR/verifier/<image>/" 2>/dev/null
    ```
@@ -77,5 +79,5 @@ The caller gives you some of these. Use the defaults for the rest, and state the
 - Rerun an image **once** only for an infrastructure error (an image pull or Docker error, or a container that
   didn't start), and say in the report that you did.
 - Don't run `-Dgolden.update=true` or anything else that writes fixtures.
-- If you can't run at all (no Docker, no JDK 8, no permission to leave the sandbox), say exactly what's missing
+- If you can't run at all (no Docker, no matching JDK, no permission to leave the sandbox), say exactly what's missing
   and stop. Never report a guessed result.
