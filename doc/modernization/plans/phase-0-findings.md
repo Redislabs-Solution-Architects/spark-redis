@@ -149,3 +149,9 @@ Spark's default `spark.redaction.regex` does not match `spark.redis.auth`. See s
 The only recurring warnings are Spark's own: "spark.sql.adaptive.enabled is not supported in streaming" and notes
 about temporary checkpoint folders. There were no Redis error replies (`ERR`, `WRONGTYPE`, `NOAUTH`, `NOPERM`,
 `MOVED`, `ASK`) in any log.
+
+### 6. The benchmark CSV gets no header if the file exists but is empty
+
+`RedisBenchmarks.appendCsv` (B5) wrote the `name,millis` header only when `target/benchmarks.csv` did not exist. A
+file that exists but is empty, for example one truncated with `: > target/benchmarks.csv` to start a fresh baseline,
+got rows and no header, so its first row is read as the header. `RedisBenchmarksCsvSuite` covers it.

@@ -38,11 +38,14 @@ object RedisBenchmarks {
 
   val CsvFile = new File("target/benchmarks.csv")
 
-  /** Appends `name,millis`, writing the header first if the file is new. */
-  def appendCsv(name: String, millis: Long): Unit = synchronized {
-    val isNew = !CsvFile.exists()
-    CsvFile.getParentFile.mkdirs()
-    val writer = new PrintWriter(new FileWriter(CsvFile, true))
+  /** Appends `name,millis` to `target/benchmarks.csv`, writing the header first if the file is new. */
+  def appendCsv(name: String, millis: Long): Unit = appendCsv(CsvFile, name, millis)
+
+  /** Appends `name,millis` to `file`, writing the header first if the file is new. */
+  private[redis] def appendCsv(file: File, name: String, millis: Long): Unit = synchronized {
+    val isNew = !file.exists()
+    file.getParentFile.mkdirs()
+    val writer = new PrintWriter(new FileWriter(file, true))
     try {
       if (isNew) writer.write("name,millis\n")
       writer.write(s"${csvField(name)},$millis\n")
