@@ -8,3 +8,5 @@
 #   src/test/scala/com/redislabs/provider/redis/rdd/cluster/MovedWriteClusterSuite.scala  # #347
 #
 # Agents may add lines but not remove them. The owner removes a line once its fix has merged.
+
+src/test/scala/com/redislabs/provider/redis/rdd/cluster/MovedWriteClusterSuite.scala  # #347 (writes after a slot moves are lost)
