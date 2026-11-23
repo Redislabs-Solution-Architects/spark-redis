@@ -5,7 +5,9 @@
 #
 # Checks added lines in .scala, .java, .py and .kt files only, because the 3.x code still contains these calls until
 # Phase 1 replaces them. Flags the client calls (jedis.keys(, smembers(, hmset(, setex(, setnx(, getSet(, eval(,
-# evalsha(, zrangeByScore, blpop(, brpop(, subscribe( and their close variants) and raw Protocol.Command names.
+# evalsha(, .zrangeByScore, blpop(, brpop(, subscribe( and their close variants) and raw Protocol.Command names.
+# zrangeByScore is matched as a method call (.zrangeByScore, .zrevrangeByScoreWithScores, ...), so a helper of that
+# name, or a test that names the command to check it isn't sent, isn't flagged.
 # See scripts/check-common.sh for the arguments and exit status.
 
 set -o pipefail
@@ -47,8 +49,8 @@ guard_added_lines |
         report(toupper(hit)); rest = substr(rest, RSTART + RLENGTH)
       }
       rest = text
-      while (match(rest, /(^|[^A-Za-z0-9_])z(rev)?range[bB]y[sS]core/)) {
-        hit = substr(rest, RSTART, RLENGTH); sub(/^[^A-Za-z]/, "", hit)
+      while (match(rest, /[.]z(rev)?range[bB]y[sS]core/)) {
+        hit = substr(rest, RSTART + 1, RLENGTH - 1)
         report(toupper(hit)); rest = substr(rest, RSTART + RLENGTH)
       }
       rest = text
