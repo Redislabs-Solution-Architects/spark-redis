@@ -47,7 +47,9 @@
 		<scala.complete.version>${scala.major.version}.0</scala.complete.version>
 		<jedis.version>3.9.0</jedis.version>
 		<spark.version>3.2.1</spark.version>
-		<plugins.scalatest.version>1.0</plugins.scalatest.version>
+		<!-- 2.1.0 or later: the plugin starts the test JVM from ${java.home}, the JDK that runs Maven (JAVA_HOME).
+		     1.0 ran whatever `java` came first on PATH, so a jenv or Homebrew JDK 17 there broke the tests. -->
+		<plugins.scalatest.version>2.2.0</plugins.scalatest.version>
 		<testcontainers.version>1.21.4</testcontainers.version>
 		<!-- Test Redis: the image RedisContainers runs, and whether it runs containers at all. Override on the
 		     command line, for example -Dredis.image=redis:8.6. Forwarded to the test JVM below. -->
