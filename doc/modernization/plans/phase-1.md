@@ -6,8 +6,9 @@
 >   §2.12 verification, §2.13 release engineering and §2.14 legacy patterns;
 > - the signed [Phase 0 exit review](phase-0-exit-review.md).
 >
-> Status: **draft, for the owner's approval.** The [decisions](#decisions-for-the-owner) below need answers
-> before code starts.
+> Status: **draft, for the owner's approval.** The owner accepted the seven
+> [decisions](#decisions-for-the-owner) on 2026-11-23, as recommended. The plan is approved when this PR merges, and
+> code starts after that.
 >
 > Work happens on `spike/phase-1` in the `Redislabs-Solution-Architects/spark-redis` fork. It is cut from
 > `spike/phase-0` once this plan merges there; Phase 0 was signed off at `987aba1`.
@@ -391,7 +392,8 @@ Lane A is one session working in sequence, because the port touches every file (
   3. deploys the three artifacts to GitHub Packages;
   4. generates a CycloneDX SBOM;
   5. creates the `v4.0.0-M1` GitHub Release, with the jars, sources and javadoc jars, the SBOM, SHA-256 checksums,
-     signatures if D4 says so, and Release Drafter's notes.
+     and Release Drafter's notes. Following D4, the assets are GPG-signed when the repository has a signing-key
+     secret. Without one, M1 ships with the SBOM and checksums only, and signing starts with M2.
 
   A smoke job then runs `spark-submit` on Spark 4.1, 4.2 and 4.3 with each released jar. It writes and reads a
   `hash` table and compares the result with the golden scenario.
@@ -472,7 +474,9 @@ The owner signs off on each item:
 
 ## Decisions for the owner
 
-| # | Question | Recommendation |
+**All seven accepted by the owner on 2026-11-23, as recommended.** The steps above follow them.
+
+| # | Question | Decision |
 |---|---|---|
 | D1 | **Which matrix runs when?** The roadmap's Phase 1 matrix is Spark {4.1, 4.2, 4.3} × Redis {8.2, 8.4, 8.6, 8.8, 8.10} on JDK 17, with JDK 21 and 25 on the newest Spark: 17 jobs. In Phase 0, #33 cut CI down to 8.6 on PRs and 8.2 after merge | **PRs:** Spark 4.2 × Redis 8.6 × JDK 17. **After each merge and nightly:** the full 17 jobs, allowed to fail during Phase 1. The exit needs one nightly run with all of them green. Redis 8.4 drops out at its EOL (2027-01-01) |
 | D2 | **How to build one artifact per Spark minor:** Maven modules or profiles? | **Modules** (B1). Each has a constant artifactId, they build in one reactor, and CI selects one with `-pl`. A profile would need an expression in the artifactId, which Maven only resolves with the flatten plugin |
