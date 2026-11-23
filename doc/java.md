@@ -86,29 +86,3 @@ df.write()
   .mode(SaveMode.Overwrite)
   .save();
 ```
-
-## Streaming
-
-The following example demonstrates how to create a stream from Redis list `myList`. Please, refer to [Streaming](streaming.md) for more details.
-
-```java
-SparkConf sparkConf = new SparkConf()
-            .setAppName("MyApp")
-            .setMaster("local[*]")
-            .set("spark.redis.host", "localhost")
-            .set("spark.redis.port", "6379");
-
-JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, Durations.seconds(1));
-
-RedisConfig redisConfig = new RedisConfig(new RedisEndpoint(sparkConf));
-
-RedisStreamingContext redisStreamingContext = new RedisStreamingContext(jssc.ssc());
-String[] keys = new String[]{"myList"};
-RedisInputDStream<Tuple2<String, String>> redisStream =
-        redisStreamingContext.createRedisStream(keys, StorageLevel.MEMORY_ONLY(), redisConfig);
-
-redisStream.print();
-
-jssc.start();
-jssc.awaitTermination();
-```

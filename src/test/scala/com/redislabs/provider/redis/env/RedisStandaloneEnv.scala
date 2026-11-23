@@ -12,7 +12,6 @@ trait RedisStandaloneEnv extends Env {
     .set("spark.redis.host", redisHost)
     .set("spark.redis.port", s"$redisPort")
     .set("spark.redis.password", redisAuth)
-    .set("spark.streaming.stopGracefullyOnShutdown", "true")
     .set("spark.sql.streaming.forceDeleteTempCheckpointLocation", "true")
     .set("spark.driver.bindAddress", "127.0.0.1")
     // Spark 4 executors fetch classes from the driver during code generation, at spark.driver.host: advertise

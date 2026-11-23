@@ -19,6 +19,7 @@ import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import redis.clients.jedis.{Pipeline, PipelineBase, Protocol}
 
+import scala.annotation.nowarn
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -156,6 +157,8 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
     * Deletes the table's rows. The topology is read again for this: the relation's copy can be out of date, and a key
     * scan finds nothing on a slot's old owner once the slot has moved. The deletes follow MOVED and ASK (#347).
     */
+  // The DataFrame source still reads keys through the deprecated RDD API; Phase 2 replaces both.
+  @nowarn("cat=deprecation")
   private def truncate(): Unit = {
     val currentConfig = new RedisConfig(redisConfig.initialHost)
     sc.fromRedisKeyPattern(dataKeyPattern)(currentConfig, readWriteConfig).foreachPartition { partition =>
@@ -197,6 +200,8 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
         if (ttl > 0) writeTransactionsWithRedirects(encodedRows)(commands) else writeWithRedirects(encodedRows)(commands)
     }
 
+  // The DataFrame source still reads keys through the deprecated RDD API; Phase 2 replaces both.
+  @nowarn("cat=deprecation")
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     logInfo("build scan")
     val keysRdd = sc.fromRedisKeyPattern(dataKeyPattern, partitionNum = numPartitions)
@@ -236,6 +241,8 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
   /**
     * @return true if data exists in redis
     */
+  // The DataFrame source still reads keys through the deprecated RDD API; Phase 2 replaces both.
+  @nowarn("cat=deprecation")
   def isEmpty: Boolean = {
     sc.fromRedisKeyPattern(dataKeyPattern, partitionNum = numPartitions).isEmpty()
   }
@@ -265,6 +272,8 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
   /**
     * infer schema from a random redis row
     */
+  // The DataFrame source still reads keys through the deprecated RDD API; Phase 2 replaces both.
+  @nowarn("cat=deprecation")
   private def inferSchema(): StructType = {
     if (persistenceModel != SqlOptionModelHash) {
       throw new IllegalArgumentException(s"Cannot infer schema from model '$persistenceModel'. " +

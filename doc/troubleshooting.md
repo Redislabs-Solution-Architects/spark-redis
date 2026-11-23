@@ -7,7 +7,6 @@
   - [Read timed out](#read-timed-out)
   - [NullPointerException in Utils.redact](#nullpointerexception-in-utilsredact)
   - [NoSuchMethodError: scala.Predef$...](#nosuchmethoderror-scalapredef)
-  - [NotSerializableException: SparkContext or StreamingContext](#notserializableexception-sparkcontext-or-streamingcontext)
   - [The job succeeds but data is missing in Redis](#the-job-succeeds-but-data-is-missing-in-redis)
   - [Redis rejected N of M pipelined commands](#redis-rejected-n-of-m-pipelined-commands)
   - [ClassNotAllowedException when reading a table](#classnotallowedexception-when-reading-a-table)
@@ -86,21 +85,6 @@ Errors such as `java.lang.NoSuchMethodError: scala.Predef$.refArrayOps(...)` mea
 for a different Scala version than your Spark distribution. Use `spark-redis_2.12` with the default Spark 3.x download
 (Scala 2.12) and `spark-redis_2.13` with the Scala 2.13 download. `spark-shell` prints the Scala version at startup. See
 [Getting the library](getting-started.md#getting-the-library).
-
-## NotSerializableException: SparkContext or StreamingContext
-
-When you write to Redis from `foreachRDD` in a Spark Streaming job with checkpointing enabled, don't use the outer `sc` or
-`ssc` inside the closure. Use the RDD's own context:
-
-```scala
-import com.redislabs.provider.redis._
-
-stream.foreachRDD { rdd =>
-  rdd.sparkContext.toRedisKV(rdd)
-}
-```
-
-See [Writing a DStream to Redis](streaming.md#writing-a-dstream-to-redis).
 
 ## The job succeeds but data is missing in Redis
 

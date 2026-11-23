@@ -18,6 +18,9 @@ import scala.reflect.{ClassTag, classTag}
 import scala.util.{Failure, Success, Try}
 
 
+@deprecated(
+  "The RDD API is removed in 4.0.0-M2. Use the DataFrame source, format(\"org.apache.spark.sql.redis\"), instead.",
+  "4.0.0-M1")
 class RedisKVRDD(prev: RDD[String],
                  val rddType: String,
                  implicit val readWriteConfig: ReadWriteConfig)
@@ -69,6 +72,9 @@ class RedisKVRDD(prev: RDD[String],
   }
 }
 
+@deprecated(
+  "The RDD API is removed in 4.0.0-M2. Use the DataFrame source, format(\"org.apache.spark.sql.redis\"), instead.",
+  "4.0.0-M1")
 class RedisListRDD(prev: RDD[String],
                    val rddType: String,
                    implicit val readWriteConfig: ReadWriteConfig) extends RDD[String](prev) with Keys {
@@ -133,6 +139,9 @@ case class ZSetContext(startPos: Long,
                        withScore: Boolean,
                        typ: String)
 
+@deprecated(
+  "The RDD API is removed in 4.0.0-M2. Use the DataFrame source, format(\"org.apache.spark.sql.redis\"), instead.",
+  "4.0.0-M1")
 class RedisZSetRDD[T: ClassTag](prev: RDD[String],
                                 zsetContext: ZSetContext,
                                 rddType: Class[T],
@@ -215,6 +224,9 @@ class RedisZSetRDD[T: ClassTag](prev: RDD[String],
   }
 }
 
+@deprecated(
+  "The RDD API is removed in 4.0.0-M2. Use the DataFrame source, format(\"org.apache.spark.sql.redis\"), instead.",
+  "4.0.0-M1")
 class RedisKeysRDD(sc: SparkContext,
                    val redisConfig: RedisConfig,
                    implicit val readWriteConfig: ReadWriteConfig,

@@ -12,7 +12,6 @@ trait RedisStandaloneSSLEnv extends Env {
     .set("spark.redis.port", s"$redisPort")
     .set("spark.redis.password", redisAuth)
     .set("spark.redis.ssl", "true")
-    .set("spark.streaming.stopGracefullyOnShutdown", "true")
     .set("spark.driver.bindAddress", "127.0.0.1")
     // Spark 4 executors fetch classes from the driver during code generation, at spark.driver.host: advertise
     // the loopback address the driver binds to, or every lookup waits on a LAN address nothing listens on.

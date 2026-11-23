@@ -28,7 +28,7 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home ./mvnw -B 
 
 | Path | What it is |
 |---|---|
-| `src/main/scala/com/redislabs/provider/redis/` | RDD API (`redisFunctions.scala`, `rdd/`), config and pools, partitioner, DStreams (`streaming/`) |
+| `src/main/scala/com/redislabs/provider/redis/` | RDD API (`redisFunctions.scala`, `rdd/`; deprecated), config and pools, partitioner |
 | `src/main/scala/org/apache/spark/sql/redis/` | DataFrame source (DSv1, `hash` and `binary` models) and the Structured Streaming source (`stream/`) |
 | `src/test/scala/**/env/` | Testcontainers harness. Suites are split by topology: `standalone/`, `cluster/`, `acl/` |
 | `src/test/scala/**/golden/`, `src/test/resources/golden/` | Golden-layout tests and fixtures: the exact Redis data 3.x writes and reads |

@@ -13,6 +13,9 @@ import scala.jdk.CollectionConverters._
   *
   * @param sc a spark context
   */
+@deprecated(
+  "The RDD API is removed in 4.0.0-M2. Use the DataFrame source, format(\"org.apache.spark.sql.redis\"), instead.",
+  "4.0.0-M1")
 class RedisContext(@transient val sc: SparkContext) extends Serializable {
 
   val IncorrectKeysOrKeyPatternMsg = "KeysOrKeyPattern should be String or Array[String]"
@@ -614,6 +617,9 @@ object RedisContext extends Serializable {
 
 trait RedisFunctions {
 
+  @deprecated(
+    "The RDD API is removed in 4.0.0-M2. Use the DataFrame source, format(\"org.apache.spark.sql.redis\"), instead.",
+    "4.0.0-M1")
   implicit def toRedisContext(sc: SparkContext): RedisContext = new RedisContext(sc)
 
 }

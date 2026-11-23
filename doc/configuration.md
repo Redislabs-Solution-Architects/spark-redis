@@ -76,7 +76,7 @@ val df = spark.read
   .load()
 ```
 
-The RDD and DStream functions take an implicit `RedisConfig`, see [Connecting to Multiple Redis Clusters/Instances](cluster.md).
+The RDD functions take an implicit `RedisConfig`, see [Connecting to Multiple Redis Clusters/Instances](cluster.md).
 A `RedisEndpoint` can also be created from a Redis URI:
 
 ```scala
