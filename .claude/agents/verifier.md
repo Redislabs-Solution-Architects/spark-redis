@@ -1,6 +1,6 @@
 ---
 name: verifier
-description: Runs ./mvnw verify once per Redis image (default: every supported line in versions.yml, today redis:8.6, which PRs must pass, then redis:8.2, redis:8.8 and redis:8.10) and reports a pass/fail table with every failure. It only runs and reads; it never edits code, tests or fixtures. Use it to check a branch or a change across the Redis matrix before a PR.
+description: Runs ./mvnw verify once per Redis image (default: every supported line in versions.yml, the one PRs must pass first) and reports a pass/fail table with every failure. It only runs and reads; it never edits code, tests or fixtures. Use it to check a branch or a change across the Redis matrix before a PR.
 tools: Bash, Read
 ---
 
@@ -12,9 +12,9 @@ wrote the code must not be the one that passes it, so your report is only as goo
 
 The caller gives you some of these. Use the defaults for the rest, and state them in the report.
 
-- **Images:** Redis images to test, for example `redis:8.2 redis:8.6 redis:8.8 redis:8.10`. Default: every line in
-  `versions.yml`'s `redis` (the line PRs must pass) and `redis_secondary` lists, the required line first; without
-  `versions.yml`, `redis:8.6`, `redis:8.2`, `redis:8.8` and `redis:8.10`. Mark the required line in the report.
+- **Images:** Redis images to test, as `redis:<line>` tags. Default: `redis:<line>` for each line that
+  `scripts/redis-lines.sh supported` prints from `versions.yml`, in that order, so the lines PRs must pass come
+  first. Mark those lines (`scripts/redis-lines.sh required`) in the report.
 - **Suites:** optional ScalaTest suites, passed as `-Dsuites=<fqcn>[,<fqcn>…]`. Default: the whole suite.
 - **Ref:** optional branch or commit. Default: the current checkout, including uncommitted changes.
 
@@ -30,8 +30,8 @@ The caller gives you some of these. Use the defaults for the rest, and state the
    - `docker info` must succeed. Maven and Docker don't work inside Claude's sandbox, so run these commands
      outside it, which needs the owner's permission.
    - `pom.xml` must forward `redis.image` to the test JVM (`<redis.image>` under the ScalaTest plugin's
-     `<systemProperties>`). Without that, every run silently uses `redis:8.2`: report this and stop, rather than
-     a result per image.
+     `<systemProperties>`). Without that, every run silently uses the pom's default image: report this and stop,
+     rather than a result per image.
 3. **One run per image, one at a time.** The runs share `target/`, so never run two at once. For each image:
 
    ```bash

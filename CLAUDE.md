@@ -6,17 +6,19 @@ Redis 8.2+). We are in **Phase 0**: make the 3.x code safe to change before anyt
 ## Build and test
 
 ```bash
-JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B verify -Dredis.image=redis:8.6
+JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B verify -Dredis.image=redis:$(scripts/redis-lines.sh required | head -n 1)
 ```
 
 - **JDK 8 only** for 3.x. A newer default `java` will not work, so always set `JAVA_HOME`.
 - **Docker must be running.** Testcontainers starts the Redis servers each test JVM needs, on free ports, so runs can
   overlap. No local `redis-server` (`-Dredis.containers=false` uses external servers on the old fixed ports).
 - **One suite:** add `-Dsuites=com.redislabs.provider.redis.df.standalone.HashDataframeStandaloneSuite`.
-- **Redis lines:** every PR must pass **8.6**. CI runs the other supported lines, `redis:8.2`, `redis:8.8` and
-  `redis:8.10`, after each merge and nightly, allowed to fail (`versions.yml`). To run several, use the `verifier`
-  agent. Without `-Dredis.image`, the tests use `redis:8.2`, the floor.
-- **Shorthand:** `make test REDIS_IMAGE=redis:8.6 SUITES=<fqcn>,…` runs the same command (`JAVA_HOME` still applies).
+- **Redis lines:** `versions.yml` is the only list of them, so don't copy that list into docs, commands or agents.
+  `scripts/redis-lines.sh required` prints the lines every PR must pass, and the command above runs the first.
+  `supported` adds the other supported lines, which CI runs after each merge and nightly, allowed to fail. To run
+  several, use the `verifier` agent. Without `-Dredis.image`, the tests use `redis:8.2`, the floor.
+- **Shorthand:** `make test SUITES=<fqcn>,…` runs the same command (`JAVA_HOME` still applies).
+  `REDIS_IMAGE=redis:<line>` picks another line.
 - `verify` is the gate. It exits non-zero on any failure, and CI runs the same command.
 
 ## Layout
