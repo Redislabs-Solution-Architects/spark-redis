@@ -20,15 +20,15 @@
             "entries-read": null,
             "lag": 0,
             "pending": 0,
-            "consumers": [{"name": "consumer-1", "pending": 0}]
+            "consumers": []
           },
           {
             "name": "spark-source",
             "last-delivered-id": "#5",
-            "entries-read": 5,
+            "entries-read": null,
             "lag": 0,
             "pending": 0,
-            "consumers": [{"name": "consumer-1", "pending": 0}]
+            "consumers": []
           }
         ]
       }
