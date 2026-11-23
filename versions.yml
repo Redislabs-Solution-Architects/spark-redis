@@ -3,7 +3,7 @@
 # see doc/modernization/spec.md §1 for the policy.
 
 # Redis lines in active development, as Docker image tags. Every job must pass.
-redis: ["8.2", "8.6", "8.10"]
+redis: ["8.2", "8.6", "8.8", "8.10"]
 
 # Upcoming Redis lines. CI tests the newest release-candidate tag of each (for example 8.12-rc3).
 # These jobs may fail without failing the build.

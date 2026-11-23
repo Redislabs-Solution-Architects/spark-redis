@@ -13,7 +13,8 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B v
 - **Docker must be running.** Testcontainers starts the Redis servers each test JVM needs, on free ports, so runs can
   overlap. No local `redis-server` (`-Dredis.containers=false` uses external servers on the old fixed ports).
 - **One suite:** add `-Dsuites=com.redislabs.provider.redis.df.standalone.HashDataframeStandaloneSuite`.
-- **Other Redis lines:** `-Dredis.image=redis:8.6`, `redis:8.10`. To run several, use the `verifier` agent.
+- **Other Redis lines:** `-Dredis.image=redis:8.6`, `redis:8.8`, `redis:8.10` (the list is in `versions.yml`). To run
+  several, use the `verifier` agent.
 - **Shorthand:** `make test REDIS_IMAGE=redis:8.6 SUITES=<fqcn>,…` runs the same command (`JAVA_HOME` still applies).
 - `verify` is the gate. It exits non-zero on any failure, and CI runs the same command.
 
