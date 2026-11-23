@@ -347,6 +347,7 @@ root
 | auth                   | overrides `spark.redis.auth` configured in SparkSession (if set, any other connection setting from SparkSession is ignored )                                | `String`              | -              |
 | dbNum                  | overrides `spark.redis.db` configured in SparkSession (if set, any other connection setting from SparkSession is ignored )                                  | `Int`                 | `0`            |
 | timeout                | overrides `spark.redis.timeout` configured in SparkSession (if set, any other connection setting from SparkSession is ignored )                             | `Int`                 | `2000`         |
+| client.name            | overrides `spark.redis.client.name` configured in SparkSession: the name this source's connections set with `CLIENT SETNAME`. Empty means no name | `String`              | -              |
 
 
 ## Known limitations

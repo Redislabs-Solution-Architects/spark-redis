@@ -9,22 +9,24 @@ You need:
 - **Docker.** The tests start their own Redis servers in containers through Testcontainers, on free ports chosen at
   run time, so no local `redis-server` is needed, and several test runs can happen at once.
 
-To run every test against Redis 8.2:
+To run every test against the Redis line that pull requests must pass (the first, if there are several), run this
+before you open one:
 
 ```
 make test
 ```
 
-To pick another Redis version, or to run only some suites:
+To pick another Redis line, or to run only some suites:
 
 ```
-make test REDIS_IMAGE=redis:8.6
+make test REDIS_IMAGE=redis:<line>
 make test SUITES=com.redislabs.provider.redis.df.standalone.HashDataframeStandaloneSuite
 ```
 
-CI requires Redis 8.6 on every pull request, so run `make test REDIS_IMAGE=redis:8.6` before you open one. It runs
-the other supported lines (8.2, 8.8 and 8.10) after each merge and nightly, and those jobs may fail without failing
-the build. [`versions.yml`](../versions.yml) lists the lines.
+[`versions.yml`](../versions.yml) is the only list of Redis lines. CI requires its `redis` lines on every pull
+request. It runs the `redis_secondary` lines after each merge and nightly, and those jobs may fail without failing
+the build. `scripts/redis-lines.sh supported` prints them all, the required lines first. Without `-Dredis.image`, as
+in an IDE, the tests use the floor, `redis:8.2`.
 
 Running tests from your IDE works the same way: the first suite that needs Redis starts it. To use Redis servers you
 started yourself instead, on the old fixed ports (6379 standalone, 6380 TLS, 7379-7381 cluster), pass
