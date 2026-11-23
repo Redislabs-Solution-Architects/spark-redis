@@ -16,5 +16,9 @@ redis_preview: []
 # JDKs for this 3.x build. Phase 1 adds 17, 21 and 25 together with the Spark lines.
 jdk: ["8"]
 
+# Scala versions the 3.x build is tested with, on the `redis` line. Like Spark 3.x, the library is published for both;
+# CI switches the build with dev/change-scala-version.sh. The other jobs build the pom's default, 2.12.
+scala: ["2.12", "2.13"]
+
 # The Redis line for nightly benchmarks: the floor, the same as doc/modernization/benchmarks/baseline-3.x.md.
 benchmark_redis: "8.2"
