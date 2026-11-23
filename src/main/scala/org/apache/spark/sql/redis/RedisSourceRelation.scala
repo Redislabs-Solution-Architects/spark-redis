@@ -17,7 +17,6 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import redis.clients.jedis.{PipelineBase, Protocol}
 
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
 class RedisSourceRelation(override val sqlContext: SQLContext,
@@ -61,7 +60,7 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
   private val keysPatternOpt: Option[String] = parameters.get(SqlOptionKeysPattern)
   private val numPartitions = parameters.get(SqlOptionNumPartitions).map(_.toInt)
     .getOrElse(SqlOptionNumPartitionsDefault)
-  private val persistenceModel = parameters.getOrDefault(SqlOptionModel, SqlOptionModelHash)
+  private val persistenceModel = parameters.getOrElse(SqlOptionModel, SqlOptionModelHash)
   private val persistence = RedisPersistence(persistenceModel)
   private val tableNameOpt: Option[String] = parameters.get(SqlOptionTableName)
   private val ttl = parameters.get(SqlOptionTTL).map(_.toInt).getOrElse(0)
@@ -110,11 +109,11 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
       // truncate the table
       sc.fromRedisKeyPattern(dataKeyPattern).foreachPartition { partition =>
         groupKeysByNode(redisConfig.hosts, partition).foreach { case (node, keys) =>
-          val conn = node.connect()
-          foreachWithPipeline(conn, keys) { (pipeline, key) =>
-            (pipeline: PipelineBase).del(key) // fix ambiguous reference to overloaded definition
+          withConnection(node.connect()) { conn =>
+            foreachWithPipeline(conn, keys) { (pipeline, key) =>
+              (pipeline: PipelineBase).del(key) // fix ambiguous reference to overloaded definition
+            }
           }
-          conn.close()
         }
       }
     }
@@ -126,13 +125,13 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
         // the following can be optimized to not create a map
         val rowsWithKey: Map[String, Row] = batch.map(row => dataKeyId(row) -> row).toMap
         groupKeysByNode(redisConfig.hosts, rowsWithKey.keysIterator).foreach { case (node, keys) =>
-          val conn = node.connect()
-          foreachWithPipeline(conn, keys) { (pipeline, key) =>
-            val row = rowsWithKey(key)
-            val encodedRow = persistence.encodeRow(keyName, row)
-            persistence.save(pipeline, key, encodedRow, ttl)
+          withConnection(node.connect()) { conn =>
+            foreachWithPipeline(conn, keys) { (pipeline, key) =>
+              val row = rowsWithKey(key)
+              val encodedRow = persistence.encodeRow(keyName, row)
+              persistence.save(pipeline, key, encodedRow, ttl)
+            }
           }
-          conn.close()
         }
       }
     }
@@ -237,10 +236,10 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
     val key = schemaKey(tableName())
     logInfo(s"saving schema $key")
     val schemaNode = getMasterNode(redisConfig.hosts, key)
-    val conn = schemaNode.connect()
     val schemaBytes = SerializationUtils.serialize(schema)
-    conn.set(key.getBytes, schemaBytes)
-    conn.close()
+    withConnection(schemaNode.connect()) { conn =>
+      conn.set(key.getBytes, schemaBytes)
+    }
     schema
   }
 
@@ -251,16 +250,15 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
     val key = schemaKey(tableName())
     logInfo(s"loading schema $key")
     val schemaNode = getMasterNode(redisConfig.hosts, key)
-    val conn = schemaNode.connect()
-    val schemaBytes = conn.get(key.getBytes)
+    val schemaBytes = withConnection(schemaNode.connect()) { conn =>
+      conn.get(key.getBytes)
+    }
     if (schemaBytes == null) {
       throw new IllegalStateException(s"Unable to read dataframe schema by key '$key'. " +
         s"If dataframe was not persisted by Spark, provide a schema explicitly with .schema() " +
         s"or use 'infer.schema' option. ")
     }
-    val schema = SerializationUtils.deserialize[StructType](schemaBytes)
-    conn.close()
-    schema
+    SerializationUtils.deserialize[StructType](schemaBytes)
   }
 
   /**
@@ -290,7 +288,7 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
         } else {
           keysAndValues.filter {
             case (_, null) => false // binary model
-            case (_, value: JList[_]) if value.forall(_ == null) => false // hash model
+            case (_, value: JList[_]) if value.asScala.forall(_ == null) => false // hash model
             case _ => true
           }
         }
