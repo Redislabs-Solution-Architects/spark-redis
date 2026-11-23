@@ -79,8 +79,39 @@ schema JSON (`StructType.json`), so any Spark and Scala version can read the tab
 
 Earlier versions of Spark-Redis stored a Java-serialized `StructType` instead. Those schemas can only be read with the
 Spark minor version and the Scala version that wrote them: reading one with another version fails with an error that
-names the schema key. To read such a table, pass the schema with `.schema(...)`, or read it with the versions that wrote
-it. Saving the table again stores its schema as JSON.
+names the schema key. To read such a table, pass the schema with `.schema(...)`, read it with the versions that wrote
+it, save the table again, or migrate its schema. On the versions that wrote it, a Java-serialized schema is read
+allowing only the classes a schema is made of, the same way as [Binary model rows](#binary-model-and-untrusted-data).
+
+#### Migrating old schemas to JSON
+
+`SchemaMigration` rewrites Java-serialized schema keys as JSON. It reads them without Java deserialization, so it works
+whichever Spark and Scala versions wrote them, and whichever it runs on: for example, before or after upgrading from
+Spark 3.1 to 3.5. It changes only the `_spark:<table>:schema` keys, never the rows, and keeps a key's TTL. A key that
+another client changes while it runs is left alone and reported, and so is a schema it can't read, for example one with
+a data type that the Spark version it runs on doesn't have.
+
+From the command line, with the same `spark.redis.*` settings as your jobs, and the Spark-Redis JAR that includes its
+dependencies (see [Getting Started](getting-started.md)) for the Scala version of your Spark:
+
+```bash
+spark-submit --class com.redislabs.provider.redis.SchemaMigration \
+  --conf spark.redis.host=redis.example.com --conf spark.redis.port=6379 --conf spark.redis.password=passwd \
+  <path-to>/spark-redis_2.12-<version>-jar-with-dependencies.jar --dry-run
+```
+
+`--dry-run` reports what it would migrate and changes nothing; run again without it to migrate. `--tables <pattern>`
+limits it to the tables whose names match a glob. It prints one line per schema key, and exits with 1 if a key failed or
+changed meanwhile.
+
+From a Spark job or notebook:
+
+```scala
+import com.redislabs.provider.redis.{RedisConfig, SchemaMigration}
+
+val results = SchemaMigration.migrate(RedisConfig.fromSparkConf(sc.getConf), tables = "person*", dryRun = true)
+results.foreach(println)
+```
 
 ### Specifying Redis key
 
@@ -139,7 +170,7 @@ The table's rows are the keys that match `<table>:*`.
 
 Please note:
 
-* With `SaveMode.Append`, when a row's key already exists, the new row is merged into the existing Redis hash with `HMSET`
+* With `SaveMode.Append`, when a row's key already exists, the new row is merged into the existing Redis hash with `HSET`
   by default. Fields of the new row replace the existing fields, but fields that exist only in Redis are kept, for example a
   column that isn't in the new DataFrame or a value that is `null` in the new row (see [Null values](#null-values)). To
   replace whole rows, set `write.mode` to `replace` (see [Write mode](#write-mode)), or use `SaveMode.Overwrite`.
@@ -268,6 +299,41 @@ df.write
 ```
 
 Note: You should read the DataFrame with the same model as it was written.
+
+### Binary model and untrusted data
+
+Reading a Binary model table deserializes values that were read from Redis. Anyone who can write to the table's keys
+could store any Java-serialized object there, and deserializing some classes runs code. So Spark-Redis only deserializes
+the classes it writes itself: Spark's values for every column type (numbers, strings, decimals, binary, dates, timestamps,
+intervals, arrays, maps and structs) and the Scala and Spark classes they are serialized with. A value that contains any
+other class fails the read with a `ClassNotAllowedException` that names the Redis key and the class, before any of that
+class's code runs.
+
+A column with a user-defined type (UDT) holds instances of the UDT's own class. Allow it with the
+`deserialization.allowed.classes` option, a comma-separated list of:
+
+| Pattern  | Allows                                                   |
+|----------|----------------------------------------------------------|
+| `a.b.C`  | the class `a.b.C` (a nested class is `a.b.Outer$Inner`)  |
+| `a.b.*`  | every class in package `a.b`                             |
+| `a.b.**` | every class in package `a.b` and its subpackages         |
+| `a.b.C*` | every class whose name starts with `a.b.C`               |
+
+```scala
+spark.read
+  .format("org.apache.spark.sql.redis")
+  .option("table", "places")
+  .option("model", "binary")
+  .option("deserialization.allowed.classes", "com.example.geo.*")
+  .load()
+```
+
+Allow only classes whose deserialization can't do anything but restore their fields. Dynamic proxies are never allowed.
+
+A value's arrays also can't declare more elements in all than the value has bytes, which no value Spark-Redis wrote
+does. Without that limit, a value of a few bytes could declare an array of billions of elements, and allocating it would
+run the executor (or, for a schema, the driver) out of memory. A serialization filter that the JVM sets with
+`jdk.serialFilter` still applies.
 
 ## Reading
 
@@ -501,13 +567,15 @@ sc.toRedisKV(kvRdd)
 | ttl                    | data time to live in `seconds`. Data doesn't expire if `ttl` is less than `1`                                                                               | `Int`                 | `0`     |
 | write.mode             | what a hash-model write does to a hash already stored under the row's key: `merge` keeps fields the new row doesn't have, `replace` removes them, see [Write mode](#write-mode) | `enum [merge, replace]` | `merge` |
 | infer.schema           | infer schema from random row, all columns will have `String` type                                                                                           | `Boolean`             | `false` |
+| deserialization.allowed.classes | classes, besides Spark's own, that a Binary model row or an earlier version's Java-serialized schema may contain, for example a UDT's class, see [Binary model and untrusted data](#binary-model-and-untrusted-data) | `String`              | -       |
 | max.pipeline.size      | maximum number of commands per pipeline (used to batch commands)                                                                                            | `Int`                 | 100     |
 | scan.count             | count option of SCAN command (used to iterate over keys)                                                                                                    | `Int`                 | 100     |
 | iterator.grouping.size | the number of rows processed together when reading or writing a partition                                                                                  | `Int`                 | 1000    |
 | host                   | overrides `spark.redis.host`                                                                                                                                | `String`              | `localhost`    |
 | port                   | overrides `spark.redis.port`                                                                                                                                | `Int`                 | `6379`         |
 | user                   | overrides `spark.redis.user`                                                                                                                                | `String`              | -              |
-| auth                   | overrides `spark.redis.auth`                                                                                                                                | `String`              | -              |
+| password               | overrides `spark.redis.password`                                                                                                                            | `String`              | -              |
+| auth                   | **deprecated**, use `password`. Read only when `password` is unset. Spark doesn't hide it in query plans                                                  | `String`              | -              |
 | ssl                    | overrides `spark.redis.ssl`                                                                                                                                 | `Boolean`             | `false`        |
 | dbNum                  | overrides `spark.redis.db`                                                                                                                                  | `Int`                 | `0`            |
 | timeout                | overrides `spark.redis.timeout`                                                                                                                             | `Int`                 | `2000`         |
@@ -516,7 +584,7 @@ sc.toRedisKV(kvRdd)
 `max.pipeline.size`, `scan.count` and `iterator.grouping.size` are explained in
 [Tuning reads and writes](configuration.md#tuning-reads-and-writes).
 
-Each connection option (`host`, `port`, `user`, `auth`, `ssl`, `dbNum`, `timeout`, `client.name`) overrides only its own `spark.redis.*`
+Each connection option (`host`, `port`, `user`, `password`, `ssl`, `dbNum`, `timeout`, `client.name`) overrides only its own `spark.redis.*`
 parameter. The others still come from the Spark configuration. The option names don't have the `spark.redis.` prefix,
 see [Configuration](configuration.md#overriding-the-connection-for-a-dataframe-stream-or-rdd).
 
