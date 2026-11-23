@@ -16,10 +16,13 @@
 > **And at 21:20 UTC,** after upstream PRs #430–#434: the three 3.x fixes this review listed for a clean Phase 1
 > start are in upstream, and PR #40 merges them into `spike/phase-0`. See
 > [3.x fixes before Phase 1](#3x-fixes-before-phase-1).
+>
+> **Signed off at 22:13 UTC**, after a snapshot was published from `dd09066` and seen on the Packages page
+> (criterion 6), and the owner signed `backlog.md` (criterion 7).
 
 ## Verdict
 
-**Phase 0 can't exit yet: 7 of 8 criteria are met, and 1 waits on the owner:** the `backlog.md` sign-off.
+**Phase 0 exits: all 8 criteria are met.** The owner signed `backlog.md` and this review on 2026-11-23.
 
 Criterion 8 counts as met because the owner decided Redis Cloud doesn't need its own RESP3 check (see the table).
 
@@ -28,9 +31,8 @@ The earlier non-blocking items are settled:
 - the password no longer reaches the logs (open item 9);
 - the 3.x fixes the owner wanted before Phase 1 are in upstream, and in the fork with PR #40. The owner's goal is a
   clean 3.x starting point, with today's features working and none added; see
-  [3.x fixes before Phase 1](#3x-fixes-before-phase-1).
-
-One remains: the published package hasn't been seen directly, and predates the move to Spark 3.5 (criterion 6).
+  [3.x fixes before Phase 1](#3x-fixes-before-phase-1);
+- the published package is seen directly, and matches the code Phase 0 ends with (criterion 6).
 
 ## Exit criteria
 
@@ -41,8 +43,8 @@ One remains: the published package hasn't been seen directly, and predates the m
 | 3 | Legacy fixtures and their README are committed | **Met** | 8 files in `src/test/resources/legacy/`. The README names the producing build: spark-redis `3.1.0-SNAPSHOT` at `37c855d`, Scala 2.12, Spark 3.2.1, Java 8. **Since then:** the fixtures are tested through upstream's schema migration (#429), in #37. The schema blobs are read with its version-independent reader, and the table loads after `SchemaMigration`. `LegacyFixturesSuite` passes 4/4 on Spark 3.5.10 (Scala 2.12 and 2.13) and on Spark 3.2.1. The fixtures didn't change |
 | 4 | The benchmark baseline (CSV and environment notes) is committed | **Met, with a caveat** | `doc/modernization/benchmarks/baseline-3.x.csv` has 60 timings, and `baseline-3.x.md` describes the environment. The machine wasn't idle (load average about 9–14), and many steps vary by 20–90% between runs. The notes say so. Re-measure on an idle machine before any number is used as a gate |
 | 5 | `CLAUDE.md`, `REVIEW.md`, the hooks, the verifier, the `golden-layout` skill and 10 evals are in place, and the eval baseline is recorded | **Met** | Everything is in place (PR #7): `CLAUDE.md`, `REVIEW.md`, `.claude/settings.json` with `protect-paths.sh` and `after-edit.sh`, `.claude/agents/verifier.md`, `.claude/skills/golden-layout/SKILL.md`, and 10 tasks in `evals/tasks/` (01 and 09 fixed in PR #10). **The baseline is recorded in `evals/README.md`: 8 of 9 tasks pass** at `eval-base-phase-0`, with 03 not applicable. Task 02 failed on duplicated Redis line lists; PR #18 fixed them, and 02 passes on the new guardrails. **Since then:** the owner amended rule 1 (#34), and the upstream rule in "Working on this repo" now describes how this work sends fixes upstream (this PR) |
-| 6 | A snapshot has been published to GitHub Packages | **Met, not seen directly** | The `publish-snapshot` runs 45076832942 (from a temporary branch) and 45077405383 (from `spike/phase-0` at `d90cdaf`) both succeeded, and the deploy step ended in `BUILD SUCCESS` for `spark-redis_2.12-3.1.0-SNAPSHOT`. The agent's `gh` token lacks `read:packages`, so the owner should confirm the package appears on the fork's Packages page. **Since then:** no snapshot has been published. `publish-snapshot.yml` runs only by hand, and the fork has moved to Spark 3.5.10 and Scala 2.13 since `d90cdaf`. Run it again (`gh workflow run publish-snapshot.yml --ref spike/phase-0`) so the package matches the code Phase 0 ends with |
-| 7 | `backlog.md` is confirmed | **Waiting on the owner** | `doc/modernization/backlog.md` has 117 rows. Six of them note a 3.x fix that merged during Phase 0 (#33, #267, #347, #351, #358, #398). **The sign-off line is blank.** **Since then:** 88 of the 117 issues have been closed upstream, 80 as completed and 8 as not planned, several when the upstream PR that fixed them merged. `backlog.md` now shows each issue's upstream state, and which upstream PR carries the 3.x fix |
+| 6 | A snapshot has been published to GitHub Packages | **Met** | The `publish-snapshot` runs 45076832942 (from a temporary branch) and 45077405383 (from `spike/phase-0` at `d90cdaf`) both succeeded, and the deploy step ended in `BUILD SUCCESS` for `spark-redis_2.12-3.1.0-SNAPSHOT`. The agent's `gh` token lacks `read:packages`, so the owner should confirm the package appears on the fork's Packages page. **Since then:** no snapshot has been published. `publish-snapshot.yml` runs only by hand, and the fork has moved to Spark 3.5.10 and Scala 2.13 since `d90cdaf`. Run it again (`gh workflow run publish-snapshot.yml --ref spike/phase-0`) so the package matches the code Phase 0 ends with **Since then:** the owner ran it again from `dd09066`, the current `spike/phase-0` (run 45271206751, 2026-11-23 21:36 UTC). The package API shows `com.redislabs.spark-redis_2.12` as public and linked to the fork. Its public package page lists build `3.1.0-20261123.213540-3`, with the jar, the javadoc jar, the jar-with-dependencies and the pom, next to the two builds from 2026-11-22. The `repo` scope reads a package by name, and the page needs no sign-in, so the missing `read:packages` scope doesn't matter |
+| 7 | `backlog.md` is confirmed | **Met** | `doc/modernization/backlog.md` has 117 rows. Six of them note a 3.x fix that merged during Phase 0 (#33, #267, #347, #351, #358, #398). **The sign-off line is blank.** **Since then:** 88 of the 117 issues have been closed upstream, 80 as completed and 8 as not planned, several when the upstream PR that fixed them merged. `backlog.md` now shows each issue's upstream state, and which upstream PR carries the 3.x fix **Since then:** the owner confirmed every row and signed it on 2026-11-23 |
 | 8 | The RESP3 check is recorded for the latest Redis Software, and for Redis Cloud if a database was provided | **Met** | Redis Software 8.2.6-58, with a default 8.8 database: `HELLO 3` returned `proto=3` ([findings](phase-0-findings.md#a5-resp3-on-managed-redis)). **Redis Cloud was skipped by owner decision (2026-11-22)**: it's assumed to accept RESP3 because the latest Redis Software does. No Redis Cloud database was provided |
 
 ## Measurements
@@ -51,7 +53,7 @@ These are the measures the playbook asks for (see `phase-0.md`, "Measurement").
 
 | Measure | Value | Notes |
 |---|---|---|
-| Time from plan approval to exit sign-off | Not yet: **about 25 h 55 min** so far | The plan was approved at `72e5bbd` (2026-11-22 19:25 UTC). This review was first written at 23:17 UTC, and updated on 2026-11-23 at 19:50 and 21:20 UTC |
+| Time from plan approval to exit sign-off | **26 h 48 min** | The plan was approved at `72e5bbd` (2026-11-22 19:25 UTC), and the owner signed off on 2026-11-23 at 22:13 UTC. This review was first written at 23:17 UTC on 2026-11-22, and updated on 2026-11-23 at 19:50 and 21:20 UTC |
 | First-pass merge rate of Phase 0 PRs | **10 of 11** merged PRs had no commits after opening | Only #6 was rebased after opening, to sit on top of #7. #5 was a throwaway proof PR and was closed. **Of #32–#38, 6 of 7** had no commits after opening; #35, the upstream merge, was refreshed twice as upstream moved |
 | Follow-up PRs that fixed earlier merged Phase 0 work | **3 of lane A's 7 PRs** | #2 changed A1's fixed ports to dynamic ports, at the owner's request. #3 fixed `-Dredis.image` never reaching the test JVM, a bug in A1's harness. #4 did the same for `golden.update`. (#9's JaCoCo fix repaired a pre-existing 3.x bug, not Phase 0 work) |
 | PRs merged after this review | **25** (#14–#38) | #14–#31 as before: 13 from the eval sessions and the sessions they started, at the owner's request, and 5 from this session (#18, #27, #29, #30, #31). Then #32–#38: this review, the CI lines, rule 1, the upstream merge, the slot-move fix, the legacy fixtures through the migration, and the golden re-capture |
@@ -64,9 +66,8 @@ These are the measures the playbook asks for (see `phase-0.md`, "Measurement").
 ## Open items
 
 1. **Done: the eval baseline** is recorded in `evals/README.md` (criterion 5).
-2. **Owner: confirm `backlog.md`** and sign it (criterion 7).
-3. **Owner: confirm the snapshot** appears on the fork's Packages page (criterion 6), and publish one from the current
-   `spike/phase-0`.
+2. **Done: the owner confirmed `backlog.md`** and signed it (criterion 7).
+3. **Done: the snapshot** is on the fork's Packages page, published from the current `spike/phase-0` (criterion 6).
 4. **Done: the 8.12-rc3 preview job finishes again** (PR #24).
    - **The cause:** Redis 8.12 refused to start the test cluster without TLS on its bus, and the harness repeated
      the failed start for every cluster suite.
@@ -175,4 +176,4 @@ Spark and Scala classes, so they're tied to those versions, and a new row format
 
 When items 2 and 3 are done, the owner signs here to close Phase 0 and approve starting the Phase 1 plan.
 
-  Owner: ____________________  Date: ____________
+  Owner: Albert T. Wong  Date: 2026-11-23
