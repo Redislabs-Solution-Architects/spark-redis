@@ -5,6 +5,7 @@ import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
 import com.redislabs.provider.redis.util.PipelineUtils._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import redis.clients.jedis.params.SetParams
 import scala.collection.JavaConversions.mapAsJavaMap
 
 /**
@@ -381,18 +382,16 @@ object RedisContext extends Serializable {
     */
   def setKVs(arr: Iterator[(String, String)], ttl: Int, redisConfig: RedisConfig, readWriteConfig: ReadWriteConfig) {
     implicit val rwConf: ReadWriteConfig = readWriteConfig
-    arr.map(kv => (redisConfig.getHost(kv._1), kv)).toArray.groupBy(_._1).
-      mapValues(a => a.map(p => p._2)).foreach { x =>
-        val conn = x._1.endpoint.connect()
-        foreachWithPipeline(conn, x._2) { case (pipeline, (k, v)) =>
-          if (ttl <= 0) {
-            pipeline.set(k, v)
-          } else {
-            pipeline.setex(k, ttl.toLong, v)
-          }
-        }
-        conn.close()
+    // redisConfig's topology was read on the driver and can be out of date. foreachWithRedirects follows MOVED and
+    // ASK to the slot's current owner, and fails on any other error reply instead of dropping the write.
+    val kvs = arr.map(kv => (redisConfig.getHost(kv._1).endpoint, kv)).toList
+    foreachWithRedirects(kvs) { case (pipeline, (k, v)) =>
+      if (ttl <= 0) {
+        pipeline.set(k, v)
+      } else {
+        pipeline.set(k, v, SetParams.setParams().ex(ttl.toLong))
       }
+    }
   }
 
   /**
