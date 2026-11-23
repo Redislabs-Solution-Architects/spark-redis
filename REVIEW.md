@@ -22,7 +22,8 @@ Run every pass. A pass with nothing to report says "no findings".
    - Does the stated proof show that, and could the owner rerun it?
    - Files outside the lane's ownership table (plan) need a reason in the description.
    - Tests: fix the code, not the test. Flag any weakened assertion, new skip or `ignore`, widened tolerance,
-     edited test listed in `.claude/failing-first.txt`, or quarantine entry without a findings link.
+     edited test listed in `.claude/failing-first.txt` (or removed from it in this PR), or quarantine entry
+     without a findings link.
 2. **Cluster correctness.**
    - Multi-key commands and pipelines are grouped by slot or by node. No `CROSSSLOT` risk.
    - Scans and reads cover every primary (or replica, when asked), each slot range exactly once.
