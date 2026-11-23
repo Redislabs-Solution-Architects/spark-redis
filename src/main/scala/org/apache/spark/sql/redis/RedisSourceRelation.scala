@@ -68,6 +68,7 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
   private val tableNameOpt: Option[String] = parameters.get(SqlOptionTableName)
   private val ttl = parameters.get(SqlOptionTTL).map(_.toInt).getOrElse(0)
   private val writeMode = parseWriteMode(parameters)
+
   /** `write.mode = replace` on the hash model. A binary-model row is one value, which a write always replaces. */
   private val replaceHashes = writeMode == SqlOptionWriteModeReplace && persistenceModel != SqlOptionModelBinary
   private val persistence =
@@ -119,14 +120,15 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
     // write schema, so that we can load dataframe back
     currentSchema = saveSchema(schema)
     if (overwrite) {
-      // truncate the table
-      sc.fromRedisKeyPattern(dataKeyPattern).foreachPartition { partition =>
-        groupKeysByNode(redisConfig.hosts, partition).foreach { case (node, keys) =>
-          val conn = node.connect()
-          foreachWithPipeline(conn, keys) { (pipeline, key) =>
-            (pipeline: PipelineBase).del(key) // fix ambiguous reference to overloaded definition
+      // Truncate the table. The topology is read again for this: the relation's copy can be out of date, and a key
+      // scan finds nothing on a slot's old owner once the slot has moved. The deletes follow MOVED and ASK (#347).
+      val currentConfig = new RedisConfig(redisConfig.initialHost)
+      sc.fromRedisKeyPattern(dataKeyPattern)(currentConfig, readWriteConfig).foreachPartition { partition =>
+        partition.grouped(iteratorGroupingSize).foreach { keys =>
+          writeWithRedirects(keys.map(key => (currentConfig.getHost(key).endpoint, key))) { key =>
+            // the type ascription fixes an ambiguous reference to an overloaded definition
+            List((pipeline: Pipeline) => (pipeline: PipelineBase).del(key))
           }
-          conn.close()
         }
       }
     }
@@ -138,25 +140,30 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
         // the following can be optimized to not create a map
         val rowsWithKey: Map[String, Row] = batch.map(row => dataKeyId(row) -> row).toMap
         groupKeysByNode(redisConfig.hosts, rowsWithKey.keysIterator).foreach { case (node, keys) =>
-          val conn = node.connect()
-          val save = (pipeline: Pipeline, key: String) => {
-            val row = rowsWithKey(key)
-            val encodedRow = persistence.encodeRow(keyName, row)
-            persistence.save(pipeline, key, encodedRow, ttl)
-          }
           binaryTtlWrite match {
             case Some((binary, capabilities)) =>
               // one MSETEX per batch (per slot on a cluster), or SET ... EX per row; a rejected write fails the task
+              val conn = node.connect()
               try {
                 val encodedRows = keys.map(key => key -> binary.encodeRow(keyName, rowsWithKey(key)))
                 binary.saveWithTtl(conn, encodedRows, ttl, capabilities)
               } finally conn.close()
             case None if replaceHashes =>
               // a replace that Redis refused fails the task instead of leaving the old row in place silently
-              try failOnErrorReplies(mapWithPipeline(conn, keys)(save)) finally conn.close()
+              val conn = node.connect()
+              val save = (pipeline: Pipeline, key: String) =>
+                persistence.save(pipeline, key, persistence.encodeRow(keyName, rowsWithKey(key)), ttl)
+              try failOnErrorReplies(mapWithPipeline(conn, keys)(save))
+              finally conn.close()
             case None =>
-              foreachWithPipeline(conn, keys)(save)
-              conn.close()
+              // Follows MOVED and ASK to each key's current owner, since the relation's topology can be out of date,
+              // and fails on any other error reply instead of dropping the row (#347).
+              val encodedRows = keys.toList.map { key =>
+                (node.endpoint, (key, persistence.encodeRow(keyName, rowsWithKey(key))))
+              }
+              writeWithRedirects(encodedRows) { case (key, encodedRow) =>
+                persistence.saveCommands(key, encodedRow, ttl)
+              }
           }
         }
       }
