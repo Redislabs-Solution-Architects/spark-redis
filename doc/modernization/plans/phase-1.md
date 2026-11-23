@@ -88,7 +88,7 @@ Jedis 8.0.2 jars:
 
 | Where | Setup |
 |---|---|
-| Owner's Mac (arm64) | **JDK 17 is needed and not installed** (only Zulu 8 is). Install Zulu 17, for example `brew install --cask zulu@17`, at `/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home`. Zulu 8 stays for `branch-3.x`. Docker Desktop for Testcontainers; the Maven Wrapper |
+| Owner's Mac (arm64) | **Zulu 17** (17.0.21.1) at `/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home` builds and tests 4.x. Homebrew's `openjdk@17` (the same version, jenv's global default) and `openjdk@21` are also installed, the latter for local JDK 21 runs. **Zulu 8** stays for `branch-3.x`. As in Phase 0, always set `JAVA_HOME`, because `java` on `PATH` comes from jenv. Docker Desktop for Testcontainers; the Maven Wrapper |
 | CI | GitHub Actions, `ubuntu-24.04`, Temurin 17, plus 21 and 25 on the newest Spark line. Docker on the runners. `branch-3.x` keeps Temurin 8 |
 | Claude's sandbox | Reaches the Docker socket. It can't read `src/test/resources/tls/*.key`, so suites that start the TLS container run outside the sandbox. It can't write `.claude/hooks/` or `.claude/skills/`, so the owner writes or approves those edits (X1) |
 
