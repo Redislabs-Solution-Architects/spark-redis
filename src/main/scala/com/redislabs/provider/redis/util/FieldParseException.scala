@@ -48,7 +48,8 @@ object FieldParseException {
     // java.sql.Date.valueOf throws without a message
     val reason = dataType match {
       case DateType => Some("expected yyyy-[m]m-[d]d")
-      case TimestampType => Some("expected yyyy-[m]m-[d]d hh:mm:ss[.fffffffff]")
+      case TimestampType =>
+        Some("expected yyyy-[m]m-[d]d hh:mm:ss[.fffffffff] or an ISO-8601 date-time such as 2022-10-14T13:33:15")
       case _ => Option(parseError.getMessage)
     }
     s"Can't parse value '$value' of field '$field'$where as ${dataType.typeName}" + reason.map(": " + _).getOrElse("")

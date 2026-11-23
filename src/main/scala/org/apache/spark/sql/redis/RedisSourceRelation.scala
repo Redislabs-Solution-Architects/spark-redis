@@ -20,7 +20,6 @@ import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import redis.clients.jedis.exceptions.JedisDataException
 import redis.clients.jedis.{Pipeline, PipelineBase, Protocol}
 
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
 class RedisSourceRelation(override val sqlContext: SQLContext,
@@ -64,7 +63,7 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
   private val keysPatternOpt: Option[String] = parameters.get(SqlOptionKeysPattern)
   private val numPartitions = parameters.get(SqlOptionNumPartitions).map(_.toInt)
     .getOrElse(SqlOptionNumPartitionsDefault)
-  private val persistenceModel = parameters.getOrDefault(SqlOptionModel, SqlOptionModelHash)
+  private val persistenceModel = parameters.getOrElse(SqlOptionModel, SqlOptionModelHash)
   private val tableNameOpt: Option[String] = parameters.get(SqlOptionTableName)
   private val ttl = parameters.get(SqlOptionTTL).map(_.toInt).getOrElse(0)
   private val writeMode = parseWriteMode(parameters)
@@ -269,10 +268,10 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
     val key = schemaKey(tableName())
     logInfo(s"saving schema $key")
     val schemaNode = getMasterNode(redisConfig.hosts, key)
-    val conn = schemaNode.connect()
     val schemaBytes = SerializationUtils.serialize(schema)
-    conn.set(key.getBytes, schemaBytes)
-    conn.close()
+    withConnection(schemaNode.connect()) { conn =>
+      conn.set(key.getBytes, schemaBytes)
+    }
     schema
   }
 
@@ -283,16 +282,15 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
     val key = schemaKey(tableName())
     logInfo(s"loading schema $key")
     val schemaNode = getMasterNode(redisConfig.hosts, key)
-    val conn = schemaNode.connect()
-    val schemaBytes = conn.get(key.getBytes)
+    val schemaBytes = withConnection(schemaNode.connect()) { conn =>
+      conn.get(key.getBytes)
+    }
     if (schemaBytes == null) {
       throw new IllegalStateException(s"Unable to read dataframe schema by key '$key'. " +
         s"If dataframe was not persisted by Spark, provide a schema explicitly with .schema() " +
         s"or use 'infer.schema' option. ")
     }
-    val schema = SerializationUtils.deserialize[StructType](schemaBytes)
-    conn.close()
-    schema
+    SerializationUtils.deserialize[StructType](schemaBytes)
   }
 
   /**
@@ -322,7 +320,7 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
         } else {
           keysAndValues.filter {
             case (_, null) => false // binary model
-            case (_, value: JList[_]) if value.forall(_ == null) => false // hash model
+            case (_, value: JList[_]) if value.asScala.forall(_ == null) => false // hash model
             case _ => true
           }
         }
