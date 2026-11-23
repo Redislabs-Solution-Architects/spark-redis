@@ -21,6 +21,8 @@ Run every pass. A pass with nothing to report says "no findings".
    - Does the diff do what the cited section says, all of it, and nothing outside it?
    - Does the stated proof show that, and could the owner rerun it?
    - Files outside the lane's ownership table (plan) need a reason in the description.
+   - A Phase 0 change to `src/main` is a bug fix with its failing-first test, or a change the owner asked for
+     (CLAUDE.md rule 1). The description says which.
    - Tests: fix the code, not the test. Flag any weakened assertion, new skip or `ignore`, widened tolerance,
      edited test listed in `.claude/failing-first.txt` (or removed from it in this PR), or quarantine entry
      without a findings link.
