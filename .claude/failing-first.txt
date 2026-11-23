@@ -8,3 +8,6 @@
 #   src/test/scala/com/redislabs/provider/redis/rdd/cluster/MovedWriteClusterSuite.scala  # #347
 #
 # Agents may add lines but not remove them. The owner removes a line once its fix has merged.
+src/test/scala/com/redislabs/provider/redis/util/ParseUtilsTest.scala  # #358
+src/test/scala/com/redislabs/provider/redis/df/HashDataframeSuite.scala  # #358
+src/test/scala/org/apache/spark/sql/redis/stream/RedisStreamSourceSuite.scala  # #358
