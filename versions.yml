@@ -1,9 +1,13 @@
 # The versions CI tests against. This file is the single source of truth for the test matrix
 # (.github/workflows/ci.yml reads it). Update it when an upstream line ships or reaches end of life;
-# see doc/modernization/spec.md §1 for the policy.
+# see doc/modernization/spec.md §1 for the policy. Every line in `redis` and `redis_secondary` is supported.
 
-# Redis lines in active development, as Docker image tags. Every job must pass.
-redis: ["8.2", "8.6", "8.8", "8.10"]
+# The Redis line every pull request must pass, as a Docker image tag. It also runs after each merge and nightly.
+redis: ["8.6"]
+
+# The other supported Redis lines. CI runs them after each merge to master or spike/phase-0, nightly and on
+# manual dispatch, never on pull requests. These jobs may fail without failing the build.
+redis_secondary: ["8.2", "8.8", "8.10"]
 
 # Upcoming Redis lines. CI tests the newest release-candidate tag of each (for example 8.12-rc3).
 # These jobs may fail without failing the build.

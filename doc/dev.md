@@ -22,6 +22,10 @@ make test REDIS_IMAGE=redis:8.6
 make test SUITES=com.redislabs.provider.redis.df.standalone.HashDataframeStandaloneSuite
 ```
 
+CI requires Redis 8.6 on every pull request, so run `make test REDIS_IMAGE=redis:8.6` before you open one. It runs
+the other supported lines (8.2, 8.8 and 8.10) after each merge and nightly, and those jobs may fail without failing
+the build. [`versions.yml`](../versions.yml) lists the lines.
+
 Running tests from your IDE works the same way: the first suite that needs Redis starts it. To use Redis servers you
 started yourself instead, on the old fixed ports (6379 standalone, 6380 TLS, 7379-7381 cluster), pass
 `-Dredis.containers=false`.
