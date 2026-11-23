@@ -44,7 +44,8 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home ./mvnw -B v
    the `SCAN` family, `HSET`, `SET … EX`, `ZRANGE … BYSCORE`, `MULTI`/`EXEC` on one key, and Streams.
 4. **Gate on capabilities, not versions.** Probe with `COMMAND INFO` / `MODULE LIST`, keep a fallback, test both.
 5. **If a test fails, fix the code, not the test.** Never weaken an assertion, skip a test or widen a tolerance to
-   get green. A bug's test is committed failing before its fix and listed in `.claude/failing-first.txt`.
+   get green. A bug's test is committed failing before its fix and listed in `.claude/failing-first.txt`. The PR
+   with the fix removes that line and leaves the test unchanged; CI checks both.
 6. **Golden fixtures and quarantine entries change only with the owner's approval.** Agents never edit
    `src/test/resources/{golden,legacy,tls}/` or `quarantine.txt`, and never run `-Dgolden.update=true`. A hook
    blocks it; propose the change and stop. See the `golden-layout` skill.
