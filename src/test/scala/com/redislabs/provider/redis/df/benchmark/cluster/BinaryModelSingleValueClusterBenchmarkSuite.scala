@@ -14,7 +14,5 @@ class BinaryModelSingleValueClusterBenchmarkSuite extends SingleValueBenchmarkSu
 
   override def suiteTags: String = s"${super.suiteTags}, Binary"
 
-  override def topology: String = "cluster"
-
   override def persistentModel: String = sql.redis.SqlOptionModelBinary
 }

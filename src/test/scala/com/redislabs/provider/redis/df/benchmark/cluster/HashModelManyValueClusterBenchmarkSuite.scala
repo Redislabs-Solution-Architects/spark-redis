@@ -14,7 +14,5 @@ class HashModelManyValueClusterBenchmarkSuite extends ManyValueBenchmarkSuite
 
   override def suiteTags: String = s"${super.suiteTags}, Hash"
 
-  override def topology: String = "cluster"
-
   override def persistentModel: String = SqlOptionModelHash
 }
