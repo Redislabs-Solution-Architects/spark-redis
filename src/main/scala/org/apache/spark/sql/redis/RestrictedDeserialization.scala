@@ -2,7 +2,7 @@ package org.apache.spark.sql.redis
 
 import java.io.{
   ByteArrayInputStream, IOException, InputStream, InvalidClassException, ObjectInputStream,
-  ObjectStreamClass
+  ObjectStreamClass, StreamCorruptedException
 }
 import java.lang.reflect.{InvocationHandler, InvocationTargetException, Method, Proxy}
 import java.util.concurrent.atomic.AtomicBoolean
@@ -58,10 +58,10 @@ private[redis] object RestrictedDeserialization extends Logging {
         // what a filter rejects fails as "filter status: REJECTED"
         case e: InvalidClassException if limits.rejection.isDefined =>
           throw new ValueRejectedException(limits.rejection.get, None, e)
-        // ObjectInputStream allocates an array of the length the stream declares without checking it
-        case e: NegativeArraySizeException =>
-          throw new ValueRejectedException("it declares an array of negative length, so Spark-Redis didn't write it.",
-            None, e)
+        // On Java 17, ObjectInputStream allocates an array of the length the stream declares without checking it.
+        case e: NegativeArraySizeException => throw negativeLength(e)
+        // Java 21 checks the length first.
+        case e: StreamCorruptedException if e.getMessage == NegativeLengthMessage => throw negativeLength(e)
       } finally in.close()
       limits.checkConsulted(value)
       value.asInstanceOf[T]
@@ -69,6 +69,12 @@ private[redis] object RestrictedDeserialization extends Logging {
       case e: ClassNotAllowedException => throw e
       case e @ (_: IOException | _: ClassNotFoundException) => throw new SerializationException(e)
     }
+
+  /** ObjectInputStream's message for an array of negative length on Java 21, in a StreamCorruptedException. */
+  private val NegativeLengthMessage = "Array length is negative"
+
+  private def negativeLength(cause: Throwable): ValueRejectedException =
+    new ValueRejectedException("it declares an array of negative length, so Spark-Redis didn't write it.", None, cause)
 
   /** Runs body, adding the Redis key to a [[ClassNotAllowedException]] or [[ValueRejectedException]] it throws. */
   private[redis] def withKey[T](key: String)(body: => T): T =
