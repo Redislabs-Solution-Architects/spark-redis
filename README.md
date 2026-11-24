@@ -16,7 +16,7 @@ Spark-Redis provides access to all of Redis' data structures - String, Hash, Lis
 
 The library can be used both with Redis stand-alone as well as clustered databases. When used with Redis cluster, Spark-Redis is aware of its partitioning scheme and adjusts in response to resharding and node failure events.
 
-Spark-Redis also supports Structured Streaming. The DStream API (Spark Streaming) was removed in 4.0.0-M1, and the RDD API is deprecated.
+Spark-Redis also supports Structured Streaming. 4.x drops the DStream API (Spark Streaming) and the RDD API: use the DataFrame source and Structured Streaming.
 
 ## Version compatibility and branching
 

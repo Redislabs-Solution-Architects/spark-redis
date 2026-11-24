@@ -38,9 +38,11 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home ./mvnw -B 
 
 ## Rules
 
-1. **In Phase 1, `src/main` changes only to port today's features to Spark 4, Jedis 8 and RESP3, or to fix a bug.**
-   No new features or options, except `ssl.verify.hostname` (plan, Goal). A bug fix comes with its failing-first
-   test (rule 5). The golden layouts pass unchanged.
+1. **In Phase 1, the 3.x code in `src/main` changes only to compile and pass on each Spark line, or to fix a bug.**
+   It's the golden-layout baseline, it stays on Jedis 3.9, and Phase 2e deletes it, so no ports, features or options
+   go into it (roadmap Amendment 1). A bug fix comes with its failing-first test (rule 5). The golden layouts pass
+   unchanged. 4.x follows the spec and Spark 4 practice. Upstream issues and PRs were written for 3.x, so they
+   aren't requirements.
 2. **New code goes in `com.redis.sparkredis`** from Phase 2. **Nothing new under `org.apache.spark.*`**, and no new
    imports from `org.apache.spark.sql.catalyst` or `.execution` outside `scripts/spark-internal-allowlist.txt`.
 3. **No legacy Redis commands** (spec §2.14): no `KEYS`, `SMEMBERS`, `HMSET`, `SETEX`, `SETNX`, `GETSET`, `EVAL`,

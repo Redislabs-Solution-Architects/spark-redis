@@ -1,4 +1,4 @@
-# Phase 1 plan: platform lift → 4.0.0-M1
+# Phase 1 plan: Spark 4 build and CI
 
 > Stage: **Build**, the `plan.md` for Phase 1 (AI-native SDLC playbook). Inputs:
 > - [`roadmap.md`](../roadmap.md), Phase 1;
@@ -6,14 +6,29 @@
 >   §2.12 verification, §2.13 release engineering and §2.14 legacy patterns;
 > - the signed [Phase 0 exit review](phase-0-exit-review.md).
 >
-> Status: **draft, for the owner's approval.** The owner accepted the seven
-> [decisions](#decisions-for-the-owner) on 2026-11-23, as recommended. The plan is approved when this PR merges, and
-> code starts after that.
+> Status: **approved by the owner on 2026-11-23**, with the seven [decisions](#decisions-for-the-owner) accepted as
+> recommended. **Amended the same day by roadmap Amendment 1** (proposed, for the owner's approval): Phase 1
+> releases nothing, and the first 4.x release, 4.0.0-M1, is Phase 2's DataSource V2 core.
+>
+> - **What the amendment does to Phase 1's steps:**
+>   - A3 and A4 are dropped;
+>   - B3 moves to Phase 2;
+>   - B4 builds the release workflow but publishes snapshots only.
+> - **What stays as originally planned:** the goal and steps below, with each change marked where it applies.
 >
 > Work happens on `spike/phase-1` in the `Redislabs-Solution-Architects/spark-redis` fork. It is cut from
 > `spike/phase-0` once this plan merges there; Phase 0 was signed off at `987aba1`.
 
 ## Goal
+
+> **Amended (roadmap Amendment 1).** The goal is now: the codebase builds and is tested on Spark 4.1, 4.2 and 4.3,
+> Scala 2.13 and JDK 17, with one artifact per Spark minor and the CI matrix, so that Phase 2 starts on the Spark 4
+> platform.
+> - **The 3.x code** comes along as the golden-layout baseline only. It changes only to compile and pass on each
+>   Spark line, stays on Jedis 3.9, and is deleted in Phase 2e.
+> - **Nothing is released.** 4.0.0-M1 is Phase 2's release.
+>
+> The original goal follows.
 
 Run **today's feature set unchanged** on Spark 4.1, 4.2 and 4.3, Scala 2.13, JDK 17, Jedis 8 and RESP3, against
 Redis 8.2 and later. Publish it as **4.0.0-M1**.
@@ -42,14 +57,14 @@ Phase 0 and the upstream fixes already did part of the roadmap's Phase 1 scope. 
 
 | Roadmap Phase 1 item | State at `987aba1` | Step |
 |---|---|---|
-| 1. Start from the fork's code, with #394 only as a reference | `spike/phase-0`, which includes upstream `master` up to #434 | — |
+| 1. Start from the fork's code | `spike/phase-0`, which includes upstream `master` up to #434 | — |
 | 2. Scala 2.13 and JDK 17 | Scala 2.13 builds and passes in CI next to 2.12, and `JavaConversions` is gone (upstream). Still JDK 8, 2.12 is the default, and `JavaConverters` is used in 12 files | A1 |
 | 3. Spark 4.1 compile | Spark 3.5.10 | A1 |
-| 4. Jedis 8, and the legacy commands (spec §2.14) | **Done in 3.x:** `HSET`, `SET … EX`, `SSCAN` (#434), `ZRANGE … BYSCORE` (#434), a value and its TTL in one `MULTI`/`EXEC` (#433), `UNLINK` in `write.mode = replace`, `CLIENT SETNAME`/`SETINFO`. **Still to do:** Jedis 3.9 → 8; `HELLO 3` (today `HELLO` is only a capability probe); TLS hostname verification; `LRANGE 0 -1` and `HGETALL`; `DEL` in truncate; `INFO` parsing; `CLUSTER SLOTS`; the hand-rolled `XINFO` decoder | A3, A4 |
+| 4. Jedis 8, and the legacy commands (spec §2.14) | **Done in 3.x:** `HSET`, `SET … EX`, `SSCAN` (#434), `ZRANGE … BYSCORE` (#434), a value and its TTL in one `MULTI`/`EXEC` (#433), `UNLINK` in `write.mode = replace`, `CLIENT SETNAME`/`SETINFO`. **Still to do:** Jedis 3.9 → 8; `HELLO 3` (today `HELLO` is only a capability probe); TLS hostname verification; `LRANGE 0 -1` and `HGETALL`; `DEL` in truncate; `INFO` parsing; `CLUSTER SLOTS`; the hand-rolled `XINFO` decoder | Dropped (Amendment 1): Phase 2a |
 | 5. Remove DStreams; deprecate the RDD API | Both present | A2 |
 | 6. One artifact per Spark minor; the CI matrix | One artifact, `com.redislabs:spark-redis_2.12`. CI runs Redis 8.6 × JDK 8 × Scala {2.12, 2.13} on PRs, and Redis 8.2 after merge | B1, B2 |
 | 7. `branch-3.x` | None. The schema migration (`SchemaMigration`, #429) exists in the 3.x code | C1–C3 |
-| 8. Publish 4.0.0-M1 | The snapshot pipeline to GitHub Packages works (Phase 0 C9) | B4 |
+| 8. Publish 4.0.0-M1 | The snapshot pipeline to GitHub Packages works (Phase 0 C9) | B4, snapshots only (Amendment 1) |
 
 **What the port touches.** This comes from a read of the code at `987aba1`, checked against the Spark 4.1.4 and
 Jedis 8.0.2 jars:
@@ -237,6 +252,10 @@ Lane A is one session working in sequence, because the port touches every file (
 
 **A3. Jedis 8 and RESP3**
 
+> **Dropped by roadmap Amendment 1.** Phase 2a's `RedisExecutor` brings Jedis 8, RESP3 only, TLS hostname
+> verification and the protocol tests, so porting the 3.x client code first would be thrown away. The design notes
+> below stay as input for Phase 2a.
+
 - **Files:**
   - `pom.xml`, for Jedis 8.0.2;
   - `ConnectionPool.scala`, `RedisConfig.scala`, `util/PipelineUtils.scala`, `util/ConnectionUtils.scala`,
@@ -284,6 +303,10 @@ Lane A is one session working in sequence, because the port touches every file (
   - The new protocol and TLS tests pass.
 
 **A4. The remaining legacy commands, and topology without `INFO`**
+
+> **Dropped by roadmap Amendment 1.** The 3.x code that sends these commands is deleted in Phase 2e. Phase 2a's
+> topology (`CLUSTER SHARDS`, `ROLE`) and the 4.x table models use only the modern commands from the start. The
+> legacy-command check's `--all` mode moves to Phase 2e, once the 3.x code is gone.
 
 - **Files:** `RedisConfig.scala`, `rdd/RedisRDD.scala`, `util/ConnectionUtils.scala`,
   `org/apache/spark/sql/redis/RedisSourceRelation.scala` and `stream/RedisSource.scala`, plus
@@ -366,6 +389,9 @@ Lane A is one session working in sequence, because the port touches every file (
 
 **B3. Benchmarks against a fresh baseline** ([D7](#decisions-for-the-owner))
 
+> **Moved to Phase 2 by roadmap Amendment 1.** It compares the first 4.x release with a 3.x baseline re-measured on
+> an idle machine, next to Phase 2's 2× write-throughput gate.
+
 - **Files:** `doc/modernization/benchmarks/baseline-3.x.csv` and `.md` (re-measured), new `phase-1-m1.csv` and
   `.md`; the nightly benchmark job in `ci.yml`.
 - **Change:**
@@ -379,6 +405,10 @@ Lane A is one session working in sequence, because the port touches every file (
   the one that isn't.
 
 **B4. Release 4.0.0-M1** ([D4](#decisions-for-the-owner))
+
+> **Narrowed by roadmap Amendment 1.** Phase 1 builds `release.yml` and moves `publish-snapshot.yml` to JDK 17 and
+> the three modules, and publishes snapshots only, with the SBOM. The `v4.0.0-M1` release, the smoke job and the
+> README section come with Phase 2's first release.
 
 - **Files:**
   - new: `.github/workflows/release.yml`;
@@ -445,10 +475,10 @@ Lane A is one session working in sequence, because the port touches every file (
    `spike/phase-0`.
 1. **X1 and A1.** Everything else builds on A1.
 2. **In parallel, up to three sessions:**
-   - **lane A:** A2, then A3, then A4;
+   - **lane A:** A2. A3 and A4 are dropped (Amendment 1);
    - **lane B:** B1, then B2. B1 starts first, so lane A's later pom edits land on the new layout;
    - **lane C:** C1–C3, at any time.
-3. **B3 and B4** after A4, because M1 ships the finished port.
+3. **B4,** narrowed to the release workflow and snapshots (Amendment 1). B3 moves to Phase 2.
 4. **The exit review.**
 
 ## Exit criteria
@@ -459,22 +489,23 @@ The owner signs off on each item:
       quarantined.
 - [ ] The golden write and read fixtures and the legacy fixtures pass unchanged on every line, in standalone and
       cluster.
-- [ ] Each benchmark is within 10% of the re-measured 3.x baseline (B3).
-- [ ] 4.0.0-M1 is published:
-  - three artifacts in GitHub Packages;
-  - a GitHub Release with the SBOM;
-  - the smoke job passes.
-- [ ] **RESP3 only:** the protocol tests pass, and no connection the connector opens reports `resp=2`.
-- [ ] **No legacy commands or DStreams:**
-  - `check-legacy-redis.sh --all src/main` passes;
-  - nothing in `src/` imports `org.apache.spark.streaming`.
+- [ ] **Snapshots:** `release.yml` publishes snapshots of the three per-Spark artifacts, with the SBOM (B4, narrowed).
+- [ ] **No DStreams:** nothing in `src/` imports `org.apache.spark.streaming`.
+
+**Moved by roadmap Amendment 1:**
+- the benchmark comparison (B3), to Phase 2;
+- publishing 4.0.0-M1, to Phase 2;
+- the RESP3-only and legacy-command criteria, to Phase 2a and 2e.
 - [ ] **`branch-3.x`:** CI passes, and `spark-redis-migrate --dry-run` runs against the legacy fixtures.
 - [ ] **Guardrails:** `CLAUDE.md`, `REVIEW.md` and the evals are updated for Phase 1, and the eval pass rate is
       recorded.
 
 ## Decisions for the owner
 
-**All seven accepted by the owner on 2026-11-23, as recommended.** The steps above follow them.
+**All seven accepted by the owner on 2026-11-23, as recommended.** The steps above follow them. After roadmap
+Amendment 1:
+- D4 (signing) and D7 (the benchmark baseline) apply to Phase 2's 4.0.0-M1;
+- D6 (keep the package names in M1) no longer applies, because no release carries the 3.x packages.
 
 | # | Question | Decision |
 |---|---|---|
