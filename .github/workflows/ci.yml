@@ -1,8 +1,8 @@
 # Test matrix (Phase 1 plan, step B2; decision D1). versions.yml decides what runs:
 # - pull requests: the `spark_reference` line on the `redis` line and the `jdk`, which a PR must pass;
-# - after each merge to spike/phase-1: every `spark` line on every `redis` and `redis_secondary` line, and on the
-#   `jdk_secondary` JDK with the `redis` line, allowed to fail. To run it again without a merge, re-run the last
-#   push run (gh run rerun <run-id>), which keeps its event and commit.
+# - after each merge to spike/phase-1, nightly, and by hand: every `spark` line on every `redis` and `redis_secondary`
+#   line, and on the `jdk_secondary` JDK with the `redis` line, allowed to fail. By hand:
+#   gh workflow run ci.yml -R Redislabs-Solution-Architects/spark-redis --ref spike/phase-1
 # Each job builds and tests one Spark line's module (spark-<line>/). The tests start their own Redis in Docker through
 # Testcontainers (see RedisContainers.scala), so no Redis is installed on the runner. Guardrail checks run separately,
 # in guardrails.yml.
@@ -14,9 +14,10 @@ on:
     paths-ignore: ['doc/**', '**/*.md']
   pull_request:
     paths-ignore: ['doc/**', '**/*.md']
-  # GitHub runs a schedule, and dispatches a workflow by hand, only when the default branch has the workflow. The
-  # fork's master doesn't have this file, so neither of these two triggers fires: the full matrix runs only after a
-  # merge, and the benchmark job doesn't run. They start working if this file reaches master.
+  # GitHub runs a schedule only from the default branch's copy of a workflow, and lets a workflow be dispatched by hand
+  # only when the default branch has it. So the fork's master has a small ci.yml of its own: nightly at 03:00 UTC it
+  # dispatches this file on spike/phase-1, and this schedule never fires by itself. A dispatch on spike/phase-1 runs
+  # this file directly.
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
@@ -157,7 +158,7 @@ jobs:
   benchmark:
     # The numbers come from a GitHub-hosted runner, so they are not comparable with the baseline in
     # doc/modernization/benchmarks/, which was measured on the owner's Mac. They are recorded, not gated,
-    # until there is a stable runner. It runs only on the schedule or by hand, so not until master has this file.
+    # until there is a stable runner. It runs nightly and by hand: master's ci.yml starts the nightly run as a dispatch.
     name: Benchmarks (Spark ${{ needs.matrix.outputs.spark_reference }}, Redis ${{ needs.matrix.outputs.benchmark_redis }})
     needs: matrix
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

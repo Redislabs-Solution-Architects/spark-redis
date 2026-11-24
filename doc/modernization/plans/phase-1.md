@@ -429,7 +429,7 @@ Lane A is one session working in sequence, because the port touches every file (
   2. sets the version in every pom;
   3. deploys the parent pom and the three artifacts to GitHub Packages, with each one's CycloneDX SBOM;
   4. creates the GitHub Release, with the jars, sources and javadoc jars, the jars-with-dependencies, the SBOMs,
-     SHA-256 checksums, and GitHub's generated notes. Release Drafter runs only on pushes to `master`, the 3.x line.
+     SHA-256 checksums, and GitHub's generated notes (the owner's choice at the exit review; Release Drafter is gone).
      Following D4, the assets are GPG-signed when the repository has a signing-key secret. Without one, M1 ships
      with the SBOMs and checksums only, and signing starts with M2.
 
@@ -533,9 +533,10 @@ D1, as built in B2:
 - **JDK 21 runs on every Spark line,** not just the newest.
 - **Redis 8.6 only, for now** (owner decision, 2026-11-23). The other supported Redis lines (8.2–8.10) return to
   `redis_secondary` before 4.0.0-M1. Until then, a merge runs 6 jobs: every Spark line on JDK 17 and 21, all on 8.6.
-- **There's no nightly or manual run.** GitHub runs a schedule, and dispatches a workflow by hand, only when the
-  default branch has the workflow, and the fork's `master` doesn't have `ci.yml`. So the full matrix runs after
-  each merge, re-running the last push run repeats it, and CI's benchmark job doesn't run.
+- **Nightly and manual runs** (added at the exit review, 2026-11-24). GitHub runs a schedule, and dispatches a
+  workflow by hand, only from the default branch. So the fork's `master` has a small `ci.yml` that dispatches
+  `spike/phase-1`'s `ci.yml` nightly at 03:00 UTC. A manual dispatch on `spike/phase-1` runs that copy directly. Both
+  run the full matrix and CI's benchmark job, and the full matrix also runs after each merge.
 
 | # | Question | Decision |
 |---|---|---|
