@@ -30,8 +30,8 @@
 
 - [RedisLabs/spark-redis#394](https://github.com/RedisLabs/spark-redis/pull/394) ("[WIP] Prepare for
   Spark 4"). It moves to Scala 2.13, JDK 17, Jedis 5 and `CLUSTER SHARDS`, and removes DStreams. It has been
-  open with no reviews since October 2024. The spike is built in the fork instead, and uses #394 only as a
-  reference for the Scala 2.13 and JDK 17 changes.
+  open with no reviews since October 2024. The spike is built in the fork instead. Since Amendment 1, #394 isn't
+  a reference: like the other upstream issues and PRs, it was written against 3.x.
 - Redis field engineering's *Redis Connector for Spark*
   ([docs](https://redis-field-engineering.github.io/redis-spark/),
   [binaries](https://github.com/redis-field-engineering/redis-spark-dist)). See the
@@ -77,13 +77,68 @@ scaffolding, a cluster-aware client, replica reads and the hash, JSON and string
 part of Phase 3: a consumer-group stream source and a streaming sink. It covers nothing from Phase 1
 (Spark 4), Phase 4 (Redis 8 data models), Phase 5 (Python and Connect) or Phase 6.
 
+## Amendment 1 (2026-11-23): the first 4.x release is DSv2-native
+
+> **Status: proposed, for the owner's approval.** The owner's goal: the 4.x connector is designed with Spark 4
+> development practices in mind, and gives a Spark 4 developer the best experience. The sections below already
+> read as amended. This one records what changed and why.
+
+**What changed.** As planned before this amendment, Phase 1 would have released **4.0.0-M1**: the 3.x connector
+ported to Spark 4, with the RDD API deprecated but still there. That release would give a Spark 4 developer:
+- the RDD API, which Spark Connect and PySpark can't reach;
+- DataSource V1, built on Spark internals (`classic.SQLContext.internalCreateDataFrame`, the V1 streaming
+  `Source`);
+- the `org.apache.spark.sql.redis` format name;
+- the 3.x defaults: the `hash` model, random UUID keys and Java-serialized `binary` rows.
+
+It would serve 3.x users moving to Spark 4, not Spark 4 developers. Porting the 3.x client code to Jedis 8 and
+RESP3 (Phase 1's old item 4) would also have been thrown away: Phase 2a's `RedisExecutor` replaces that code.
+
+**Now:**
+- **Phase 1 is "Spark 4 build and CI", with no release.** The codebase builds and is tested on Spark 4.1–4.3, JDK 17
+  and Scala 2.13, with one artifact per Spark minor and the CI matrix.
+  - The 3.x code comes along only as the baseline the golden-layout tests run against. It changes only to compile
+    and pass on each Spark line, stays on Jedis 3.9, and Phase 2e deletes it.
+  - Done before the amendment: Spark 4, Scala 2.13 and JDK 17 (#44), and DStreams removed (#45).
+  - Dropped: the Jedis 8 and RESP3 port of the 3.x code, its legacy-command cleanup, and the M1 release.
+- **4.0.0-M1 is Phase 2's release, the first 4.x release.** It is built on DataSource V2: `format("redis")` in
+  `com.redis.sparkredis`, Jedis 8 behind `RedisExecutor` with RESP3, deterministic keys, `json` as the default,
+  pushdown and the catalog. What was called 4.0.0-M2 doesn't exist any more. 4.0.0 GA is unchanged (Phase 3).
+- **No 4.x release has the RDD API, DSv1 or the `org.apache.spark.sql.redis` package.** A 3.x job moves to
+  `format("redis")` when it moves to Spark 4. Until then it stays on the 3.x releases on Spark 3.5, whose extended
+  LTS (security fixes only) runs until November 2027. The path from 3.x is:
+  - the migration guide, which maps every RDD function and 3.x option;
+  - the golden-layout tests, which show that 4.x reads and writes the `hash` data 3.x wrote;
+  - `SchemaMigration` for the schema keys, which already runs on Spark 4.1 (`LegacyFixturesSuite`);
+  - `spark-redis-migrate` for `binary` rows (Phase 2e).
+- **Spark 4's error framework** joins the spec (§2.10): the connector's errors are `SparkThrowable`s, with named
+  error conditions and SQLSTATEs. Phase 2a builds it.
+- **The 3.x issues and PRs aren't requirements for 4.x.** The upstream issues and PRs were written against 3.x:
+  Spark 3, the RDD API, DSv1 and the 3.x options. 4.x is designed from Spark 4 and Redis 8 practice and from
+  this spec, so a request in an issue or a PR neither adds a 4.x feature nor shapes one.
+  - The "Issues closed" lists in this roadmap and the issue links in the spec stay as a record: which 3.x
+    issues a 4.x feature resolves or makes moot, for closing them when 4.x ships and for the migration guide.
+  - `backlog.md` stays the same kind of record.
+  - #394 is no longer a reference.
+
+**What this costs.** A 3.x job can't move to Spark 4 first and rewrite later: the rewrite comes with the move. With
+Spark 3.5 supported until late 2027, and the migration guide and tooling, that's the trade this amendment
+proposes for a native Spark 4 design.
+
+**Open decisions:**
+- **A1. Lane C.** Does `branch-3.x` still need a schema migration jar, now that `SchemaMigration` runs on Spark 4?
+  The recommendation is to keep the branch, for `binary` rows only, and decide that in Phase 2e.
+- **A2. The issue record.** The issues Phase 1 used to close (#390, #386, #368, #373, #253, #294, #188, #377, #302
+  and #295, all "run on Spark 4") now close with 4.0.0-M1 in Phase 2. The recommendation is that `backlog.md` keeps
+  them under Phase 1, with a note, since the backlog is a record and not a plan.
+
 ## Release train
 
 | Phase | Release | What users get | Main gate |
 |---|---|---|---|
 | 0. Ground truth and guardrails | none | A test suite and CI running on Redis 8; agent guardrails in place | Product owner approves the intent and spec |
-| 1. Platform lift | **4.0.0-M1** | Today's features running on Spark 4.1–4.3, Redis 8.2+ and Jedis 8 | All golden-layout tests pass across the matrix |
-| 2. DataSource V2 batch core | **4.0.0-M2** | JSON as the default model, deterministic keys, pushdown, slot-aware writes, Sentinel, replica reads, catalog, metrics, migration tool | At least 2× write throughput; point lookups run without `SCAN` |
+| 1. Spark 4 build and CI | none (snapshots only) | Nothing yet: the codebase builds and is tested on Spark 4.1–4.3, with one artifact per Spark minor and the CI matrix (Amendment 1) | All golden-layout tests pass across the matrix |
+| 2. DataSource V2 batch core | **4.0.0-M1**, the first 4.x release | `format("redis")` on DSv2, JSON as the default model, deterministic keys, pushdown, slot-aware writes, Sentinel, replica reads, catalog, metrics, Spark error conditions, migration tool | At least 2× write throughput; point lookups run without `SCAN` |
 | 3. Streaming on DSv2 | **4.0.0 GA** | A reliable stream source, sinks for every model, exactly-once with `IDMP` | Kill-and-replay tests show no loss or duplicates |
 | 4. Redis 8 data models | **4.1.0** | JSON/`VARIANT`, Query Engine pushdown, vectors, hybrid search, TimeSeries, `MERGE`/`UPDATE`/`DELETE` | Proof that pushdown reads only what the query needs |
 | 5. Python, Connect and SQL | **4.2.0** | pip package, pure-Python fallback source, Connect-tested, cookbook | A Python suite passes against a Spark Connect server |
@@ -91,14 +146,14 @@ part of Phase 3: a consumer-group stream source and a streaming sink. It covers 
 
 ```mermaid
 flowchart LR
-  P0[0 Ground truth<br/>and guardrails] --> P1[1 Platform lift<br/>4.0.0-M1]
+  P0[0 Ground truth<br/>and guardrails] --> P1[1 Spark 4 build<br/>and CI]
   P1 --> SPI[2a Core SPI +<br/>executor + topology]
   SPI --> RD[2b Scan planner]
   SPI --> WR[2c Write path]
   SPI --> CF[2d Config + security]
   SPI --> CT[2e Catalog +<br/>migration tool]
   SPI --> JS[2f JSON model<br/>the default]
-  RD & WR & CF & CT & JS --> M2((4.0.0-M2))
+  RD & WR & CF & CT & JS --> M2((4.0.0-M1))
   M2 --> SRC[3a Stream source]
   M2 --> SNK[3b Sinks +<br/>ForeachWriter]
   SRC & SNK --> GA((4.0.0 GA))
@@ -260,12 +315,16 @@ the work up to each gate, and named humans pass the gates.
 **Lanes:** three in parallel, with disjoint files: (a) harness plus CI; (b) golden tests plus fixtures;
 (c) guardrails, hygiene and triage.
 
-## Phase 1: platform lift → 4.0.0-M1
+## Phase 1: Spark 4 build and CI (no release)
 
-**Plan:** [`plans/phase-1.md`](plans/phase-1.md) (draft, for the owner's approval).
+**Plan:** [`plans/phase-1.md`](plans/phase-1.md), approved 2026-11-23 and amended by Amendment 1.
 
-**Goal.** Run **today's feature set unchanged** on supported versions, with nothing new. This unblocks the
-most-requested issue family quickly:
+**Goal.** The codebase builds and is tested on Spark 4.1–4.3, JDK 17 and Scala 2.13, with one artifact per
+Spark minor and the CI matrix, so that Phase 2 starts on the Spark 4 platform. The 3.x code comes along as the
+golden-layout baseline only. It isn't released, and Phase 2e deletes it (Amendment 1).
+
+Before Amendment 1, Phase 1 also released 4.0.0-M1 with today's feature set unchanged. That release would have
+closed the "run on Spark 4" issue family, which now closes with 4.0.0-M1 in Phase 2:
 [#390](https://github.com/RedisLabs/spark-redis/issues/390),
 [#386](https://github.com/RedisLabs/spark-redis/issues/386),
 [#368](https://github.com/RedisLabs/spark-redis/issues/368),
@@ -279,8 +338,8 @@ most-requested issue family quickly:
 
 **Scope:**
 
-1. Start from the fork's `master`. Use #394 as a reference for the Scala 2.13 and JDK 17 changes, not as a
-   base.
+1. Start from the fork's code (`spike/phase-0`). Phase 1 did the Scala 2.13 and JDK 17 changes without #394
+   (Amendment 1).
 2. **Scala 2.13 and JDK 17:** `JavaConversions` → `CollectionConverters`, and Scala 2.13 collection
    changes.
 3. **Spark 4.1 compile:**
@@ -288,7 +347,9 @@ most-requested issue family quickly:
      replaces this in Phase 3.
    - json4s 4.0.7.
    - Behaviour changes from ANSI mode being the default.
-4. **Jedis 3.9 → 8.0:**
+4. **Dropped by Amendment 1:** Jedis 3.9 → 8.0 for the 3.x code. Phase 2a's `RedisExecutor` brings Jedis 8,
+   RESP3 and the modern commands instead, and the 3.x code stays on Jedis 3.9 until Phase 2e deletes it. The
+   original list, for Phase 2a to cover:
    - legacy commands → modern forms (spec §2.14):
      - `hmset` → `HSET`
      - `hmset` + `expire` → `HSET` + `EXPIRE` in one `MULTI`/`EXEC`
@@ -305,33 +366,39 @@ most-requested issue family quickly:
    - the pool moves onto `RedisClient`
    - every connection opens with `HELLO 3`: RESP3 only, with no RESP2 fallback
    - TLS hostname verification is now on by default
-5. **Remove DStreams, and mark the RDD API `@deprecated`.** The RDD API ships unchanged in 4.0.0-M1, so
-   existing jobs can move to Spark 4 first. Phase 2e removes it.
+5. **Remove DStreams, and mark the RDD API `@deprecated`** (done, #45). No 4.x release carries the RDD API:
+   Phase 2e deletes it before 4.0.0-M1 (Amendment 1).
 6. **Per-Spark-minor artifacts** for 4.1, 4.2 and 4.3. The CI matrix is
    Spark {4.1, 4.2, 4.3} × Redis {8.2, 8.4, 8.6, 8.8, 8.10} × {standalone, cluster, TLS}, on JDK 17, with
    JDK 21 and 25 run on the newest Spark line.
 7. **`branch-3.x`:** set up the branch, on Spark 3.5 and Scala 2.12, that will host `spark-redis-migrate`
    (Phase 2e). There is no bridge release.
-8. Publish **4.0.0-M1** to GitHub Packages and a GitHub Release. M1 still defaults to `hash` and generates
-   UUID keys, because it ships today's behaviour unchanged. Phase 2 changes both.
+8. **The release workflow** builds, signs and publishes the per-Spark artifacts. In Phase 1 it publishes
+   snapshots only. Its first release is 4.0.0-M1 in Phase 2 (Amendment 1).
 
 **Exit criteria:**
 
 - Golden-layout and existing tests pass across the full matrix.
-- Benchmarks are within 10% of baseline.
-- 4.0.0-M1 is published.
+- Snapshots of every per-Spark artifact are published from the release workflow.
 
-**Lanes:** (a) the code port, which stays one lane because it touches every file; (b) build and the CI
-matrix; (c) the `branch-3.x` skeleton for the migration tool.
+The benchmark comparison moves to Phase 2's exit, which already requires 2× the baseline write throughput.
+
+**Lanes:** (a) keeping the 3.x code compiling and passing on each Spark line; (b) build, the CI matrix and the
+release workflow; (c) the `branch-3.x` skeleton for the migration tool.
 
 **Risk.** If Spark 4.1 reaches EOL (expected around June 2027) before 4.0.0 GA, GA ships with a 4.2 floor.
 4.2 has the longest maintenance window of any current line (18 months, to about January 2028). That makes
 it our **reference line** for docs, examples and the default artifact.
 
-## Phase 2: DataSource V2 batch core → 4.0.0-M2
+## Phase 2: DataSource V2 batch core → 4.0.0-M1, the first 4.x release
 
 **Goal.** The new architecture, at parity and then beyond for `json` (the new default), `hash`, `string`,
-`zset`, `list` and `set`.
+`zset`, `list` and `set`. It is the first 4.x release users get (Amendment 1), so it is built the way a Spark 4
+developer expects:
+- DataSource V2 and the catalog;
+- a `format("redis")`-only surface, which Spark Connect and PySpark can use as is;
+- Spark's error framework;
+- no Spark internals.
 The spec sections are §2.1–§2.4 and §2.6–§2.11.
 
 **Scope:**
@@ -339,7 +406,9 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
 - **2a: Foundation** (sequential; every other lane depends on it):
   - split into `core`, `sql` and `it` modules, under the new package `com.redis.sparkredis`, with a stub at the
     old `DefaultSource` name that tells users to switch to `format("redis")`
-  - the `RedisExecutor` interface on Jedis 8
+  - the `RedisExecutor` interface on Jedis 8, with RESP3 only (`HELLO 3`), TLS hostname verification and the
+    modern commands that Phase 1's dropped item 4 listed
+  - Spark error conditions for the connector's errors (spec §2.10)
   - topology from `CLUSTER SHARDS`, refreshed on `MOVED`/`ASK`
   - **Sentinel** and **replica reads**
   - the capability probe and pool sizing
@@ -397,6 +466,10 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
 - The migration tool round-trips every Phase 0 fixture.
 - Retrying a write task or replaying a batch leaves exactly the same set of keys.
 - No credentials appear in the Spark UI Environment tab or in logs (an automated test).
+- Every error the connector raises is a `SparkThrowable` with a documented error condition and SQLSTATE, and a
+  test asserts each one by condition (spec §2.10, §2.12).
+- Every connection reports `resp=3` (spec §2.12), and every benchmark is compared with a baseline re-measured on
+  an idle machine (Phase 1 plan, D7).
 
 **Lanes:** 2a goes first, alone. After that, 2b, 2c, 2d, 2e and 2f run in parallel worktrees, up to three
 at a time.
@@ -540,6 +613,7 @@ puts the matrix in one file and Phase 6 automates it.
 | **Spark:** `MicroBatchStream`, admission control, `AvailableNow`, source metrics | §2.5 | 3 |
 | **Spark:** Real-Time Mode (Foreach sink now, source later) | §2.5 | 3, 6 |
 | **Spark:** custom metrics (`mergeWith` in 4.2) and structured logging | §2.10 | 2 |
+| **Spark:** the error framework: `SparkThrowable` errors with named conditions and SQLSTATEs | §2.10 | 2 |
 | **Spark:** Spark Connect, Python Data Source API, Declarative Pipelines, Connect JDBC | §2.7 | 5 |
 | **Spark:** `transformWithState` | none; it works with our source as is. A Redis `StateStoreProvider` is out of scope (§4) | — |
 | **Spark:** DSv2 `Changelog` (4.2) | Not pursued. Keyspace notifications are fire-and-forget, so they are not a durable change log; Streams already cover CDC | — |
@@ -547,10 +621,10 @@ puts the matrix in one file and Phase 6 automates it.
 | **Redis:** Vector Sets, TimeSeries, probabilistic types | §2.2 | 4c, 4d |
 | **Redis:** `HSETEX`/`HGETEX`, field TTL, `HIMPORT`, `MSETEX` | §2.4 | 2 |
 | **Redis:** `SET IFEQ`/`IFDEQ`, `DELEX`, `DIGEST` | §2.4 | 4e |
-| **Redis:** `CLUSTER SHARDS`, `CLUSTER SLOT-STATS`, atomic slot migration | §2.1, §2.3 | 1, 2, 6 |
+| **Redis:** `CLUSTER SHARDS`, `CLUSTER SLOT-STATS`, atomic slot migration | §2.1, §2.3 | 2, 6 |
 | **Redis:** `XACKDEL`, `XTRIM ACKED`, `XREADGROUP CLAIM`/`MAXSIZE`, `XNACK`, `XADD IDMP` | §2.5 | 3 |
-| **Redis:** RESP3 as the only protocol, `CLIENT SETINFO` (already merged), token auth, `HOTKEYS` | §2.1, §2.9 | 1, 6 |
-| **Redis:** modern replacements only: `SCAN` family, ACL users, atomic command flags, Streams, native JSON, Functions | §2.14 | 0, 1, 2 |
+| **Redis:** RESP3 as the only protocol, `CLIENT SETINFO` (already merged), token auth, `HOTKEYS` | §2.1, §2.9 | 2, 6 |
+| **Redis:** modern replacements only: `SCAN` family, ACL users, atomic command flags, Streams, native JSON, Functions | §2.14 | 0, 2 |
 | **Redis:** Array type (8.8), roaring bitmaps and set-member TTL (8.12) | Later lanes, once there is demand and they are GA | — |
 
 ## Decisions

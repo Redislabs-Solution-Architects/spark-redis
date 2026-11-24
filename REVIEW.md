@@ -21,11 +21,13 @@ Run every pass. A pass with nothing to report says "no findings".
    - Does the diff do what the cited section says, all of it, and nothing outside it?
    - Does the stated proof show that, and could the owner rerun it?
    - Files outside the lane's ownership table (plan) need a reason in the description.
-   - A Phase 1 change to `src/main` ports today's features to Spark 4, Jedis 8 and RESP3, or fixes a bug with its
-     failing-first test (CLAUDE.md rule 1). The description says which.
-   - **Does the PR add behaviour that 3.x doesn't have?** A new feature, option, default or API is an Important
-     finding, unless the plan names it (`ssl.verify.hostname`). So is a 3.x behaviour that changes without the plan
-     saying so (plan, Goal).
+   - A Phase 1 change to the 3.x code in `src/main` only keeps it compiling and passing on a Spark line, or fixes a
+     bug with its failing-first test (CLAUDE.md rule 1). The description says which.
+   - **In Phase 1: does the PR add behaviour to the 3.x code?** A new feature, option, default, API or port is an
+     Important finding, and so is a 3.x behaviour that changes without the plan saying so (roadmap Amendment 1).
+     New 4.x behaviour belongs in `com.redis.sparkredis`, from Phase 2.
+   - **Is a 4.x design justified by a 3.x issue or PR, not by the spec?** That's an Important finding: upstream
+     issues and PRs aren't requirements for 4.x (roadmap Amendment 1).
    - Tests: fix the code, not the test. Flag any weakened assertion, new skip or `ignore`, widened tolerance,
      edited test listed in `.claude/failing-first.txt` (or removed from it in this PR), or quarantine entry
      without a findings link.

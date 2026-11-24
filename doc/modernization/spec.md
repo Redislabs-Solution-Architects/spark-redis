@@ -4,8 +4,13 @@
 > Next artifact: [`roadmap.md`](roadmap.md), then one `plan.md` per phase, written in plan mode from this spec.
 
 This spec describes the connector we would build today if we were starting from scratch. The design is fixed
-here, and [`roadmap.md`](roadmap.md) sets the order of the work. Each section lists the open GitHub issues it
-resolves, so reviewers can check the design against what users have asked for.
+here, and [`roadmap.md`](roadmap.md) sets the order of the work. Each section lists the GitHub issues it
+resolves.
+
+> **Amended (roadmap Amendment 1, 2026-11-23).** The design follows Spark 4 and Redis 8 practice, for the best
+> experience a Spark 4 developer can get. The 3.x issues and PRs were written against 3.x, so they aren't
+> requirements. The issue links record which 3.x issues a 4.x feature resolves or makes moot. They don't say why
+> the feature exists, and an issue's request doesn't shape it.
 
 ---
 
@@ -523,6 +528,20 @@ Related behaviour:
 - **Spark 4 structured logging** adds MDC fields for table, model, shard and slot range.
 - **An `EXPLAIN` view of the chosen strategy**, for example `RedisScan[strategy=QueryEngine, index=idx:user,
   pushed=[age > 30], limit=100]`.
+- **Errors use Spark's error framework** (Amendment 1).
+  - **The exceptions:** every error the connector raises for a user mistake or a server condition is a
+    `SparkThrowable`, so it carries a named error condition, an SQLSTATE and its message parameters, as Spark's
+    own errors do. The connector implements `SparkThrowable` itself: its conditions, SQLSTATEs and message
+    templates are in its own `error-conditions.json`, read the way Spark reads its own.
+  - **The conditions** cover what users hit, for example:
+    - `REDIS_RESP3_REQUIRED`, for a server or proxy that refuses `HELLO 3`;
+    - `REDIS_OPTION_RENAMED`, for a 3.x option name (§2.11);
+    - `REDIS_CAPABILITY_MISSING`, for a write option that needs a missing command (§1);
+    - `REDIS_KEY_WRONG_TYPE`, for a key that doesn't hold the table model's type;
+    - `REDIS_VALUE_PARSE_FAILED`, which names the key, field, value and type (§2.8).
+  - **What users get:** they and their tools match on the condition rather than on message text, and Spark Connect
+    carries the condition to the client. A task failure that is a `SparkThrowable` reaches the driver unwrapped,
+    so the condition holds there too.
 
 ### 2.11 Compatibility and migration from 3.x
 
@@ -574,6 +593,8 @@ before Spark 3.5's extended LTS ends in November 2027.
 - **One command.** `./mvnw verify -Pit` is the agent feedback loop and the CI gate. It exits non-zero on any
   failure.
 - **Renamed-option tests.** Every 3.x option name in §2.11 fails with its documented message.
+- **Error-condition tests.** Each error condition in §2.10 is raised by a test and asserted by condition and
+  SQLSTATE, not by message text.
 - **Deterministic-key tests.** Retrying a write task or replaying a micro-batch leaves exactly the same set
   of keys.
 - **Protocol tests.** Connecting to a server that refuses `HELLO 3` fails with a clear RESP3 error. A
@@ -647,7 +668,7 @@ The existing 3.x releases still have all of these, for jobs that cannot move yet
 | Upstream marks Real-Time Mode or another API experimental or changes it | Put it behind a feature flag in its own module, outside the GA support promise |
 | A proxy or managed endpoint in the path does not support RESP3 | Fail fast at connect with a RESP3-specific error. Phase 0 checks Redis Software 8.2 and Redis Cloud databases with `HELLO 3`, and the docs list any unsupported proxies |
 | Some Query Engine replies may cost more to build in RESP3 than in RESP2 | Benchmark Query Engine reads under RESP3 against the Phase 0 baseline in Phases 2 and 4b. Raise any regression upstream rather than bringing RESP2 back |
-| Jobs built on the RDD API cannot upgrade without code changes | A migration guide that maps every RDD function and old option to its 4.x replacement, golden-layout tests showing the replacement writes the same data, 4.0.0-M1 still shipping the RDD API (deprecated) so jobs can move to Spark 4 first, and the existing 3.x releases for jobs that cannot move yet |
+| Jobs built on the RDD API or DSv1 options must change code to move to Spark 4. No 4.x release carries them (Amendment 1) | A migration guide that maps every RDD function and old option to its 4.x replacement, and golden-layout tests showing that the replacement writes the same data. Jobs that can't move yet stay on the existing 3.x releases on Spark 3.5, whose extended LTS (security fixes only) runs until November 2027 |
 | A 3.x job that relied on `hash` being the default model would now write JSON | A table's catalog entry sets its model, and migrated tables keep `hash`. A table with no catalog entry and no `model` whose prefix already holds hashes fails at planning. The migration guide lists this change first |
 | This connector and the Redis Connector for Spark are installed on the same cluster | Both register `redis`, so `format("redis")` fails for both. Separate packages avoid class clashes. The docs say to install one, or to use our full class name, and the troubleshooting guide covers the error |
 | Data written by 3.x is unreadable after upgrade | Golden-layout tests, the migration tool, and a documented one-time migration step |
