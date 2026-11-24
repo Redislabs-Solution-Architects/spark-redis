@@ -3,6 +3,9 @@ package com.redislabs.provider.redis.util
 import java.util.UUID
 
 import org.scalatest.Assertions
+import redis.clients.jedis.{Jedis, ScanParams}
+import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.Manifest
 
 object TestUtils {
@@ -14,6 +17,22 @@ object TestUtils {
 
   def generateRandomKey(): String = {
     UUID.randomUUID().toString.replace("-", "")
+  }
+
+  /**
+    * How many keys on `conn`'s server match the glob `pattern`. It uses `SCAN ... MATCH`, not `KEYS` (spec section
+    * 2.14), and counts each key once, since `SCAN` can return a key more than once. On a cluster it counts one node.
+    */
+  def countKeys(conn: Jedis, pattern: String): Long = {
+    val params = new ScanParams().`match`(pattern).count(1000)
+    val keys = mutable.Set[String]()
+    var cursor = ScanParams.SCAN_POINTER_START
+    do {
+      val page = conn.scan(cursor, params)
+      keys ++= page.getResult.asScala
+      cursor = page.getCursor
+    } while (cursor != ScanParams.SCAN_POINTER_START)
+    keys.size.toLong
   }
 
   /**
