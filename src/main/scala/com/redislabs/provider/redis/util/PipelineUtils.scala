@@ -25,30 +25,33 @@ object PipelineUtils {
     * @param f               function to applied for each item in the sequence
     * @return response from the server
     */
-  def mapWithPipeline[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)
-                        (implicit readWriteConfig: ReadWriteConfig): Seq[AnyRef] = {
+  def mapWithPipeline[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)(
+      implicit readWriteConfig: ReadWriteConfig): Seq[AnyRef] = {
     val totalResp = mutable.ListBuffer[JList[AnyRef]]()
+    val (last, pending) = inPipelines(conn, items)(f)(pipeline => totalResp += pipeline.syncAndReturnAll())
+    if (pending) totalResp += last.syncAndReturnAll()
+    totalResp.flatMap(_.asScala).toSeq
+  }
 
-    // iterate over items and create new pipelines periodically
+  /**
+    * Calls `f` for each item, on a pipeline that is passed to `sync` and replaced by a new one after every
+    * `maxPipelineSize` items.
+    *
+    * @return the last pipeline, and whether it has commands that `sync` wasn't given
+    */
+  private def inPipelines[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)(sync: Pipeline => Unit)(
+      implicit readWriteConfig: ReadWriteConfig): (Pipeline, Boolean) = {
     var i = 0
     var pipeline = conn.pipelined()
     for (x <- items.iterator) {
       f(pipeline, x)
       i = i + 1
       if (i % readWriteConfig.maxPipelineSize == 0) {
-        val resp = pipeline.syncAndReturnAll()
-        totalResp += resp
+        sync(pipeline)
         pipeline = conn.pipelined()
       }
     }
-
-    // sync remaining items
-    if (i % readWriteConfig.maxPipelineSize != 0) {
-      val resp = pipeline.syncAndReturnAll()
-      totalResp += resp
-    }
-
-    totalResp.flatMap(_.asScala).toSeq
+    (pipeline, i % readWriteConfig.maxPipelineSize != 0)
   }
 
   /**
@@ -63,24 +66,10 @@ object PipelineUtils {
     * @param f               function to applied for each item in the sequence
     * @throws JedisDataException if Redis replies with an error to any of the commands, see [[syncAndCheck]]
     */
-  def foreachWithPipeline[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)
-                            (implicit readWriteConfig: ReadWriteConfig): Unit = {
-    // iterate over items and create new pipelines periodically
-    var i = 0
-    var pipeline = conn.pipelined()
-    for (x <- items.iterator) {
-      f(pipeline, x)
-      i = i + 1
-      if (i % readWriteConfig.maxPipelineSize == 0) {
-        syncAndCheck(pipeline)
-        pipeline = conn.pipelined()
-      }
-    }
-
-    // sync remaining items
-    if (i % readWriteConfig.maxPipelineSize != 0) {
-      syncAndCheck(pipeline)
-    }
+  def foreachWithPipeline[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)(
+      implicit readWriteConfig: ReadWriteConfig): Unit = {
+    val (last, pending) = inPipelines(conn, items)(f)(syncAndCheck)
+    if (pending) syncAndCheck(last)
   }
 
   /**
@@ -99,22 +88,10 @@ object PipelineUtils {
     * @throws JedisDataException if Redis replies with an error to any of the commands synced so far,
     *                            see [[syncAndCheck]]
     */
-  def foreachWithPipelineNoLastSync[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)
-                                      (implicit readWriteConfig: ReadWriteConfig): Pipeline = {
-    // iterate over items and create new pipelines periodically
-    var i = 0
-    var pipeline = conn.pipelined()
-    for (x <- items.iterator) {
-      f(pipeline, x)
-      i = i + 1
-      if (i % readWriteConfig.maxPipelineSize == 0) {
-        syncAndCheck(pipeline)
-        pipeline = conn.pipelined()
-      }
-    }
-
-    // return pipeline, the client should sync pipeline with syncAndCheck
-    pipeline
+  def foreachWithPipelineNoLastSync[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)(
+      implicit readWriteConfig: ReadWriteConfig): Pipeline = {
+    // the caller syncs the last pipeline with syncAndCheck
+    inPipelines(conn, items)(f)(syncAndCheck)._1
   }
 
   /** How many times one write follows a `MOVED` or `ASK` redirect before it fails. */

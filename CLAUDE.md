@@ -36,7 +36,7 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home ./mvnw -B 
 | `src/main/scala/org/apache/spark/sql/redis/` | DataFrame source (DSv1, `hash` and `binary` models) and the Structured Streaming source (`stream/`) |
 | `src/test/scala/**/env/` | Testcontainers harness. Suites are split by topology: `standalone/`, `cluster/`, `acl/` |
 | `src/test/scala/**/golden/`, `src/test/resources/golden/` | Golden-layout tests and fixtures: the exact Redis data 3.x writes and reads |
-| `src/test/resources/{tls,legacy,containers}/`, `quarantine.txt` | Test certificates, Java-serialized 3.x blobs, container configs, tests skipped on Redis 8 |
+| `src/test/resources/{legacy,containers}/`, `quarantine.txt` | Java-serialized 3.x blobs, container configs, tests skipped on Redis 8. The TLS suite generates its certificates at run time (`env/TestCertificates.scala`) |
 | `scripts/check-*.sh` | Guardrail checks; CI runs them in `.github/workflows/guardrails.yml` |
 | `.claude/` | Hooks, the `verifier` agent, skills. `evals/` holds the agent eval tasks |
 
