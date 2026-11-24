@@ -150,6 +150,12 @@ trait WriteLayoutSuite extends GoldenSuite {
     sc.toRedisByteLISTs(sc.parallelize(Seq(bytes(s"$t:ttl") -> Seq(bytes("1")))), Ttl)
   }
 
+  scenario("rdd-to-redis-fixed-list") { t =>
+    // toRedisFixedLIST takes no TTL, so its variants are trimmed (listSize 3) and untrimmed (the default, no limit)
+    sc.toRedisFixedLIST(sc.parallelize(Seq("1", "2", "3", "4", "5"), 1), s"$t:trimmed", 3)
+    sc.toRedisFixedLIST(sc.parallelize(Seq("1", "2", "3"), 1), s"$t:untrimmed")
+  }
+
   // Consumer-group state after Structured Streaming reads
 
   scenario("stream-consumer-group") { t =>
