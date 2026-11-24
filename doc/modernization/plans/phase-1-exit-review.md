@@ -5,13 +5,16 @@
 >
 > **Updated the same day** after the owner's decisions on open items 2, 3, 5 and 6: the snapshot is republished, the
 > legacy README wording is approved, GitHub's generated notes replace Release Drafter, and CI runs nightly and by hand.
+>
+> **And after #55 and #56 merged:** the benchmark job's failure is found and fixed, and every benchmark passes in CI
+> (open item 6).
 
 ## Verdict
 
 **Phase 1 can't exit yet: 4 of its 5 criteria are met.**
 
-- **Met:** the full matrix passes in one run after a merge, the golden and legacy fixtures pass unchanged (the legacy ones on standalone only), snapshots
-  publish with their SBOMs, and DStreams are gone.
+- **Met:** the full matrix passes in one run after a merge, the golden and legacy fixtures pass unchanged (the legacy
+  ones on standalone only), snapshots publish with their SBOMs, and DStreams are gone.
 - **Not met:** the Guardrails criterion. `CLAUDE.md`, `REVIEW.md`, the verifier and the evals' instructions are
   updated for Phase 1, but the Phase 1 eval baseline hasn't run, so no pass rate is recorded. It needs the
   `eval-base-phase-1` tag first (open item 1).
@@ -59,6 +62,11 @@ Also merged:
   fills (the owner's decision).
 - **#52:** upstream #436, #438 and #439, ported to the 3.x baseline, at the owner's request.
 - **#53:** #52's port failed on JDK 21, which reports a negative array length differently. This fixes it.
+- **#55** (after this review): the 3.x `XINFO` decoder threw on Redis's nil values, which failed the stream
+  benchmarks (open item 6). Upstream took the fuller fix, Jedis's typed `XINFO`, as #440.
+- **#56** (after this review): upstream #441, #442 and #443, ported at the owner's request, with #441 as an owner's
+  exception to rule 1. The TLS suite now generates its certificates at run time, so `src/test/resources/tls/` and its
+  private keys are gone, and every suite passes inside Claude's sandbox.
 
 ## Measurements
 
@@ -108,9 +116,19 @@ The plan's list, from the roadmap's "How we measure it":
    `ci.yml`. A manual dispatch on `spike/phase-1` runs that copy directly. Dispatching `master`'s copy by hand, as
    the schedule does, started run
    [45455720881](https://github.com/Redislabs-Solution-Architects/spark-redis/actions/runs/45455720881) on `5e7a6a0`:
-   all 6 matrix jobs passed. **The benchmark job ran for the first time and failed** after 5 minutes. It may fail
-   without failing the run. Its `benchmarks.csv` (584 bytes) uploaded, so some benchmarks ran first. The cause
-   isn't known yet: CI's logs aren't readable here, and B3, which owns the benchmarks, is in Phase 2.
+   all 6 matrix jobs passed.
+   - **The benchmark job, running for the first time, failed** on both stream benchmarks. The stream source moves its
+     consumer group with `XGROUP SETID` after each batch, and Redis then reports the group's `entries-read` as nil.
+     The 3.x `XINFO` decoder threw `scala.MatchError` on that nil (`case other: Any` doesn't match `null`), so the
+     benchmark's last check failed after its read had worked. It went unnoticed because Phase 0 recorded the baseline
+     before that reader change, and CI never ran benchmarks until `master` had `ci.yml`.
+   - **Fixed by #55,** test first. Upstream took the fuller fix, Jedis's typed `XINFO`, as #440.
+   - **Since then,** run [45487519438](https://github.com/Redislabs-Solution-Architects/spark-redis/actions/runs/45487519438)
+     on `83f3655` (after #55 and #56) passed all 6 matrix jobs and the benchmark job, with all 60 timings.
+   - **The stream timings don't compare with the Mac baseline.** In CI, 1,000,000 stream entries took 2.8 s
+     (standalone) and 3.7 s (cluster), against about 130 s on the owner's Mac. The other benchmarks come out close
+     on both. The stream source reads in small `XRANGE` batches, so it makes thousands of round trips, and Docker
+     Desktop's network on macOS is the likely cost. That's for B3 (Phase 2) to take into account.
 7. **Carried into Phase 2:**
    - the other supported Redis lines (8.2–8.10) return to `redis_secondary` before 4.0.0-M1;
    - D4 (a GPG signing key) and D7 (the benchmark baseline) apply to 4.0.0-M1.
