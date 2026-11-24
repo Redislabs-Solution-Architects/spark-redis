@@ -1,15 +1,15 @@
-# Publishes the current SNAPSHOT to GitHub Packages in this fork (Phase 0 plan, step C9; spec 2.13).
+# Publishes the current SNAPSHOT to GitHub Packages in this fork (Phase 0 plan, step C9; Phase 1 plan, step B4;
+# spec 2.13): the parent pom and one artifact per Spark line, com.redis:spark-redis-spark-<line>_2.13, each with its
+# sources jar, javadoc jar, jar-with-dependencies and CycloneDX SBOM (classifier cyclonedx). Releases go through
+# release.yml instead.
 #
 # Run it by hand: Actions > Publish snapshot > Run workflow, or
-#   gh workflow run publish-snapshot.yml -R Redislabs-Solution-Architects/spark-redis --ref <branch>
-#
-# The dry run keeps today's coordinates, com.redislabs:spark-redis_2.12:3.1.0-SNAPSHOT. Phase 1 switches to the
-# per-Spark com.redis artifacts.
+#   gh workflow run publish-snapshot.yml -R Redislabs-Solution-Architects/spark-redis --ref spike/phase-1
 #
 # Using the package: GitHub Packages needs a token even for public packages. Add the repository
 # https://maven.pkg.github.com/Redislabs-Solution-Architects/spark-redis to your build, and give Maven a server
-# entry with id "github", your GitHub user name, and a token with the read:packages scope. Phase 1 adds GitHub
-# Release assets, which download without a token.
+# entry with id "github", your GitHub user name, and a token with the read:packages scope. Releases also attach the
+# jars to a GitHub Release, which downloads without a token.
 name: Publish snapshot
 
 on:
@@ -26,14 +26,14 @@ concurrency:
 jobs:
   publish:
     name: Deploy to GitHub Packages
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '8'
+          java-version: '17'
           cache: maven
           # Writes ~/.m2/settings.xml with a "github" server that reads these environment variables.
           server-id: github

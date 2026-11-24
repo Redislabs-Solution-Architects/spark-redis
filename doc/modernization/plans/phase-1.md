@@ -410,22 +410,29 @@ Lane A is one session working in sequence, because the port touches every file (
 
 > **Narrowed by roadmap Amendment 1.** Phase 1 builds `release.yml` and moves `publish-snapshot.yml` to JDK 17 and
 > the three modules, and publishes snapshots only, with the SBOM. The `v4.0.0-M1` release, the smoke job and the
-> README section come with Phase 2's first release.
+> README section come with Phase 2's first release. **Status:** built in Phase 1 (the B4 PR), as below.
 
 - **Files:**
   - new: `.github/workflows/release.yml`;
   - `.github/workflows/publish-snapshot.yml`, moved to JDK 17 and to the three modules;
-  - the parent pom, which gains the CycloneDX plugin 2.9.3;
-  - `README.md`: a "4.0.0-M1" section covering the coordinates, the GitHub Packages token, the Release
+  - `.github/matrix.jq`, which gains the `all` matrix: CI's pull-request and full matrices together;
+  - the parent pom and the three module poms, which gain the CycloneDX plugin 2.9.3 and a sources jar;
+  - Phase 2: `README.md`, a "4.0.0-M1" section covering the coordinates, the GitHub Packages token, the Release
     assets, the removed DStreams, the deprecated RDD API and `ssl.verify.hostname`.
-- **Change:** `release.yml` (`workflow_dispatch`, with a version input):
-  1. sets the version;
-  2. runs the full matrix;
-  3. deploys the three artifacts to GitHub Packages;
-  4. generates a CycloneDX SBOM;
-  5. creates the `v4.0.0-M1` GitHub Release, with the jars, sources and javadoc jars, the SBOM, SHA-256 checksums,
-     and Release Drafter's notes. Following D4, the assets are GPG-signed when the repository has a signing-key
-     secret. Without one, M1 ships with the SBOM and checksums only, and signing starts with M2.
+- **Change:** pushing a tag `v<version>` runs `release.yml`. GitHub dispatches a workflow only when the default
+  branch has it, and the fork's `master` doesn't have this one, so a tag starts the release instead of
+  `workflow_dispatch`. The workflow:
+  1. runs every combination of the full matrix (`matrix.jq`'s `all`), and stops unless every one passes;
+  2. sets the version in every pom;
+  3. deploys the parent pom and the three artifacts to GitHub Packages, with each one's CycloneDX SBOM;
+  4. creates the GitHub Release, with the jars, sources and javadoc jars, the jars-with-dependencies, the SBOMs,
+     SHA-256 checksums, and GitHub's generated notes. Release Drafter runs only on pushes to `master`, the 3.x line.
+     Following D4, the assets are GPG-signed when the repository has a signing-key secret. Without one, M1 ships
+     with the SBOMs and checksums only, and signing starts with M2.
+
+  A pull request that changes the workflow, a pom, `versions.yml` or `matrix.jq` runs it as a dry run: it tests,
+  builds the release its snapshot is heading for, signs it with a throwaway key, and uploads it as a workflow
+  artifact. It publishes nothing and reads no secrets.
 
   A smoke job then runs `spark-submit` on Spark 4.1, 4.2 and 4.3 with each released jar. It writes and reads a
   `hash` table and compares the result with the golden scenario.
@@ -491,7 +498,8 @@ The owner signs off on each item:
       quarantined.
 - [ ] The golden write and read fixtures and the legacy fixtures pass unchanged on every line, in standalone and
       cluster.
-- [ ] **Snapshots:** `release.yml` publishes snapshots of the three per-Spark artifacts, with the SBOM (B4, narrowed).
+- [ ] **Snapshots:** `publish-snapshot.yml` publishes snapshots of the three per-Spark artifacts, with the SBOM, and
+      `release.yml`'s dry run passes (B4, narrowed).
 - [ ] **No DStreams:** nothing in `src/` imports `org.apache.spark.streaming`.
 
 **Moved by roadmap Amendment 1:**
