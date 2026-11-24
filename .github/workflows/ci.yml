@@ -1,0 +1,30 @@
+# Starts spike/phase-1's CI nightly and by hand (Phase 1 exit review, open item 6). GitHub runs a schedule, and lets
+# a workflow be dispatched by hand, only when the default branch has the workflow, so this file is on master. The
+# workflow it starts is spike/phase-1's .github/workflows/ci.yml, which tests every Spark, Redis and JDK line:
+# - by hand on spike/phase-1 (gh workflow run ci.yml -R Redislabs-Solution-Architects/spark-redis --ref spike/phase-1):
+#   GitHub runs spike/phase-1's copy of ci.yml directly, and this file isn't used;
+# - nightly, or by hand on master: this file dispatches ci.yml on spike/phase-1. A scheduled run always checks out
+#   the default branch, upstream's 3.x code, which has none of spike/phase-1's build, so it can't run the tests here.
+# No push or pull_request trigger: syncing master with upstream starts nothing here (upstream's integration.yml
+# still runs on master).
+name: CI
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Start CI on spike/phase-1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write   # a GITHUB_TOKEN dispatch starts a workflow run, unlike its other events
+    steps:
+      - run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref spike/phase-1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
