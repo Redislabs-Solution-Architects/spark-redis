@@ -1,7 +1,9 @@
 package org.apache.spark.sql.redis
 
-import java.io.{ByteArrayInputStream, IOException, InputStream, InvalidClassException, ObjectInputStream,
-  ObjectStreamClass}
+import java.io.{
+  ByteArrayInputStream, IOException, InputStream, InvalidClassException, ObjectInputStream,
+  ObjectStreamClass
+}
 import java.lang.reflect.{InvocationHandler, InvocationTargetException, Method, Proxy}
 
 import org.apache.commons.lang3.SerializationException
@@ -36,13 +38,14 @@ private[redis] object RestrictedDeserialization {
       // the constructor already reads the stream header
       val in = new AllowlistObjectInputStream(new ByteArrayInputStream(bytes), allowlist)
       val arrays = ArrayLengthLimit.install(in, bytes.length)
-      try in.readObject().asInstanceOf[T] catch {
+      try in.readObject().asInstanceOf[T]
+      catch {
         case e: ClassNotAllowedException => throw e
         case e: InvalidClassException if arrays.exceeded => throw new SerializationException(arrays.message, e)
       } finally in.close()
     } catch {
       case e: ClassNotAllowedException => throw e
-      case e@(_: IOException | _: ClassNotFoundException) => throw new SerializationException(e)
+      case e @ (_: IOException | _: ClassNotFoundException) => throw new SerializationException(e)
     }
 
   private class AllowlistObjectInputStream(in: InputStream, allowlist: ClassAllowlist) extends ObjectInputStream(in) {
@@ -81,7 +84,7 @@ private[redis] object RestrictedDeserialization {
   private object ArrayLengthLimit {
 
     /** The elements that one stream's arrays have declared so far. */
-    final class Elements private[ArrayLengthLimit](maxElements: Long) {
+    final class Elements private[ArrayLengthLimit] (maxElements: Long) {
       private[ArrayLengthLimit] var elements = 0L
 
       /** Whether the stream has declared more elements than `maxElements`. The array that went over isn't allocated. */
@@ -165,7 +168,8 @@ private[redis] object RestrictedDeserialization {
     }
 
     private def unwrapped(result: => AnyRef): AnyRef =
-      try result catch {
+      try result
+      catch {
         case e: InvocationTargetException => throw e.getCause
       }
   }
@@ -180,12 +184,13 @@ private[redis] object RestrictedDeserialization {
   * @param proxy     whether the stream holds a dynamic proxy, which is never allowed
   */
 final class ClassNotAllowedException(className: String, val key: Option[String] = None, val proxy: Boolean = false)
-  extends InvalidClassException(className, "not allowed") {
+    extends InvalidClassException(className, "not allowed") {
 
   override def getMessage: String = {
     val where = key.map(k => s" in key '$k'").getOrElse("")
     val what = if (proxy) s"a dynamic proxy implementing $className" else s"class '$className'"
-    val hint = if (proxy) "" else " If the value holds a user-defined type, allow its class with the option " +
+    val hint = if (proxy) ""
+    else " If the value holds a user-defined type, allow its class with the option " +
       s"'$SqlOptionDeserializationAllowedClasses'."
     s"The Java-serialized value$where contains $what, which isn't allowed. spark-redis only deserializes the " +
       "classes it writes itself, so that a value someone else stored in Redis can't run code in Spark." + hint

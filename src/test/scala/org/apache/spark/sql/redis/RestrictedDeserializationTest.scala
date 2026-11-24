@@ -1,7 +1,9 @@
 package org.apache.spark.sql.redis
 
-import java.io.{ByteArrayOutputStream, DataOutputStream, ObjectInputStream, ObjectStreamClass, ObjectStreamConstants,
-  Serializable => JSerializable}
+import java.io.{
+  ByteArrayOutputStream, DataOutputStream, ObjectInputStream, ObjectStreamClass, ObjectStreamConstants,
+  Serializable => JSerializable
+}
 import java.lang.reflect.{InvocationHandler, Method, Proxy}
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,7 +34,8 @@ class RestrictedDeserializationTest extends FunSuite with Matchers with BeforeAn
   }
 
   override def afterAll(): Unit = {
-    try spark.stop() finally super.afterAll()
+    try spark.stop()
+    finally super.afterAll()
   }
 
   private val persistence = new BinaryRedisPersistence()

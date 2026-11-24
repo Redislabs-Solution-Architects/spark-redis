@@ -53,7 +53,8 @@ object RedisContainers {
   /** Ports the OS reports as free right now. Another process could take one before Docker binds it. */
   private def freePorts(count: Int): Seq[Int] = {
     val sockets = (1 to count).map(_ => new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")))
-    try sockets.map(_.getLocalPort) finally sockets.foreach(_.close())
+    try sockets.map(_.getLocalPort)
+    finally sockets.foreach(_.close())
   }
 
   // Each server is started once per JVM, and the outcome is kept even when the start failed. A plain lazy val would
