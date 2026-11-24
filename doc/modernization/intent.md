@@ -113,7 +113,7 @@ A Spark connector built for today's platforms, the one we would design if we sta
 | Logical databases | Not supported. Namespaces are connection profiles only |
 | New option names | Accepted as proposed in spec §2.11 |
 | Spark 3.5 and `branch-3.x` | No bridge release during the spike. `branch-3.x` hosts only `spark-redis-migrate`, because it needs the 3.x classpath. Users who cannot move to Spark 4 yet stay on the existing 3.x releases. A bridge release can be reconsidered if the spike becomes the official line |
-| First 4.x release (roadmap Amendment 1, proposed 2026-11-23) | DSv2-native: 4.0.0-M1 is Phase 2's DataSource V2 batch core, and Phase 1 builds and tests on Spark 4 without a release. No 4.x release carries the RDD API, DSv1 or the `org.apache.spark.sql.redis` package. 3.x jobs stay on the 3.x releases on Spark 3.5 until they migrate. The 3.x issues and PRs aren't requirements for 4.x |
+| First 4.x release (roadmap Amendment 1, approved 2026-11-23) | DSv2-native: 4.0.0-M1 is Phase 2's DataSource V2 batch core, and Phase 1 builds and tests on Spark 4 without a release. No 4.x release carries the RDD API, DSv1 or the `org.apache.spark.sql.redis` package. 3.x jobs stay on the 3.x releases on Spark 3.5 until they migrate. The 3.x issues and PRs aren't requirements for 4.x |
 | Java package and format name | The `com.redis.sparkredis` package, so classes never clash with the Redis Connector for Spark (`com.redis.spark`). The format name stays `redis`. Install only one of the two connectors per cluster, or use our full class name (spec §2) |
 
 ## Open questions

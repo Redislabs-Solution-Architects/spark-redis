@@ -5,8 +5,9 @@ description: The checklist for adding a new Apache Spark minor line to spark-red
 
 # Adding or dropping a Spark line
 
-> **Draft.** Phase 1 seeds this skill from plan steps B1 and B2. B1 added the per-Spark modules described here;
-> B2 finishes the CI matrix steps, so check those against `versions.yml` and `ci.yml` before you rely on them.
+> Phase 1 plan steps B1 (the per-Spark modules) and B2 (the CI matrix) built what this skill describes. CI reads
+> `versions.yml` through `.github/matrix.jq`, so adding a line there adds its jobs; `scripts/spark-lines.sh` prints
+> the lines for commands and docs.
 
 spark-redis 4.x publishes **one artifact per supported Spark minor**, for example
 `com.redis:spark-redis-spark-4.2_2.13` (spec §2, "Build"). All artifacts share one source tree. A thin overlay holds
@@ -36,8 +37,8 @@ Do these in one PR, in this order:
 3. **Overlay.** Create `src/spark-4.<n>/scala/` with the same one-line README as the other overlays. Put code there
    only when the shared source can't compile against this line, or when the line adds an interface we use
    (spec §1, "Anything newer is capability-gated"). Keep each overlay as small as possible.
-4. **`versions.yml`.** Add the line to `spark`. If it is now the newest line, it also gets the extra JDKs
-   (`jdk_newest_spark`). Don't copy the list anywhere else: CI and the scripts read this file.
+4. **`versions.yml`.** Add the line to `spark`. CI then tests it on every supported Redis line with `jdk`, and on
+   `jdk_secondary` with the required Redis line. Don't copy the list anywhere else: CI and the scripts read this file.
 5. **Build and test.** Run `./mvnw -B verify -pl spark-4.<n>` on JDK 17, with the required Redis line. The golden and
    legacy fixtures must pass unchanged. A failure is a finding: fix the code, never the test or a fixture.
 6. **Docs.** Add the line to the README's compatibility table and to the release notes of the next connector

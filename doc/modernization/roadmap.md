@@ -15,7 +15,7 @@
 | | Today (`master`, Sep 2026) | Target |
 |---|---|---|
 | Spark | 3.2.1 (EOL) | 4.1, 4.2, 4.3; then 4.4 and the 4.5 LTS as they ship |
-| Scala / JDK | 2.12 / Java 8 | 2.13 / JDK 17 (tested on 17, 21 and 25) |
+| Scala / JDK | 2.12 / Java 8 | 2.13 / JDK 17 and 21 (the build targets 17) |
 | Redis | tested against 6.0.10 | 8.2 (floor) through 8.10; 8.12 when it reaches GA |
 | Client | Jedis 3.9 | Jedis 8.0 |
 | Wire protocol | RESP2 | RESP3 only, with no fallback |
@@ -79,7 +79,7 @@ part of Phase 3: a consumer-group stream source and a streaming sink. It covers 
 
 ## Amendment 1 (2026-11-23): the first 4.x release is DSv2-native
 
-> **Status: proposed, for the owner's approval.** The owner's goal: the 4.x connector is designed with Spark 4
+> **Status: approved by the owner on 2026-11-23** (PR #47). The owner's goal: the 4.x connector is designed with Spark 4
 > development practices in mind, and gives a Spark 4 developer the best experience. The sections below already
 > read as amended. This one records what changed and why.
 
@@ -370,7 +370,8 @@ closed the "run on Spark 4" issue family, which now closes with 4.0.0-M1 in Phas
    Phase 2e deletes it before 4.0.0-M1 (Amendment 1).
 6. **Per-Spark-minor artifacts** for 4.1, 4.2 and 4.3. The CI matrix is
    Spark {4.1, 4.2, 4.3} × Redis {8.2, 8.4, 8.6, 8.8, 8.10} × {standalone, cluster, TLS}, on JDK 17, with
-   JDK 21 and 25 run on the newest Spark line.
+   JDK 21 on every Spark line. The connector supports JDK 17 and 21 only (spec §1). For now CI tests Redis 8.6
+   only (owner decision, 2026-11-23), and the other Redis lines return before 4.0.0-M1.
 7. **`branch-3.x`:** set up the branch, on Spark 3.5 and Scala 2.12, that will host `spark-redis-migrate`
    (Phase 2e). There is no bridge release.
 8. **The release workflow** builds, signs and publishes the per-Spark artifacts. In Phase 1 it publishes

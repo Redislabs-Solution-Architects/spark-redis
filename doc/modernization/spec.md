@@ -33,8 +33,9 @@ today, and nothing else.** Snapshot taken on 2026-11-21.
 | 4.0 | 2025-05-23 | At EOL (4.0.5 is probably the last release) | 17/21 | 3.9+ | Not supported |
 | 3.5 | 2023-09-13 | Extended LTS, security fixes only, until Nov 2027 | 8/11/17 | 3.8+ | Not supported. `branch-3.x` hosts only the migration tool (§2.11) |
 
-All supported Spark lines use **Scala 2.13** only. The build targets **JDK 17** and CI also runs on JDK 21
-and 25.
+All supported Spark lines use **Scala 2.13** only. The connector supports **JDK 17 and 21**, the JDKs every
+supported Spark line supports (owner decision, 2026-11-23). The build targets JDK 17, and CI also runs on JDK 21.
+Spark 4.2 and later also run on JDK 25, which the connector doesn't support or test.
 
 **Redis.** Standard releases get fixes for 6 months after the next minor ships. Extended releases (the
 second minor and the last minor of each major) get 5 years
@@ -98,7 +99,8 @@ Anything newer is **capability-gated**:
   - for Redis, the current extended 8.x line and every standard 8.x line that is still getting patches
 
   Lines that get **security fixes only** (Spark 3.5 extended LTS, Redis 7.x and 6.2) are out of scope.
-- CI tests the **latest patch release of every supported line**, across every supported topology.
+- CI tests the **latest patch release of every supported line**, across every supported topology. For now it tests
+  Redis 8.6 only (owner decision, 2026-11-23). The other supported Redis lines return to CI before 4.0.0-M1.
 - We add support for a new upstream line in the **first connector minor release after its GA**. We drop a
   line in the **first connector minor release after its upstream EOL**.
 - The connector detects **capabilities, not versions**. It probes `COMMAND INFO <cmd>` and `MODULE LIST` /

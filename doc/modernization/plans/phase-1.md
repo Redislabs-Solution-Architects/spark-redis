@@ -7,7 +7,7 @@
 > - the signed [Phase 0 exit review](phase-0-exit-review.md).
 >
 > Status: **approved by the owner on 2026-11-23**, with the seven [decisions](#decisions-for-the-owner) accepted as
-> recommended. **Amended the same day by roadmap Amendment 1** (proposed, for the owner's approval): Phase 1
+> recommended. **Amended the same day by roadmap Amendment 1**, approved with PR #47: Phase 1
 > releases nothing, and the first 4.x release, 4.0.0-M1, is Phase 2's DataSource V2 core.
 >
 > - **What the amendment does to Phase 1's steps:**
@@ -105,7 +105,7 @@ Jedis 8.0.2 jars:
 | Where | Setup |
 |---|---|
 | Owner's Mac (arm64) | **Zulu 17** (17.0.21.1) at `/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home` builds and tests 4.x. Homebrew's `openjdk@17` (the same version, jenv's global default) and `openjdk@21` are also installed, the latter for local JDK 21 runs. **Zulu 8** stays for `branch-3.x`. As in Phase 0, always set `JAVA_HOME`, because `java` on `PATH` comes from jenv. Docker Desktop for Testcontainers; the Maven Wrapper |
-| CI | GitHub Actions, `ubuntu-24.04`, Temurin 17, plus 21 and 25 on the newest Spark line. Docker on the runners. `branch-3.x` keeps Temurin 8 |
+| CI | GitHub Actions, `ubuntu-24.04`, Temurin 17, plus 21 on every Spark line (the connector supports JDK 17 and 21, spec §1). Docker on the runners. `branch-3.x` keeps Temurin 8 |
 | Claude's sandbox | Reaches the Docker socket. It can't read `src/test/resources/tls/*.key`, so suites that start the TLS container run outside the sandbox. It can't write `.claude/hooks/` or `.claude/skills/`, so the owner writes or approves those edits (X1) |
 
 ## Branches, lanes and file ownership
@@ -372,14 +372,16 @@ Lane A is one session working in sequence, because the port touches every file (
   - **`versions.yml` stays the only list of lines.** It gains:
     - `spark: ["4.1", "4.2", "4.3"]`;
     - `spark_reference: "4.2"`, the line with the longest maintenance window (roadmap, Phase 1 risk);
-    - `jdk: ["17"]`, and `jdk_newest_spark: ["21", "25"]`;
-    - the Redis lines from D1.
+    - `jdk: ["17"]`, and `jdk_secondary: ["21"]`. The connector supports JDK 17 and 21 only (spec §1, owner
+      decision on 2026-11-23); JDK 25, planned here at first, is dropped;
+    - the Redis lines from D1. For now that's Redis 8.6 only, with `redis_secondary` empty (owner decision,
+      2026-11-23); the other supported lines return before 4.0.0-M1.
 
     The `scala` key goes.
   - **Pull requests run** the reference Spark line × the required Redis line × JDK 17.
-  - **After each merge and nightly,** CI runs:
+  - **After each merge, and on manual dispatch,** CI runs:
     - every Spark line × every supported Redis line × JDK 17;
-    - the newest Spark line on JDK 21 and 25.
+    - every Spark line on JDK 21, with the required Redis line.
   - **Each job** runs `./mvnw -B verify -pl spark-<line> -Dredis.image=redis:<redis>`, so every job covers
     standalone, cluster, TLS and ACL. The suites start all four.
 - **Proof:**
@@ -440,7 +442,7 @@ Lane A is one session working in sequence, because the port touches every file (
 - **Change:**
   - **CI:** `ci.yml` and `guardrails.yml` run on pushes to the branch and on PRs into it. The branch's copy of
     `ci.yml` adds `branch-3.x` to its push trigger.
-  - **Protection:** the owner protects the branch like `spike/phase-0`.
+  - **Protection:** none, like `spike/phase-0` and `spike/phase-1`, which the owner leaves unprotected.
   - **README:** a note at the top says the branch exists only for `spark-redis-migrate`, and links to the 3.x
     releases for jobs that stay on Spark 3.
 - **Proof:** CI passes on `branch-3.x`, all 590 tests.
@@ -471,7 +473,7 @@ Lane A is one session working in sequence, because the port touches every file (
 
 ## Order
 
-0. **The owner creates and protects `spike/phase-1`** from `spike/phase-0` after this plan merges, as for
+0. **The owner creates `spike/phase-1`** (done; left unprotected, the owner's choice) from `spike/phase-0` after this plan merges, as for
    `spike/phase-0`.
 1. **X1 and A1.** Everything else builds on A1.
 2. **In parallel, up to three sessions:**
@@ -485,7 +487,7 @@ Lane A is one session working in sequence, because the port touches every file (
 
 The owner signs off on each item:
 
-- [ ] For each Spark line, `./mvnw verify` passes on the full matrix (D1) in one nightly run, with nothing
+- [ ] For each Spark line, `./mvnw verify` passes on the full matrix (D1) in one run, after a merge or on manual dispatch, with nothing
       quarantined.
 - [ ] The golden write and read fixtures and the legacy fixtures pass unchanged on every line, in standalone and
       cluster.
@@ -506,6 +508,14 @@ The owner signs off on each item:
 Amendment 1:
 - D4 (signing) and D7 (the benchmark baseline) apply to Phase 2's 4.0.0-M1;
 - D6 (keep the package names in M1) no longer applies, because no release carries the 3.x packages.
+
+D1, as built in B2:
+- **JDKs:** the connector supports JDK 17 and 21 only (owner decision, 2026-11-23), so JDK 25 is out of the matrix.
+- **JDK 21 runs on every Spark line,** not just the newest.
+- **Redis 8.6 only, for now** (owner decision, 2026-11-23). The other supported Redis lines (8.2–8.10) return to
+  `redis_secondary` before 4.0.0-M1. Until then, a merge runs 6 jobs: every Spark line on JDK 17 and 21, all on 8.6.
+- **There's no nightly run.** GitHub runs schedules only from the default branch, which doesn't have `ci.yml`, so
+  the full matrix runs after each merge and on manual dispatch.
 
 | # | Question | Decision |
 |---|---|---|
@@ -528,7 +538,7 @@ Amendment 1:
 | The Spark internals that the V1 streaming source uses (`Source`, `HDFSMetadataLog`, `internalCreateDataFrame`) change again in 4.2 or 4.3 | Each module compiles its own line, and an overlay can hold a per-line shim. Phase 3 replaces the source with DSv2 |
 | Binary-model rows read differently on Spark 4: `RestrictedDeserialization`'s allowlist names Spark 3.2–3.5 classes | The golden binary fixtures and `LegacyFixturesSuite` run on every line. Allowlist entries for Spark 4 come only with a test that reads a 3.x row |
 | ANSI mode changes a result | The connector parses with JVM parsers rather than Spark casts. Any change goes in the findings doc and is fixed back to the 3.x result |
-| The 17-job matrix is slow or flaky | PRs run one job (D1). The full matrix runs after merge and nightly. A flaky test is fixed, never quarantined, without the owner |
+| The 17-job matrix is slow or flaky | PRs run one job (D1). The full matrix runs after each merge and on manual dispatch. A flaky test is fixed, never quarantined, without the owner |
 | Spark 4.1 reaches EOL (about June 2027) before 4.0.0 GA | The `spark-4.1` module and its CI jobs are deleted. GA ships with a 4.2 floor (roadmap) |
 | Users on the 3.x artifact pick up M1 by accident | M1 uses new coordinates (`com.redis:spark-redis-spark-<line>_2.13`), so no 3.x build resolves to it |
 
