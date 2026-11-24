@@ -10,8 +10,3 @@
 # The PR that fixes the bug removes the test's line and leaves the test as it is: scripts/check-failing-first.sh
 # fails a PR that removes a line and also changes or deletes its test, and the test jobs show that it passes. A
 # line removed in the working tree keeps protecting its test until the removal is committed.
-
-# Upstream fixes ported to the 3.x baseline (owner's request, 2026-11-23):
-src/test/scala/org/apache/spark/sql/redis/RestrictedDeserializationTest.scala  # upstream #436, #438
-src/test/scala/org/apache/spark/sql/redis/SchemaEncodingTest.scala  # upstream #436
-src/test/scala/com/redislabs/provider/redis/RedisConfigSuite.scala  # upstream #439
