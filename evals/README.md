@@ -42,12 +42,27 @@ the same way. The Phase 1 baseline (plan step X1) runs every task from it, on JD
 stay on JDK 8, because that commit is 3.x code. If a task's setup no longer applies on the Phase 1 base, its fix is a
 PR of its own, noted in the results table.
 
+**What changes on `eval-base-phase-1`** (tagged on 2026-11-24 at `13885f1`, A1's merge):
+
+- **Tasks 04–10's features are already there:** Phase 0 merged what they ask for. Their setups remove it first, each
+  with its patch in [`setup/`](setup/). Task 09 also deletes the CSV sink's own test, which came after the Phase 0 base.
+  Each setup was checked on the tag, on JDK 17: the code still compiles, and the task's acceptance test fails, while
+  every acceptance test passes on the tag itself.
+- **Two starting states differ from Phase 0's on purpose,** so the prompts stay true:
+  - 07 puts back the one `SETEX` per row that its prompt describes. By the tag, the binary model had moved to
+    `SET … EX`.
+  - 08 puts back `toRedisKV`'s writer from before Phase 0's fix (#19), so a correct test fails, as it did in Phase 0.
+    The other writers still follow redirects.
+- **Task 03 is n/a:** the tag has no `quarantine.txt`.
+- **The answers are reachable:** every feature these tasks remove is in the repository's history, and most are in
+  upstream too. Check the transcript for code taken from there.
+
 ## Running one task
 
 ```bash
 EVALS=$PWD/evals                       # this folder, in your own checkout: the acceptance tests stay here
 N=04-client-name                       # the task
-git worktree add -b "eval/$N-$(date +%Y%m%d)" "$TMPDIR/eval-$N" eval-base-phase-0
+git worktree add -b "eval/$N-$(date +%Y%m%d)" "$TMPDIR/eval-$N" eval-base-phase-0   # eval-base-phase-1 for Phase 1
 cd "$TMPDIR/eval-$N"
 # Only when testing a guardrail change: take the guardrails from the candidate commit.
 #   git checkout <candidate> -- CLAUDE.md REVIEW.md .claude scripts .scalafmt.conf

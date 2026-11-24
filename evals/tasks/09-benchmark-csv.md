@@ -13,6 +13,9 @@ bench=src/test/scala/com/redislabs/provider/redis/df/benchmark
 git checkout 37c855d -- src/test/scala/com/redislabs/provider/redis/RedisBenchmarks.scala "$bench"
 added=$(git diff --name-only --diff-filter=A 37c855d -- "$bench")
 [ -z "$added" ] || git rm -q $added
+# eval-base-phase-1 also has the CSV sink's own test, from after the Phase 0 base
+csv=src/test/scala/com/redislabs/provider/redis/RedisBenchmarksCsvSuite.scala
+[ ! -f "$csv" ] || git rm -q "$csv"
 ./mvnw -B -q test-compile
 rm -f target/benchmarks.csv
 ```
