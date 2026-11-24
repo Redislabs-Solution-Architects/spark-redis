@@ -275,6 +275,42 @@
 						</execution>
 					</executions>
 				</plugin>
+				<!-- The sources jar, published with each artifact and attached to its GitHub Release (spec 2.13). -->
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-source-plugin</artifactId>
+					<version>3.4.0</version>
+					<executions>
+						<execution>
+							<id>attach-sources</id>
+							<goals>
+								<goal>jar-no-fork</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<!-- A CycloneDX SBOM of what each artifact ships (spec 2.13): target/bom.json, attached with the cyclonedx
+				     classifier, so it is deployed with the jars. Spark's provided dependencies and test dependencies stay
+				     out of it. -->
+				<plugin>
+					<groupId>org.cyclonedx</groupId>
+					<artifactId>cyclonedx-maven-plugin</artifactId>
+					<version>2.9.3</version>
+					<configuration>
+						<outputFormat>json</outputFormat>
+						<outputName>bom</outputName>
+						<includeProvidedScope>false</includeProvidedScope>
+						<includeTestScope>false</includeTestScope>
+					</configuration>
+					<executions>
+						<execution>
+							<phase>package</phase>
+							<goals>
+								<goal>makeBom</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
 				<!-- disable surefire -->
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>

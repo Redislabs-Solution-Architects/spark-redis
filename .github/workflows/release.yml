@@ -1,0 +1,189 @@
+# Releases spark-redis 4.x (Phase 1 plan, step B4; spec §2.13). Pushing a tag v<version>, for example v4.0.0-M1:
+#   1. tests every Spark, Redis and JDK combination in versions.yml (CI's pull-request and full matrices together),
+#      and stops unless every one passes;
+#   2. sets <version> in every pom;
+#   3. deploys the parent pom and each Spark line's artifacts to GitHub Packages;
+#   4. creates a GitHub Release with each Spark line's jar, sources jar, javadoc jar, jar-with-dependencies and
+#      CycloneDX SBOM, a SHA256SUMS file, and GPG signatures when the repository has a signing key (decision D4).
+#
+# A pull request that changes this file, a pom or the matrix runs the same jobs as a dry run. It tests, sets the
+# version its snapshot is heading for (4.0.0-M1-SNAPSHOT becomes 4.0.0-M1), builds and collects the assets, signs
+# them with a throwaway key, and uploads them as a workflow artifact. It publishes nothing and reads no secrets.
+#
+# A tag rather than workflow_dispatch: GitHub dispatches a workflow only when the default branch has it, and the
+# fork's master doesn't have this one.
+#
+# Phase 1 publishes snapshots only, through publish-snapshot.yml. The first tag is v4.0.0-M1, in Phase 2.
+#
+# Signing: add the repository secrets GPG_PRIVATE_KEY (an ASCII-armored private key) and GPG_PASSPHRASE. Without
+# them, a release has its SBOMs and SHA256SUMS but no signatures.
+name: Release 4.x
+
+on:
+  push:
+    tags: ['v4.*']
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - '.github/matrix.jq'
+      - 'versions.yml'
+      - 'pom.xml'
+      - 'spark-*/pom.xml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DRY_RUN: ${{ github.event_name != 'push' }}
+
+jobs:
+  matrix:
+    name: Read versions.yml
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      all: ${{ steps.read.outputs.all }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        run: |
+          set -euo pipefail
+          yq -o=json versions.yml > "$RUNNER_TEMP/versions.json"
+          echo "all=$(jq -c --arg which all -f .github/matrix.jq "$RUNNER_TEMP/versions.json")" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test (Spark ${{ matrix.spark }}, Redis ${{ matrix.redis }}, JDK ${{ matrix.jdk }})
+    needs: matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      # The release needs every job, but the others still show what else is broken.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.all) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+      - name: Test
+        run: ./mvnw -B verify -pl "spark-${{ matrix.spark }}" -Dredis.image="redis:${{ matrix.redis }}"
+      - name: Upload the test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-reports-spark-${{ matrix.spark }}-redis-${{ matrix.redis }}-jdk-${{ matrix.jdk }}
+          path: spark-${{ matrix.spark }}/target/surefire-reports/
+          if-no-files-found: ignore
+
+  release:
+    name: ${{ github.event_name == 'push' && 'Release' || 'Release (dry run)' }}
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write   # gh release create, on a tag only
+      packages: write   # mvn deploy to GitHub Packages, on a tag only
+    env:
+      HAS_SIGNING_KEY: ${{ github.event_name == 'push' && secrets.GPG_PRIVATE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          # Writes ~/.m2/settings.xml with a "github" server (the id in the pom's distributionManagement) that reads
+          # its credentials from these environment variables.
+          server-id: github
+          server-username-env-var: GITHUB_ACTOR
+          server-password-env-var: GITHUB_TOKEN
+      - name: Set the version
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = true ]; then
+            snapshot=$(./mvnw -B -q -N org.apache.maven.plugins:maven-help-plugin:3.6.0:evaluate \
+              -Dexpression=project.version -DforceStdout)
+            version="${snapshot%-SNAPSHOT}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          if ! [[ "$version" =~ ^4\.[0-9]+\.[0-9]+(-(M|RC)[0-9]+)?$ ]]; then
+            echo "::error::$version isn't 4.<minor>.<patch>, optionally followed by -M<n> or -RC<n>. Snapshots go through publish-snapshot.yml."
+            exit 1
+          fi
+          ./mvnw -B -q org.codehaus.mojo:versions-maven-plugin:2.25.3:set -DnewVersion="$version" \
+            -DprocessAllModules -DgenerateBackupPoms=false
+          echo "Version $version (dry run: $DRY_RUN)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      # The test job tested this commit, so this builds without the tests. Each Spark line deploys in turn.
+      - name: Build, and deploy to GitHub Packages on a tag
+        run: |
+          set -euo pipefail
+          goal=verify
+          [ "$DRY_RUN" = true ] || goal=deploy
+          ./mvnw -B "$goal" -DskipTests
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The same files the deploy sent, so the Release and GitHub Packages have the same bytes.
+      - name: Collect the release assets
+        run: |
+          set -euo pipefail
+          mkdir dist
+          for module in spark-*/; do
+            module="${module%/}"
+            cp "$module"/target/spark-redis-*.jar dist/
+            artifact=$(basename "$module"/target/spark-redis-*-sources.jar "-$VERSION-sources.jar")
+            cp "$module/target/bom.json" "dist/$artifact-$VERSION-cyclonedx.json"
+          done
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          ls -l dist
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+      # On a tag, with the repository's key (D4). A dry run signs with a throwaway key instead, so this step runs before
+      # the first release.
+      - name: Sign the assets
+        if: env.DRY_RUN == 'true' || env.HAS_SIGNING_KEY == 'true'
+        run: |
+          set -euo pipefail
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -m 700 "$GNUPGHOME"
+          if [ "$DRY_RUN" = true ]; then
+            gpg --batch --pinentry-mode loopback --passphrase '' \
+              --quick-gen-key 'spark-redis release dry run <dry-run@example.invalid>' ed25519 sign never
+          else
+            printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          fi
+          for f in dist/*; do
+            gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --armor --detach-sign "$f" <<< "$GPG_PASSPHRASE"
+          done
+          for f in dist/*.asc; do
+            gpg --batch --verify "$f" "${f%.asc}"
+          done
+        env:
+          GPG_PRIVATE_KEY: ${{ github.event_name == 'push' && secrets.GPG_PRIVATE_KEY || '' }}
+          GPG_PASSPHRASE: ${{ github.event_name == 'push' && secrets.GPG_PASSPHRASE || '' }}
+      - name: Upload the assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ steps.version.outputs.version }}${{ github.event_name != 'push' && '-dry-run' || '' }}
+          path: dist/
+          if-no-files-found: error
+      - name: Create the GitHub Release
+        if: env.DRY_RUN != 'true'
+        run: |
+          set -euo pipefail
+          prerelease=()
+          case "$VERSION" in *-M*|*-RC*) prerelease=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "spark-redis $VERSION" --generate-notes \
+            ${prerelease[@]+"${prerelease[@]}"}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
