@@ -106,7 +106,7 @@ Jedis 8.0.2 jars:
 |---|---|
 | Owner's Mac (arm64) | **Zulu 17** (17.0.21.1) at `/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home` builds and tests 4.x. Homebrew's `openjdk@17` (the same version, jenv's global default) and `openjdk@21` are also installed, the latter for local JDK 21 runs. **Zulu 8** stays for upstream 3.x work. As in Phase 0, always set `JAVA_HOME`, because `java` on `PATH` comes from jenv. Docker Desktop for Testcontainers; the Maven Wrapper |
 | CI | GitHub Actions, `ubuntu-24.04`, Temurin 17, plus 21 on every Spark line (the connector supports JDK 17 and 21, spec §1). Docker on the runners |
-| Claude's sandbox | Reaches the Docker socket. It can't read `src/test/resources/tls/*.key`, so suites that start the TLS container run outside the sandbox. It can't write `.claude/hooks/` or `.claude/skills/`, so the owner writes or approves those edits (X1) |
+| Claude's sandbox | Reaches the Docker socket. The TLS suite generates its certificates at run time (upstream #443), so it runs inside the sandbox too. It can't write `.claude/hooks/` or `.claude/skills/`, so the owner writes or approves those edits (X1) |
 
 ## Branches, lanes and file ownership
 

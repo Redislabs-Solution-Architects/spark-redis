@@ -83,7 +83,11 @@
 		     Spark 4.2 and 4.3 drop jdk.reflect.useDirectMethodHandle=false and add the sun-misc-unsafe-memory-access=allow
 		     option, which is for JDK 23 and later; neither matters on JDK 17 or 21, the JDKs the connector supports. -->
 		<spark.test.jvm.options>-XX:+IgnoreUnrecognizedVMOptions --add-modules=jdk.incubator.vector --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false -Dio.netty.tryReflectionSetAccessible=true -Dio.netty.allocator.type=pooled -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE --enable-native-access=ALL-UNNAMED</spark.test.jvm.options>
-		<spark.test.ssl.options>-Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</spark.test.ssl.options>
+		<!-- More options for the test JVM. The TLS suites trust only the CA they generate for their TLS container (see
+		     RedisContainers), so with -Dredis.containers=false pass a truststore for your own TLS server here, for
+		     example -Dtest.jvm.options="-Djavax.net.ssl.trustStore=/path/to/truststore.jks -Djavax.net.ssl.trustStorePassword=changeit" -->
+		<test.jvm.options></test.jvm.options>
+		<bouncycastle.version>1.87</bouncycastle.version>
 	</properties>
 
 	<!-- GitHub Packages in the spike's fork (Phase 0 plan, step C9). OSSRH has been shut down (spec 2.13).
@@ -331,7 +335,7 @@
 						<reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
 						<junitxml>.</junitxml>
 						<filereports>WDF TestSuite.txt</filereports>
-						<argLine>${jacocoArgLine} ${spark.test.jvm.options} -Xmx2g ${spark.test.ssl.options}</argLine>
+						<argLine>${jacocoArgLine} ${spark.test.jvm.options} -Xmx2g ${test.jvm.options}</argLine>
 						<tagsToExclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToExclude>
 						<!-- The plugin does not pass Maven's -D properties to the forked test JVM, so forward them here. -->
 						<systemProperties>
@@ -416,6 +420,15 @@
 			<version>${testcontainers.version}</version>
 			<scope>test</scope>
 		</dependency>
+		<!-- Builds the certificates for the TLS suites when they run (src/test/scala/.../env/TestCertificates.scala), so
+		     no private key is kept in the repository. It only builds them: keys, signatures and TLS use the JDK's own
+		     providers. -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcpkix-jdk18on</artifactId>
+			<version>${bouncycastle.version}</version>
+			<scope>test</scope>
+		</dependency>
     </dependencies>
     <profiles>
 		<profile>
@@ -431,7 +444,7 @@
 								<tagsToInclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToInclude>
 								<!-- This profile replaces the whole plugin configuration, so repeat what the tests need. -->
 								<workingDirectory>${redis.root}</workingDirectory>
-								<argLine>${spark.test.jvm.options} -Xmx2g ${spark.test.ssl.options}</argLine>
+								<argLine>${spark.test.jvm.options} -Xmx2g ${test.jvm.options}</argLine>
 								<systemProperties>
 									<redis.image>${redis.image}</redis.image>
 									<redis.containers>${redis.containers}</redis.containers>
