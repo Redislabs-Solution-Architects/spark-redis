@@ -29,6 +29,10 @@
 
 Upstream on 2026-11-23: **29 open**, **80 closed** as completed, **8 closed** as not planned.
 
+**Phase 1 since roadmap Amendment 1:** Phase 1 builds and tests the connector on Spark 4 but releases nothing, so its
+11 issues reach users with Phase 2's 4.0.0-M1, the first 4.x release. They stay under Phase 1, where the Spark 4
+build happened, because this backlog is a record, not a plan (owner decision A2, 2026-11-23).
+
 Six rows (#33, #267, #347, #351, #358, #398) also note a fix that merged into the 3.x code on `spike/phase-0`
 during Phase 0. Their phase is still the one that brings the behaviour to the 4.x connector. Those fixes are now in
 upstream 3.x as well, and so is the fix for #90; the notes name the upstream PRs.

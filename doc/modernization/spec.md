@@ -31,7 +31,7 @@ today, and nothing else.** Snapshot taken on 2026-11-21.
 | **4.1** | 2025-12-16 | Maintained; EOL not published (we estimate about Jun 2027) | 17/21 | 3.10+ | **Supported (floor)** |
 | 4.5 | Branch cut about Feb 2027 | Future **4.x LTS** (18 months) | — | — | The long-term anchor once it ships |
 | 4.0 | 2025-05-23 | At EOL (4.0.5 is probably the last release) | 17/21 | 3.9+ | Not supported |
-| 3.5 | 2023-09-13 | Extended LTS, security fixes only, until Nov 2027 | 8/11/17 | 3.8+ | Not supported. `branch-3.x` hosts only the migration tool (§2.11) |
+| 3.5 | 2023-09-13 | Extended LTS, security fixes only, until Nov 2027 | 8/11/17 | 3.8+ | Not supported. If Phase 2e cuts a `branch-3.x`, it hosts only the migration tool (§2.11) |
 
 All supported Spark lines use **Scala 2.13** only. The connector supports **JDK 17 and 21**, the JDKs every
 supported Spark line supports (owner decision, 2026-11-23). The build targets JDK 17, and CI also runs on JDK 21.
@@ -153,8 +153,8 @@ flowchart LR
 | `python` | The `spark-redis` pip package: option helpers, docs, and a pure-Python fallback data source | PySpark, redis-py |
 | `it` | Testcontainers integration tests, golden-layout compatibility tests, benchmarks | all |
 
-There is no compatibility module. The migration tool, `spark-redis-migrate`, lives on `branch-3.x`, because it
-needs the Scala 2.12 classpath to read 3.x's Java-serialized data (§2.11).
+There is no compatibility module. If the migration tool, `spark-redis-migrate`, needs the Scala 2.12 classpath to
+read 3.x's Java-serialized data, it lives on `branch-3.x` (§2.11). Phase 2e decides.
 
 - **New package:** `com.redis.sparkredis`. New code is not added under `org.apache.spark.*`. The old package
   was used to reach `private[sql]` APIs, which is exactly the coupling we are removing. The old
@@ -584,8 +584,10 @@ Everything else (`table`, `keys.pattern`, `key.column`, `model = hash`, `ttl`, `
 and the other `stream.*` options) keeps its name and meaning. Note that the *default* model is now `json`
 (see the table above).
 
-**`branch-3.x`** hosts only `spark-redis-migrate`, built against Spark 3.5 and Scala 2.12. Reading 3.x's
-Java-serialized schemas and `binary` rows needs the 3.x classpath, so the tool cannot live in the 4.x build.
+**`branch-3.x`**, if Phase 2e cuts it, hosts only `spark-redis-migrate`, built against Spark 3.5 and Scala 2.12.
+3.x's Java-serialized data may need the 3.x classpath, and then the tool cannot live in the 4.x build. Phase 2e
+decides (roadmap Amendment 1, A1): `SchemaMigration` already reads the legacy schema fixtures on every Spark 4 line
+(`LegacyFixturesSuite`), and the legacy `binary` fixtures deserialize there too.
 There is **no bridge release** during the spike. Users who cannot move to Spark 4 yet stay on the existing
 3.x releases. If the spike becomes the official line, a bridge release on Spark 3.5 can be reconsidered
 before Spark 3.5's extended LTS ends in November 2027.
