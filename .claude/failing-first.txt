@@ -10,5 +10,3 @@
 # The PR that fixes the bug removes the test's line and leaves the test as it is: scripts/check-failing-first.sh
 # fails a PR that removes a line and also changes or deletes its test, and the test jobs show that it passes. A
 # line removed in the working tree keeps protecting its test until the removal is committed.
-
-src/test/scala/com/redislabs/provider/redis/util/ConnectionUtilsTest.scala  # XINFO nil values, stream benchmark (exit review)

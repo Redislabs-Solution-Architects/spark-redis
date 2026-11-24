@@ -52,6 +52,9 @@ object ConnectionUtils {
           val key = asString(group.head)
           val value = group(1) match {
             case arr: Array[Byte] => asString(arr)
+            // a nil, such as entries-read after XGROUP SETID, or first-entry and last-entry of an empty stream;
+            // `case other: Any` doesn't match null
+            case null => null
             case other: Any => other
           }
           key -> value
