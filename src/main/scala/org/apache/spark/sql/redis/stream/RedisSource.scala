@@ -13,10 +13,10 @@ import org.apache.spark.sql.execution.streaming.{Offset, Source}
 import org.apache.spark.sql.redis.stream.RedisSource._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SQLContext, classic}
+import redis.clients.jedis.exceptions.JedisDataException
 import redis.clients.jedis.{StreamEntryID, Jedis}
 
 import scala.jdk.CollectionConverters._
-import scala.util.Try
 
 /**
   * @author The Viet Nguyen
@@ -68,15 +68,11 @@ class RedisSource(sqlContext: SQLContext, metadataPath: String,
     val sourceOffset = sourceConfig.consumerConfigs.foldLeft(initialOffset) { case (acc, e) =>
       val streamKey = e.streamKey
       withConnection(streamKey) { conn =>
-        Try {
-          // try to read last stream id, it will fail if doesn't exist
-          val offsetId = streamLastId(conn, streamKey)
-          val streamOffset = streamKey -> RedisConsumerOffset(e.groupName, offsetId)
-          acc.copy(acc.offsets + streamOffset)
-        } getOrElse {
-          // stream key doesn't exist
-          acc
-        }
+        // a stream key that doesn't exist has no offset; any other error fails the query, rather than looking like a
+        // stream with no new entries
+        streamLastIdIfExists(conn, streamKey).map { offsetId =>
+          acc.copy(acc.offsets + (streamKey -> RedisConsumerOffset(e.groupName, offsetId)))
+        }.getOrElse(acc)
       }
     }
     if (sourceOffset.offsets.isEmpty) {
@@ -242,5 +238,19 @@ object RedisSource {
     val infoMap = conn.xinfo(XINFO.SubCommandStream, streamKey)
     String.valueOf(infoMap(XINFO.LastGeneratedId))
   }
+
+  /**
+    * The stream's last id, or None if its key doesn't exist, for example because the stream was deleted or expired
+    * after the source created it.
+    *
+    * @throws JedisDataException for any other error reply, such as `WRONGTYPE` for a key that isn't a stream, or
+    *                            `NOPERM` for a user who may not run `XINFO`
+    * @throws JedisConnectionException if the connection fails
+    */
+  def streamLastIdIfExists(conn: Jedis, streamKey: String): Option[String] =
+    try Some(streamLastId(conn, streamKey))
+    catch {
+      case e: JedisDataException if String.valueOf(e.getMessage).contains("no such key") => None
+    }
 
 }
