@@ -241,7 +241,7 @@ object ClassAllowlist {
 
   /**
     * The classes that the values spark-redis writes contain: Spark's external types for each column type and the
-    * classes they're serialized with, for Spark 3.2 to 3.5 on Scala 2.12 and 2.13.
+    * classes they're serialized with, for Spark 3.2 to 3.5 on Scala 2.12 and 2.13, and Spark 4.1 to 4.3 on Scala 2.13.
     */
   val Default: ClassAllowlist = ClassAllowlist(Seq(
     // atomic types (strings are written without a class descriptor)
@@ -262,6 +262,9 @@ object ClassAllowlist {
     "scala.math.LowPriorityOrderingImplicits$$anon$2", "scala.math.Ordering$Int$", "scala.math.Ordering$Long$",
     "scala.Predef$$anon$2", "scala.Predef$$less$colon$less", // Scala 2.12
     "scala.$less$colon$less$$anon$1", "scala.$less$colon$less", "scala.$eq$colon$eq", // Scala 2.13
+    // From Spark 4.2, CharType and VarcharType hold their collation as an Option, None for an uncollated column. A
+    // collated one (Some) can't be in a Java-serialized schema: Spark 4 builds store schemas as JSON.
+    "scala.Option", "scala.None$",
     // arrays, maps, and the set of field names that a StructType caches once a field is looked up, on Scala 2.12
     "scala.collection.mutable.WrappedArray$of*",
     "scala.collection.immutable.Map$EmptyMap$",
