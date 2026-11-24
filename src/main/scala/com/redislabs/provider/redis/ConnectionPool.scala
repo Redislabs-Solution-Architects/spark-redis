@@ -8,7 +8,6 @@ import redis.clients.jedis.{Jedis, JedisFactory, JedisPool, JedisPoolConfig, Pro
 import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 
-
 object ConnectionPool extends Logging {
   @transient private lazy val pools: ConcurrentHashMap[RedisEndpoint, JedisPool] =
     new ConcurrentHashMap[RedisEndpoint, JedisPool]()
@@ -32,8 +31,8 @@ object ConnectionPool extends Logging {
       clientName: String,
       ssl: Boolean
   ) extends JedisFactory(
-      host, port, connectionTimeout, soTimeout, user, password, database, clientName, ssl, null, null, null
-  ) {
+        host, port, connectionTimeout, soTimeout, user, password, database, clientName, ssl, null, null, null
+      ) {
 
     override def makeObject(): PooledObject[Jedis] = {
       val pooledObject = super.makeObject()
@@ -89,10 +88,10 @@ object ConnectionPool extends Logging {
     while (conn == null) {
       try {
         conn = pool.getResource
-      }
-      catch {
-        case e: JedisConnectionException if e.getCause.toString.
-          contains("ERR max number of clients reached") => {
+      } catch {
+        case e: JedisConnectionException
+            if e.getCause.toString.
+              contains("ERR max number of clients reached") => {
           if (sleepTime < 500) sleepTime *= 2
           Thread.sleep(sleepTime)
         }
@@ -102,4 +101,3 @@ object ConnectionPool extends Logging {
     conn
   }
 }
-

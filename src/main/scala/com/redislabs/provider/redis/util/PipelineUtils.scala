@@ -25,8 +25,8 @@ object PipelineUtils {
     * @param f               function to applied for each item in the sequence
     * @return response from the server
     */
-  def mapWithPipeline[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)
-                        (implicit readWriteConfig: ReadWriteConfig): Seq[AnyRef] = {
+  def mapWithPipeline[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)(
+      implicit readWriteConfig: ReadWriteConfig): Seq[AnyRef] = {
     val totalResp = mutable.ListBuffer[JList[AnyRef]]()
 
     // iterate over items and create new pipelines periodically
@@ -63,8 +63,8 @@ object PipelineUtils {
     * @param f               function to applied for each item in the sequence
     * @throws JedisDataException if Redis replies with an error to any of the commands, see [[syncAndCheck]]
     */
-  def foreachWithPipeline[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)
-                            (implicit readWriteConfig: ReadWriteConfig): Unit = {
+  def foreachWithPipeline[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)(
+      implicit readWriteConfig: ReadWriteConfig): Unit = {
     // iterate over items and create new pipelines periodically
     var i = 0
     var pipeline = conn.pipelined()
@@ -99,8 +99,8 @@ object PipelineUtils {
     * @throws JedisDataException if Redis replies with an error to any of the commands synced so far,
     *                            see [[syncAndCheck]]
     */
-  def foreachWithPipelineNoLastSync[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)
-                                      (implicit readWriteConfig: ReadWriteConfig): Pipeline = {
+  def foreachWithPipelineNoLastSync[A](conn: Jedis, items: IterableOnce[A])(f: (Pipeline, A) => Unit)(
+      implicit readWriteConfig: ReadWriteConfig): Pipeline = {
     // iterate over items and create new pipelines periodically
     var i = 0
     var pipeline = conn.pipelined()

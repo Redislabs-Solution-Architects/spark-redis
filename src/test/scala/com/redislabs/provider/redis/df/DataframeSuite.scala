@@ -7,7 +7,6 @@ import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.redis._
 import org.scalatest.Matchers
 
-
 trait DataframeSuite extends RedisDataframeSuite with Matchers {
 
   import TestSqlImplicits._

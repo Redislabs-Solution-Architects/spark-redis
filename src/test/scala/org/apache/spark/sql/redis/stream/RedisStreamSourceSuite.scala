@@ -332,9 +332,8 @@ trait RedisStreamSourceSuite extends FunSuite with Matchers with Env with Loggin
 
   def foreachBatchStream(streamKey: String,
                          extraReadOptions: Map[String, String] = Map(),
-                         extraWriteOptions: Map[String, String] = Map())
-                        (processBatch: (DataFrame, Long) => Unit)
-                        (body: StreamingQuery => Unit): Unit = {
+                         extraWriteOptions: Map[String, String] = Map())(processBatch: (DataFrame, Long) => Unit)(
+      body: StreamingQuery => Unit): Unit = {
     val spark = SparkSession
       .builder
       .config(conf)

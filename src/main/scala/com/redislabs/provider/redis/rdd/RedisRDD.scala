@@ -17,14 +17,13 @@ import scala.collection.mutable
 import scala.reflect.{ClassTag, classTag}
 import scala.util.{Failure, Success, Try}
 
-
 @deprecated(
   "The RDD API is removed in 4.0.0-M2. Use the DataFrame source, format(\"org.apache.spark.sql.redis\"), instead.",
   "4.0.0-M1")
 class RedisKVRDD(prev: RDD[String],
                  val rddType: String,
                  implicit val readWriteConfig: ReadWriteConfig)
-  extends RDD[(String, String)](prev) with Keys {
+    extends RDD[(String, String)](prev) with Keys {
 
   override def getPartitions: Array[Partition] = prev.partitions
 
@@ -51,9 +50,9 @@ class RedisKVRDD(prev: RDD[String],
         }
 
         nodeKeys.zip(response)
-          .flatMap{
+          .flatMap {
             case (_, e: Throwable) => Some(Failure(e))
-            case (k, v: String) => Some(Success((k,v)))
+            case (k, v: String) => Some(Success((k, v)))
             case _ => None
           }.flatMap(ignoreJedisWrongTypeException(_).get) // Unwrap `Try` to throw exceptions if any
           .iterator
@@ -64,7 +63,7 @@ class RedisKVRDD(prev: RDD[String],
   def getHASH(nodes: Array[RedisNode], keys: Iterator[String]): Iterator[(String, String)] = {
     groupKeysByNode(nodes, keys).flatMap { case (node, nodeKeys) =>
       withConnection(node.endpoint.connect()) { conn =>
-        nodeKeys.flatMap{k =>
+        nodeKeys.flatMap { k =>
           ignoreJedisWrongTypeException(Try(conn.hgetAll(k).asScala.toMap)).get
         }.flatten.iterator
       }
@@ -96,7 +95,7 @@ class RedisListRDD(prev: RDD[String],
   def getSET(nodes: Array[RedisNode], keys: Iterator[String]): Iterator[String] = {
     groupKeysByNode(nodes, keys).flatMap { case (node, nodeKeys) =>
       withConnection(node.endpoint.connect()) { conn =>
-        val res: Iterator[String] = nodeKeys.flatMap{k =>
+        val res: Iterator[String] = nodeKeys.flatMap { k =>
           ignoreJedisWrongTypeException(Try(setMembers(conn, k))).get
         }.flatten
           .iterator
@@ -124,7 +123,7 @@ class RedisListRDD(prev: RDD[String],
   def getLIST(nodes: Array[RedisNode], keys: Iterator[String]): Iterator[String] = {
     groupKeysByNode(nodes, keys).flatMap { case (node, nodeKeys) =>
       withConnection(node.endpoint.connect()) { conn =>
-        nodeKeys.flatMap{ k =>
+        nodeKeys.flatMap { k =>
           ignoreJedisWrongTypeException(Try(conn.lrange(k, 0, -1).asScala)).get
         }.flatten.iterator
       }
@@ -146,7 +145,7 @@ class RedisZSetRDD[T: ClassTag](prev: RDD[String],
                                 zsetContext: ZSetContext,
                                 rddType: Class[T],
                                 implicit val readWriteConfig: ReadWriteConfig)
-  extends RDD[T](prev) with Keys {
+    extends RDD[T](prev) with Keys {
 
   override def getPartitions: Array[Partition] = prev.partitions
 
@@ -171,12 +170,12 @@ class RedisZSetRDD[T: ClassTag](prev: RDD[String],
     groupKeysByNode(nodes, keys).flatMap { case (node, nodeKeys) =>
       withConnection(node.endpoint.connect()) { conn =>
         if (classTag[T] == classTag[(String, Double)]) {
-          nodeKeys.flatMap{k =>
+          nodeKeys.flatMap { k =>
             ignoreJedisWrongTypeException(Try(conn.zrangeWithScores(k, startPos, endPos).asScala)).get
           }.flatten
             .map(tup => (tup.getElement, tup.getScore)).iterator
         } else if (classTag[T] == classTag[String]) {
-          nodeKeys.flatMap{k =>
+          nodeKeys.flatMap { k =>
             ignoreJedisWrongTypeException(Try(conn.zrange(k, startPos, endPos).asScala)).get
           }.flatten.iterator
         } else {
@@ -193,14 +192,14 @@ class RedisZSetRDD[T: ClassTag](prev: RDD[String],
     groupKeysByNode(nodes, keys).flatMap { case (node, nodeKeys) =>
       withConnection(node.endpoint.connect()) { conn =>
         if (classTag[T] == classTag[(String, Double)]) {
-          nodeKeys.flatMap{k =>
+          nodeKeys.flatMap { k =>
             val reply = Try(zrangeByScore(conn, k, startScore, endScore, withScores = true))
             ignoreJedisWrongTypeException(reply.map(r => BuilderFactory.TUPLE_ZSET.build(r).asScala)).get
           }.
             flatten
             .map(tup => (tup.getElement, tup.getScore)).iterator
         } else if (classTag[T] == classTag[String]) {
-          nodeKeys.flatMap{ k =>
+          nodeKeys.flatMap { k =>
             val reply = Try(zrangeByScore(conn, k, startScore, endScore, withScores = false))
             ignoreJedisWrongTypeException(reply.map(r => BuilderFactory.STRING_ZSET.build(r).asScala)).get
           }.flatten.iterator
@@ -233,7 +232,7 @@ class RedisKeysRDD(sc: SparkContext,
                    val keyPattern: String = "*",
                    val partitionNum: Int = 3,
                    val keys: Array[String] = null)
-  extends RDD[String](sc, Seq.empty) with Keys {
+    extends RDD[String](sc, Seq.empty) with Keys {
 
   override protected def getPreferredLocations(split: Partition): Seq[String] = {
     Seq(split.asInstanceOf[RedisPartition].redisConfig.initialAddr)
@@ -265,7 +264,8 @@ class RedisKeysRDD(sc: SparkContext,
       hosts.map(x => (x.endpoint.host, x.endpoint.port, x.startSlot, x.endSlot))
     } else if (hosts.size < partitionNum) {
       val presExtCnt = partitionNum / hosts.size
-      val lastExtCnt = if (presExtCnt * hosts.size < partitionNum) (presExtCnt + partitionNum % hosts.size) else presExtCnt
+      val lastExtCnt =
+        if (presExtCnt * hosts.size < partitionNum) (presExtCnt + partitionNum % hosts.size) else presExtCnt
       hosts.zipWithIndex.flatMap {
         case (host, idx) => {
           split(host, if (idx == hosts.size - 1) lastExtCnt else presExtCnt)
@@ -274,17 +274,18 @@ class RedisKeysRDD(sc: SparkContext,
     } else {
       val presExtCnt = hosts.size / partitionNum
       (0 until partitionNum).map {
-        idx => {
-          val ip = hosts(idx * presExtCnt).endpoint.host
-          val port = hosts(idx * presExtCnt).endpoint.port
-          val start = hosts(idx * presExtCnt).startSlot
-          val end = hosts(if (idx == partitionNum - 1) {
-            (hosts.size - 1)
-          } else {
-            ((idx + 1) * presExtCnt - 1)
-          }).endSlot
-          (ip, port, start, end)
-        }
+        idx =>
+          {
+            val ip = hosts(idx * presExtCnt).endpoint.host
+            val port = hosts(idx * presExtCnt).endpoint.port
+            val start = hosts(idx * presExtCnt).startSlot
+            val end = hosts(if (idx == partitionNum - 1) {
+              (hosts.size - 1)
+            } else {
+              ((idx + 1) * presExtCnt - 1)
+            }).endSlot
+            (ip, port, start, end)
+          }
       }
     }
   }
@@ -423,8 +424,8 @@ class RedisKeysRDD(sc: SparkContext,
   }
 }
 
-
 trait Keys {
+
   /**
     * @param key
     * @return true if the key is a RedisRegex
@@ -437,12 +438,12 @@ trait Keys {
         escape match {
           case true => judge(key.substring(1), false)
           case false => key.charAt(0) match {
-            case '*' => true
-            case '?' => true
-            case '[' => true
-            case '\\' => judge(key.substring(1), true)
-            case _ => judge(key.substring(1), false)
-          }
+              case '*' => true
+              case '?' => true
+              case '[' => true
+              case '\\' => judge(key.substring(1), true)
+              case _ => judge(key.substring(1), false)
+            }
         }
       }
     }
@@ -478,8 +479,7 @@ trait Keys {
   def getKeys(nodes: Array[RedisNode],
               sPos: Int,
               ePos: Int,
-              keyPattern: String)
-             (implicit readWriteConfig: ReadWriteConfig): Iterator[String] = {
+              keyPattern: String)(implicit readWriteConfig: ReadWriteConfig): Iterator[String] = {
     val endpoints = nodes.map(_.endpoint).distinct
 
     if (isRedisRegex(keyPattern)) {
@@ -529,8 +529,8 @@ trait Keys {
     * keys are guaranteed that they belongs with the server jedis connected to.
     * @return keys of "t" type
     */
-  def filterKeysByType(conn: Jedis, keys: Array[String], t: String)
-                      (implicit readWriteConfig: ReadWriteConfig): Array[String] = {
+  def filterKeysByType(conn: Jedis, keys: Array[String], t: String)(
+      implicit readWriteConfig: ReadWriteConfig): Array[String] = {
     val types = mapWithPipeline(conn, keys) { (pipeline, key) =>
       pipeline.`type`(key)
     }
