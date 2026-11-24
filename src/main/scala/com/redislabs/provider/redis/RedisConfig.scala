@@ -23,8 +23,6 @@ import scala.jdk.CollectionConverters._
   *              deprecated `spark.redis.auth`). [[toString]] never shows it.
   * @param dbNum database number (should be avoided in general)
   * @param ssl true to enable SSL connection. Defaults to false
-  * @param clientName the name every connection to this endpoint sets with CLIENT SETNAME, or null (the default)
-  *                   to leave connections unnamed. An empty name also leaves them unnamed.
   */
 case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
                          port: Int = Protocol.DEFAULT_PORT,
@@ -32,19 +30,12 @@ case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
                          auth: String = null,
                          dbNum: Int = Protocol.DEFAULT_DATABASE,
                          timeout: Int = Protocol.DEFAULT_TIMEOUT,
-                         ssl: Boolean = false,
-                         clientName: String = null)
+                         ssl: Boolean = false)
   extends Serializable {
-
-  // Fail on the driver, naming the bad value, rather than on the first connection with Redis's own error.
-  require(clientName == null || RedisConfig.isValidClientName(clientName),
-    s"Invalid Redis client name '$clientName' (${RedisConfig.ClientNameConfKey} or the " +
-      s"${RedisConfig.ClientNameOption} option): use printable ASCII characters only, with no spaces")
 
   /**
     * Constructor from spark config. set params with spark.redis.host, spark.redis.port, spark.redis.user,
-    * spark.redis.password (or the deprecated spark.redis.auth), spark.redis.db, spark.redis.timeout, spark.redis.ssl
-    * and spark.redis.client.name
+    * spark.redis.password (or the deprecated spark.redis.auth), spark.redis.db, spark.redis.timeout and spark.redis.ssl
     *
     * @param conf spark context config
     */
@@ -56,8 +47,7 @@ case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
       RedisConfig.passwordOrNull(conf),
       conf.getInt("spark.redis.db", Protocol.DEFAULT_DATABASE),
       conf.getInt("spark.redis.timeout", Protocol.DEFAULT_TIMEOUT),
-      conf.getBoolean("spark.redis.ssl", false),
-      RedisConfig.clientNameOrNull(conf.get(RedisConfig.ClientNameConfKey, null))
+      conf.getBoolean("spark.redis.ssl", false)
     )
   }
 
@@ -76,9 +66,7 @@ case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
       RedisConfig.passwordOrNull(conf, parameters),
       parameters.getOrElse("dbNum", conf.get("spark.redis.db", Protocol.DEFAULT_DATABASE.toString)).toInt,
       parameters.getOrElse("timeout", conf.get("spark.redis.timeout", Protocol.DEFAULT_TIMEOUT.toString)).toInt,
-      parameters.getOrElse("ssl", conf.get("spark.redis.ssl", false.toString)).toBoolean,
-      RedisConfig.clientNameOrNull(parameters.getOrElse(RedisConfig.ClientNameOption,
-        conf.get(RedisConfig.ClientNameConfKey, null))))
+      parameters.getOrElse("ssl", conf.get("spark.redis.ssl", false.toString)).toBoolean)
   }
 
 
@@ -227,20 +215,6 @@ object RedisConfig extends Logging {
     parameters.get(PasswordOption).orElse(parameters.get(AuthOption)).getOrElse(fromConf)
   }
 
-  /** Spark setting: the name every connection the connector opens sets with CLIENT SETNAME (#398). */
-  val ClientNameConfKey = "spark.redis.client.name"
-
-  /** DataFrame source option that overrides [[ClientNameConfKey]] for that source. */
-  val ClientNameOption = "client.name"
-
-  /** An unset or empty client name both mean unnamed connections, the behaviour without the setting. */
-  private[redis] def clientNameOrNull(name: String): String =
-    if (name == null || name.isEmpty) null else name
-
-  /** CLIENT SETNAME accepts only printable ASCII ('!' to '~'): no spaces, newlines or other characters. */
-  private[redis] def isValidClientName(name: String): Boolean =
-    name.forall(c => c >= '!' && c <= '~')
-
   /**
     * create redis config from spark config
     */
@@ -386,8 +360,7 @@ class RedisConfig(val initialHost: RedisEndpoint) extends Serializable {
         user = initialHost.user,
         auth = initialHost.auth,
         dbNum = initialHost.dbNum,
-        ssl = initialHost.ssl,
-        clientName = initialHost.clientName
+        ssl = initialHost.ssl
       ))
 
     } else {
@@ -410,8 +383,7 @@ class RedisConfig(val initialHost: RedisEndpoint) extends Serializable {
           auth = initialHost.auth,
           dbNum = initialHost.dbNum,
           timeout = initialHost.timeout,
-          ssl = initialHost.ssl,
-          clientName = initialHost.clientName)
+          ssl = initialHost.ssl)
         RedisNode(endpoint, 0, 16383, i, range)
       }).toArray
     }
@@ -450,8 +422,7 @@ class RedisConfig(val initialHost: RedisEndpoint) extends Serializable {
             auth = initialHost.auth,
             dbNum = initialHost.dbNum,
             timeout = initialHost.timeout,
-            ssl = initialHost.ssl,
-            clientName = initialHost.clientName)
+            ssl = initialHost.ssl)
           RedisNode(endpoint, sPos, ePos, i, slotInfo.size - 2)
         })
       }
