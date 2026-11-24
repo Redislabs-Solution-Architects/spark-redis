@@ -4,7 +4,7 @@
 #   make test                                  # every suite, on the Redis line PRs must pass (versions.yml)
 #   make test REDIS_IMAGE=redis:<line>         # another Redis line
 #   make test SUITES=com.example.FooSuite      # one suite, or a comma-separated list
-#   make test MVN_ARGS="-Dspark.version=3.3.3 -Dscala.complete.version=2.12.15"   # another Spark version
+#   make test SPARK=4.2                        # one Spark line's module (spark-4.2/); without it, every line
 #   make benchmark                             # the benchmark suites (long)
 #
 # Requirements: Docker, and JAVA_HOME pointing at a JDK 17 for this 4.x build (the test JVM runs on it too).
@@ -14,10 +14,12 @@ MVN ?= $(if $(wildcard ./mvnw),./mvnw,mvn)
 REQUIRED_LINES := $(shell scripts/redis-lines.sh required)
 REDIS_IMAGE ?= redis:$(or $(firstword $(REQUIRED_LINES)),$(error scripts/redis-lines.sh could not read versions.yml))
 SUITES ?=
-# extra Maven arguments, for example another Spark version (see the header)
+# one Spark line, for example 4.2: builds and tests only the spark-<line> module
+SPARK ?=
+# extra Maven arguments
 MVN_ARGS ?=
 
-MAVEN_ARGS = -B -Dredis.image=$(REDIS_IMAGE) $(if $(SUITES),-Dsuites=$(SUITES)) $(MVN_ARGS)
+MAVEN_ARGS = -B -Dredis.image=$(REDIS_IMAGE) $(if $(SPARK),-pl spark-$(SPARK)) $(if $(SUITES),-Dsuites=$(SUITES)) $(MVN_ARGS)
 
 .PHONY: test benchmark help
 

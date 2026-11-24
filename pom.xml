@@ -1,9 +1,13 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-	<groupId>com.redislabs</groupId>
-	<artifactId>spark-redis_2.13</artifactId>
-	<version>3.1.0-SNAPSHOT</version>
+	<!-- The parent of the per-Spark-minor artifacts (Phase 1 plan, step B1; spec 2, "Build"). It builds nothing itself:
+	     each module under spark-4.<n>/ compiles the shared src/main/scala and src/test/scala, plus its overlay
+	     src/spark-4.<n>/scala, against its own Spark line. See .claude/skills/new-spark-line/SKILL.md to add one. -->
+	<groupId>com.redis</groupId>
+	<artifactId>spark-redis-parent_2.13</artifactId>
+	<version>4.0.0-M1-SNAPSHOT</version>
+	<packaging>pom</packaging>
 	<name>Spark-Redis</name>
 	<description>A Spark library for Redis</description>
 	<url>http://github.com/RedisLabs/spark-redis</url>
@@ -39,18 +43,31 @@
 		</license>
 	</licenses>
 
+	<!-- One module per supported Spark minor, as versions.yml lists them. Each sets spark.version, the Scala version
+	     that Spark release is built with, and spark.line (the overlay's directory name). -->
+	<modules>
+		<module>spark-4.1</module>
+		<module>spark-4.2</module>
+		<module>spark-4.3</module>
+	</modules>
+
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<!-- The repository root, where the shared sources, test resources and configs are. Every module is one
+		     directory below it, and its test JVM runs there, because the tests read fixtures by relative paths
+		     (src/test/resources/golden, .../legacy, .../tls) and write under target/. -->
+		<redis.root>${project.basedir}/..</redis.root>
 		<!-- Spark 4 needs JDK 17 or later. javac and scalac both compile with release 17 (Phase 1 plan, step A1). -->
 		<java.version>17</java.version>
-		<!-- Spark 4 is built for Scala 2.13 only. Keep this the Scala version spark.version is built with (2.13.17 for
-		     Spark 4.1.x), read from <scala.version> in spark-parent_2.13-<spark.version>.pom. -->
+		<!-- Spark 4 is built for Scala 2.13 only. Each module sets scala.complete.version to the Scala version its
+		     spark.version is built with, read from <scala.version> in spark-parent_2.13-<spark.version>.pom. -->
 		<scala.major.version>2.13</scala.major.version>
+		<!-- The floor's versions, which every module overrides. The parent needs them only to resolve its own
+		     <dependencies> list. -->
+		<spark.version>4.1.4</spark.version>
 		<scala.complete.version>2.13.17</scala.complete.version>
 		<jedis.version>3.9.0</jedis.version>
-		<!-- The Spark 4.1 floor (spec 1). Plan step B1 builds one artifact per Spark minor. -->
-		<spark.version>4.1.4</spark.version>
 		<!-- 2.0.0 or later: the plugin starts the test JVM from ${java.home}, the JDK that runs Maven (JAVA_HOME).
 		     1.0 ran whatever `java` came first on PATH, so a jenv or Homebrew JDK 17 there broke the tests. -->
 		<plugins.scalatest.version>2.2.0</plugins.scalatest.version>
@@ -62,8 +79,11 @@
 		<!-- Set to true (-Dgolden.update=true) to regenerate golden fixtures. Only the owner does that. -->
 		<golden.update>false</golden.update>
 		<!-- The JVM options Spark 4 needs on JDK 17+: the module options spark-submit adds itself, copied from
-		     org.apache.spark.launcher.JavaModuleOptions in spark-launcher 4.1.4. The test JVM gets them below. -->
+		     org.apache.spark.launcher.JavaModuleOptions in spark-launcher 4.1.4. The test JVM gets them below.
+		     Spark 4.2 and 4.3 drop jdk.reflect.useDirectMethodHandle=false and add the sun-misc-unsafe-memory-access=allow
+		     option, which is for JDK 23 and later; neither matters on JDK 17. -->
 		<spark.test.jvm.options>-XX:+IgnoreUnrecognizedVMOptions --add-modules=jdk.incubator.vector --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false -Dio.netty.tryReflectionSetAccessible=true -Dio.netty.allocator.type=pooled -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE --enable-native-access=ALL-UNNAMED</spark.test.jvm.options>
+		<spark.test.ssl.options>-Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</spark.test.ssl.options>
 	</properties>
 
 	<!-- GitHub Packages in the spike's fork (Phase 0 plan, step C9). OSSRH has been shut down (spec 2.13).
@@ -82,183 +102,219 @@
 	</distributionManagement>
 
 	<build>
-		<plugins>
-			<plugin>
-				<groupId>org.jacoco</groupId>
-				<artifactId>jacoco-maven-plugin</artifactId>
-				<!-- 0.8.7 or later reads Java 17 class files -->
-				<version>0.8.16</version>
-				<executions>
-					<execution>
-						<goals>
-							<goal>prepare-agent</goal>
-						</goals>
-						<configuration>
-							<!-- scalatest-maven-plugin sets its own argLine, which would replace the default
-							     'argLine' property; expose the agent under its own name and reference it there -->
-							<propertyName>jacocoArgLine</propertyName>
-						</configuration>
-					</execution>
-					<execution>
-						<id>report</id>
-						<!-- must run after scalatest (bound to 'test') has written target/jacoco.exec -->
-						<phase>verify</phase>
-						<goals>
-							<goal>report</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-			<plugin>
-				<groupId>net.alchim31.maven</groupId>
-				<artifactId>scala-maven-plugin</artifactId>
-				<version>4.10.0</version>
-				<configuration>
-					<scalaVersion>${scala.complete.version}</scalaVersion>
-					<!-- passes -release to scalac and release to javac -->
-					<release>${java.version}</release>
-				</configuration>
-				<executions>
-					<execution>
-						<id>scala-compile</id>
-						<phase>process-resources</phase>
-						<goals>
-							<goal>compile</goal>
-						</goals>
-					</execution>
-					<execution>
-						<id>scala-test-compile</id>
-						<phase>process-test-resources</phase>
-						<goals>
-							<goal>testCompile</goal>
-						</goals>
-					</execution>
-					<execution>
-						<id>attach-javadocs</id>
+		<!-- Configured here and listed in each module's <plugins>, so that this parent, which has no sources, runs none
+		     of them. -->
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.jacoco</groupId>
+					<artifactId>jacoco-maven-plugin</artifactId>
+					<!-- 0.8.7 or later reads Java 17 class files -->
+					<version>0.8.16</version>
+					<executions>
+						<execution>
 							<goals>
-								<goal>doc-jar</goal>
+								<goal>prepare-agent</goal>
 							</goals>
-					</execution>
-				</executions>
-			</plugin>
-			<plugin>
-				<groupId>org.scalastyle</groupId>
-				<artifactId>scalastyle-maven-plugin</artifactId>
-				<version>0.7.0</version>
-				<configuration>
-					<verbose>false</verbose>
-					<failOnWarning>false</failOnWarning>
-					<failOnViolation>true</failOnViolation>
-					<includeTestSourceDirectory>true</includeTestSourceDirectory>
-					<sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
-					<testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
-					<configLocation>${basedir}/scalastyle-config.xml</configLocation>
-					<outputFile>${project.basedir}/scalastyle-output.xml</outputFile>
-					<outputEncoding>UTF-8</outputEncoding>
-				</configuration>
-				<executions>
-					<execution>
-						<phase>compile</phase>
-						<goals>
-							<goal>check</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-jar-plugin</artifactId>
-				<version>2.6</version>
-				<configuration>
-					<skipIfEmpty>true</skipIfEmpty>
-				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-assembly-plugin</artifactId>
-				<version>2.5.4</version>
-				<configuration>
-					<descriptorRefs>
-						<descriptorRef>jar-with-dependencies</descriptorRef>
-					</descriptorRefs>
-				</configuration>
-				<executions>
-					<execution>
-						<phase>package</phase>
-						<goals>
-							<goal>single</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-			<plugin>
-				<groupId>org.codehaus.mojo</groupId>
-				<artifactId>build-helper-maven-plugin</artifactId>
-				<version>1.10</version>
-				<executions>
-					<execution>
-						<id>add-scala-sources</id>
-						<phase>generate-sources</phase>
-						<goals>
-							<goal>add-source</goal>
-						</goals>
-						<configuration>
-							<sources>
-								<source>src/main/scala</source>
-							</sources>
-						</configuration>
-					</execution>
-					<execution>
-						<id>add-scala-test-sources</id>
-						<phase>generate-test-sources</phase>
-						<goals>
-							<goal>add-test-source</goal>
-						</goals>
-						<configuration>
-							<sources>
-								<source>src/test/scala</source>
-							</sources>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
-			<!-- disable surefire -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-surefire-plugin</artifactId>
-				<version>2.18.1</version>
-				<configuration>
-					<skipTests>true</skipTests>
-				</configuration>
-			</plugin>
-			<!-- enable scalatest -->
-			<plugin>
-				<groupId>org.scalatest</groupId>
-				<artifactId>scalatest-maven-plugin</artifactId>
-				<version>${plugins.scalatest.version}</version>
-				<configuration>
-					<reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
-					<junitxml>.</junitxml>
-					<filereports>WDF TestSuite.txt</filereports>
-					<argLine>${jacocoArgLine} ${spark.test.jvm.options} -Xmx2g -Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</argLine>
-					<tagsToExclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToExclude>
-					<!-- The plugin does not pass Maven's -D properties to the forked test JVM, so forward them here. -->
-					<systemProperties>
-						<redis.image>${redis.image}</redis.image>
-						<redis.containers>${redis.containers}</redis.containers>
-						<golden.update>${golden.update}</golden.update>
-					</systemProperties>
-				</configuration>
-				<executions>
-					<execution>
-						<id>test</id>
-						<goals>
-							<goal>test</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-		</plugins>
+							<configuration>
+								<!-- scalatest-maven-plugin sets its own argLine, which would replace the default
+								     'argLine' property; expose the agent under its own name and reference it there -->
+								<propertyName>jacocoArgLine</propertyName>
+							</configuration>
+						</execution>
+						<execution>
+							<id>report</id>
+							<!-- must run after scalatest (bound to 'test') has written target/jacoco.exec -->
+							<phase>verify</phase>
+							<goals>
+								<goal>report</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>net.alchim31.maven</groupId>
+					<artifactId>scala-maven-plugin</artifactId>
+					<version>4.10.0</version>
+					<configuration>
+						<scalaVersion>${scala.complete.version}</scalaVersion>
+						<!-- passes -release to scalac and release to javac -->
+						<release>${java.version}</release>
+					</configuration>
+					<executions>
+						<execution>
+							<id>scala-compile</id>
+							<phase>process-resources</phase>
+							<goals>
+								<goal>compile</goal>
+							</goals>
+						</execution>
+						<execution>
+							<id>scala-test-compile</id>
+							<phase>process-test-resources</phase>
+							<goals>
+								<goal>testCompile</goal>
+							</goals>
+						</execution>
+						<execution>
+							<id>attach-javadocs</id>
+								<goals>
+									<goal>doc-jar</goal>
+								</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>org.scalastyle</groupId>
+					<artifactId>scalastyle-maven-plugin</artifactId>
+					<version>0.7.0</version>
+					<configuration>
+						<verbose>false</verbose>
+						<failOnWarning>false</failOnWarning>
+						<failOnViolation>true</failOnViolation>
+						<includeTestSourceDirectory>true</includeTestSourceDirectory>
+						<sourceDirectory>${redis.root}/src/main/scala</sourceDirectory>
+						<testSourceDirectory>${redis.root}/src/test/scala</testSourceDirectory>
+						<configLocation>${redis.root}/scalastyle-config.xml</configLocation>
+						<outputFile>${project.build.directory}/scalastyle-output.xml</outputFile>
+						<outputEncoding>UTF-8</outputEncoding>
+					</configuration>
+					<executions>
+						<execution>
+							<phase>compile</phase>
+							<goals>
+								<goal>check</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-jar-plugin</artifactId>
+					<version>2.6</version>
+					<configuration>
+						<skipIfEmpty>true</skipIfEmpty>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-assembly-plugin</artifactId>
+					<version>2.5.4</version>
+					<configuration>
+						<descriptorRefs>
+							<descriptorRef>jar-with-dependencies</descriptorRef>
+						</descriptorRefs>
+					</configuration>
+					<executions>
+						<execution>
+							<phase>package</phase>
+							<goals>
+								<goal>single</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>build-helper-maven-plugin</artifactId>
+					<version>1.10</version>
+					<executions>
+						<execution>
+							<id>add-scala-sources</id>
+							<phase>generate-sources</phase>
+							<goals>
+								<goal>add-source</goal>
+							</goals>
+							<configuration>
+								<sources>
+									<source>${redis.root}/src/main/scala</source>
+									<!-- this Spark line's overlay: code that only compiles against it -->
+									<source>${redis.root}/src/${spark.line}/scala</source>
+								</sources>
+							</configuration>
+						</execution>
+						<execution>
+							<id>add-resources</id>
+							<phase>generate-resources</phase>
+							<goals>
+								<goal>add-resource</goal>
+							</goals>
+							<configuration>
+								<resources>
+									<resource>
+										<directory>${redis.root}/src/main/resources</directory>
+									</resource>
+								</resources>
+							</configuration>
+						</execution>
+						<execution>
+							<id>add-scala-test-sources</id>
+							<phase>generate-test-sources</phase>
+							<goals>
+								<goal>add-test-source</goal>
+							</goals>
+							<configuration>
+								<sources>
+									<source>${redis.root}/src/test/scala</source>
+								</sources>
+							</configuration>
+						</execution>
+						<execution>
+							<id>add-test-resources</id>
+							<phase>generate-test-resources</phase>
+							<goals>
+								<goal>add-test-resource</goal>
+							</goals>
+							<configuration>
+								<resources>
+									<resource>
+										<directory>${redis.root}/src/test/resources</directory>
+									</resource>
+								</resources>
+							</configuration>
+						</execution>
+					</executions>
+				</plugin>
+				<!-- disable surefire -->
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-surefire-plugin</artifactId>
+					<version>2.18.1</version>
+					<configuration>
+						<skipTests>true</skipTests>
+					</configuration>
+				</plugin>
+				<!-- enable scalatest -->
+				<plugin>
+					<groupId>org.scalatest</groupId>
+					<artifactId>scalatest-maven-plugin</artifactId>
+					<version>${plugins.scalatest.version}</version>
+					<configuration>
+						<!-- the repository root: see redis.root above -->
+						<workingDirectory>${redis.root}</workingDirectory>
+						<reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
+						<junitxml>.</junitxml>
+						<filereports>WDF TestSuite.txt</filereports>
+						<argLine>${jacocoArgLine} ${spark.test.jvm.options} -Xmx2g ${spark.test.ssl.options}</argLine>
+						<tagsToExclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToExclude>
+						<!-- The plugin does not pass Maven's -D properties to the forked test JVM, so forward them here. -->
+						<systemProperties>
+							<redis.image>${redis.image}</redis.image>
+							<redis.containers>${redis.containers}</redis.containers>
+							<golden.update>${golden.update}</golden.update>
+						</systemProperties>
+					</configuration>
+					<executions>
+						<execution>
+							<id>test</id>
+							<goals>
+								<goal>test</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+			</plugins>
+		</pluginManagement>
 	</build>
 	<dependencyManagement>
 		<dependencies>
@@ -272,6 +328,7 @@
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
+	<!-- Inherited by every module, which sets spark.version and scala.complete.version. -->
 	<dependencies>
         <dependency>
             <groupId>redis.clients</groupId>
@@ -328,23 +385,26 @@
 		<profile>
 			<id>benchmark</id>
 			<build>
-				<plugins>
-					<plugin>
-						<groupId>org.scalatest</groupId>
-						<artifactId>scalatest-maven-plugin</artifactId>
-						<version>${plugins.scalatest.version}</version>
-						<configuration combine.self="override">
-							<tagsToInclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToInclude>
-							<!-- This profile replaces the whole plugin configuration, so repeat what the tests need. -->
-							<argLine>${spark.test.jvm.options} -Xmx2g -Djavax.net.ssl.trustStorePassword=password -Djavax.net.ssl.trustStore=./src/test/resources/tls/clientkeystore -Djavax.net.ssl.trustStoreType=jceks</argLine>
-							<systemProperties>
-								<redis.image>${redis.image}</redis.image>
-								<redis.containers>${redis.containers}</redis.containers>
-								<golden.update>${golden.update}</golden.update>
-							</systemProperties>
-						</configuration>
-					</plugin>
-				</plugins>
+				<pluginManagement>
+					<plugins>
+						<plugin>
+							<groupId>org.scalatest</groupId>
+							<artifactId>scalatest-maven-plugin</artifactId>
+							<version>${plugins.scalatest.version}</version>
+							<configuration combine.self="override">
+								<tagsToInclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToInclude>
+								<!-- This profile replaces the whole plugin configuration, so repeat what the tests need. -->
+								<workingDirectory>${redis.root}</workingDirectory>
+								<argLine>${spark.test.jvm.options} -Xmx2g ${spark.test.ssl.options}</argLine>
+								<systemProperties>
+									<redis.image>${redis.image}</redis.image>
+									<redis.containers>${redis.containers}</redis.containers>
+									<golden.update>${golden.update}</golden.update>
+								</systemProperties>
+							</configuration>
+						</plugin>
+					</plugins>
+				</pluginManagement>
 			</build>
 		</profile>
         <profile>

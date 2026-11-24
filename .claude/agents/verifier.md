@@ -34,14 +34,19 @@ The caller gives you some of these. Use the defaults for the rest, and state the
    - `pom.xml` must forward `redis.image` to the test JVM (`<redis.image>` under the ScalaTest plugin's
      `<systemProperties>`). Without that, every run silently uses the pom's default image: report this and stop,
      rather than a result per image.
-3. **One run per image, one at a time.** The runs share `target/`, so never run two at once. For each image:
+3. **One run per image, one at a time.** The runs share `target/`, so never run two at once. On `spike/phase-1`, each
+   Spark line is a module (`spark-4.<n>/`); without `-pl` a run tests every line, one after the other. For each image:
 
    ```bash
    mkdir -p "$TMPDIR/verifier/<image>"
-   JAVA_HOME=<jdk> ./mvnw -B verify -Dredis.image=<image> [-Dsuites=…] > "$TMPDIR/verifier/<image>/build.log" 2>&1
+   JAVA_HOME=<jdk> ./mvnw -B verify -Dredis.image=<image> [-pl spark-4.<n>] [-Dsuites=…] > "$TMPDIR/verifier/<image>/build.log" 2>&1
    echo "exit=$?"
-   cp -R target/surefire-reports "$TMPDIR/verifier/<image>/" 2>/dev/null
+   for m in spark-*/target/surefire-reports target/surefire-reports; do
+     [ -d "$m" ] && mkdir -p "$TMPDIR/verifier/<image>/$(dirname "$m")" && cp -R "$m" "$TMPDIR/verifier/<image>/$(dirname "$m")/"
+   done
    ```
+
+   Report one row per image and Spark module when the run covers several modules.
 
    A full run can take longer than the Bash tool's 10-minute limit. Start it in the background and wait for it to
    finish; don't read a half-written log as a result. While it runs, confirm the image actually started:
