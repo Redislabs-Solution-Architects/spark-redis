@@ -1,7 +1,8 @@
 # Legacy 3.x fixtures
 
-Java-serialized data that spark-redis 3.x writes and that only `spark-redis-migrate` will read (spec §2.11). Each
-file holds the exact bytes of one Redis value, copied from a golden write capture (`../golden/write/`).
+Java-serialized data that spark-redis 3.x writes, that `SchemaMigration` reads on Spark 4 (`LegacyFixturesSuite`),
+and that Phase 2e's `spark-redis-migrate` will migrate (spec §2.11). Each file holds the exact bytes of one Redis
+value, copied from a golden write capture (`../golden/write/`).
 
 ## Producing build
 
@@ -16,7 +17,7 @@ file holds the exact bytes of one Redis value, copied from a golden write captur
 
 Java serialization embeds class names and `serialVersionUID`s of Spark and Scala 2.12 classes (for example
 `scala.collection.immutable.Map$EmptyMap$` inside a `StructType`), so these files cannot be read reliably on Scala
-2.13. That is why `spark-redis-migrate` runs on the 3.x classpath.
+2.13. Phase 2e decides whether `spark-redis-migrate` needs the 3.x classpath.
 
 ## Files
 
