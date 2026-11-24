@@ -86,8 +86,8 @@ jobs:
         with:
           name: reports-redis-${{ matrix.redis }}-jdk-${{ matrix.jdk }}
           path: |
-            target/surefire-reports/
-            target/site/jacoco/
+            spark-*/target/surefire-reports/
+            spark-*/target/site/jacoco/
           if-no-files-found: ignore
 
   secondary:
@@ -121,8 +121,8 @@ jobs:
         with:
           name: reports-redis-${{ matrix.redis }}-jdk-${{ matrix.jdk }}
           path: |
-            target/surefire-reports/
-            target/site/jacoco/
+            spark-*/target/surefire-reports/
+            spark-*/target/site/jacoco/
           if-no-files-found: ignore
 
   preview:

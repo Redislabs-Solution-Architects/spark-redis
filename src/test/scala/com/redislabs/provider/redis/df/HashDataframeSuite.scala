@@ -314,9 +314,12 @@ trait HashDataframeSuite extends RedisDataframeSuite with Matchers with Logging 
       .option(SqlOptionModel, SqlOptionModelBinary)
       .save()
     saveMap(tableName, extraKey, Person.dataMaps.head)
+    // Read with the 4 columns the binary rows hold, so that only the hash key fails the read. With fullSchema's 5th
+    // column (_id), which the binary model never fills, every row failed to encode too, and on Spark 4 that error
+    // (a SparkRuntimeException) could reach the driver first.
     interceptSparkErr[SparkException] {
       spark.read.format(RedisFormat)
-        .schema(Person.fullSchema)
+        .schema(Person.schema)
         .option(SqlOptionTableName, tableName)
         .option(SqlOptionModel, SqlOptionModelBinary)
         .load()

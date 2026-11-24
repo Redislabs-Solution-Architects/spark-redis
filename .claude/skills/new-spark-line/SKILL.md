@@ -5,8 +5,8 @@ description: The checklist for adding a new Apache Spark minor line to spark-red
 
 # Adding or dropping a Spark line
 
-> **Draft.** Phase 1 seeds this skill from plan steps B1 and B2. Those steps finish it once the per-Spark modules and
-> the CI matrix exist, so check each path below against the tree before you rely on it.
+> **Draft.** Phase 1 seeds this skill from plan steps B1 and B2. B1 added the per-Spark modules described here;
+> B2 finishes the CI matrix steps, so check those against `versions.yml` and `ci.yml` before you rely on them.
 
 spark-redis 4.x publishes **one artifact per supported Spark minor**, for example
 `com.redis:spark-redis-spark-4.2_2.13` (spec §2, "Build"). All artifacts share one source tree. A thin overlay holds
@@ -23,22 +23,26 @@ anything that needs a newer Spark interface. The policy is in spec §1, "Version
 Do these in one PR, in this order:
 
 1. **Module.** Copy the newest `spark-4.x/pom.xml` to `spark-4.<n>/pom.xml`. Change:
-   - the artifactId to `spark-redis-spark-4.<n>_2.13`;
+   - the artifactId to `spark-redis-spark-4.<n>_2.13`, and the `<name>`;
+   - `spark.line` to `spark-4.<n>`, which picks the overlay directory;
    - `spark.version` to the new line's latest patch;
-   - the Scala version to the one that Spark release builds with. Read it from `spark-parent_2.13-<version>.pom`
-     (`<scala.version>`) on Maven Central; don't guess.
+   - `scala.complete.version` to the Scala version that Spark release builds with. Read it from
+     `spark-parent_2.13-<version>.pom` (`<scala.version>`) on Maven Central; don't guess.
 
-   Add the module to the parent pom's `<modules>`.
-2. **Overlay.** Create `src/spark-4.<n>/scala/` with the same one-line README as the other overlays. Put code there
+   Add the module to the parent pom's `<modules>`. The plugins are configured in the parent's `pluginManagement`,
+   so the module only lists them.
+2. **JVM options.** Compare the new line's `org.apache.spark.launcher.JavaModuleOptions` (in its `spark-launcher`
+   jar) with the parent pom's `spark.test.jvm.options`. If the test JVM needs a new option on JDK 17, add it there.
+3. **Overlay.** Create `src/spark-4.<n>/scala/` with the same one-line README as the other overlays. Put code there
    only when the shared source can't compile against this line, or when the line adds an interface we use
    (spec §1, "Anything newer is capability-gated"). Keep each overlay as small as possible.
-3. **`versions.yml`.** Add the line to `spark`. If it is now the newest line, it also gets the extra JDKs
+4. **`versions.yml`.** Add the line to `spark`. If it is now the newest line, it also gets the extra JDKs
    (`jdk_newest_spark`). Don't copy the list anywhere else: CI and the scripts read this file.
-4. **Build and test.** Run `./mvnw -B verify -pl spark-4.<n>` on JDK 17, with the required Redis line. The golden and
+5. **Build and test.** Run `./mvnw -B verify -pl spark-4.<n>` on JDK 17, with the required Redis line. The golden and
    legacy fixtures must pass unchanged. A failure is a finding: fix the code, never the test or a fixture.
-5. **Docs.** Add the line to the README's compatibility table and to the release notes of the next connector
+6. **Docs.** Add the line to the README's compatibility table and to the release notes of the next connector
    minor.
-6. **Spark internals.** If the new line moved or changed a class in `scripts/spark-internal-allowlist.txt`, say so
+7. **Spark internals.** If the new line moved or changed a class in `scripts/spark-internal-allowlist.txt`, say so
    in the PR. The shim belongs in the overlay, not in the shared source.
 
 ## Dropping a line
