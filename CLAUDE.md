@@ -17,11 +17,12 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home ./mvnw -B 
   overlap. No local `redis-server` (`-Dredis.containers=false` uses external servers on the old fixed ports).
 - **One artifact per Spark minor:** `spark-4.<n>/` builds the shared `src/` against that Spark line, plus its overlay
   `src/spark-4.<n>/scala` (skill `new-spark-line`). The command above builds and tests every line, one after the other;
-  add `-pl spark-4.2` (the reference line) for one. The test JVM runs in the repository root.
+  add `-pl spark-$(scripts/spark-lines.sh reference)` for the reference line, the one PRs test. The test JVM runs
+  in the repository root. `versions.yml` lists the Spark lines too, so don't copy them either.
 - **One suite:** add `-Dsuites=com.redislabs.provider.redis.df.standalone.HashDataframeStandaloneSuite`.
 - **Redis lines:** `versions.yml` is the only list of them, so don't copy that list into docs, commands or agents.
   `scripts/redis-lines.sh required` prints the lines every PR must pass, and the command above runs the first.
-  `supported` adds the other supported lines, which CI runs after each merge, allowed to fail. To run
+  `supported` adds the other supported lines, which CI runs after each merge on every Spark line, allowed to fail. To run
   several, use the `verifier` agent. Without `-Dredis.image`, the tests use `redis:8.2`, the floor.
 - **Shorthand:** `make test SUITES=<fqcn>,…` runs the same command (`JAVA_HOME` still applies).
   `REDIS_IMAGE=redis:<line>` picks another Redis line, and `SPARK=4.2` one Spark line.

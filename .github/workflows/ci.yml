@@ -1,9 +1,10 @@
-# Test matrix (Phase 0 plan, step A4). It replaces integration.yml, and versions.yml decides what runs:
-# pull requests must pass the `redis` line, and the `redis_secondary` lines run after each merge and nightly,
-# allowed to fail. The tests start their own Redis in Docker through Testcontainers (see RedisContainers.scala),
-# so no Redis is installed on the runner. Guardrail checks run separately, in guardrails.yml.
-# Java jobs run on Ubuntu 24.04, which has Temurin 8 in its tool cache: ubuntu-latest has no Java 8, so setup-java would
-# download it, and that download has failed its checksum (upstream's fix, kept when spike/phase-0 merged upstream).
+# Test matrix (Phase 1 plan, step B2; decision D1). versions.yml decides what runs:
+# - pull requests: the `spark_reference` line on the `redis` line and the `jdk`, which a PR must pass;
+# - after each merge to spike/phase-1, and on manual dispatch: every `spark` line on every `redis` and
+#   `redis_secondary` line, and on the `jdk_secondary` JDK with the `redis` line, allowed to fail.
+# Each job builds and tests one Spark line's module (spark-<line>/). The tests start their own Redis in Docker through
+# Testcontainers (see RedisContainers.scala), so no Redis is installed on the runner. Guardrail checks run separately,
+# in guardrails.yml.
 name: CI
 
 on:
@@ -12,7 +13,8 @@ on:
     paths-ignore: ['doc/**', '**/*.md']
   pull_request:
     paths-ignore: ['doc/**', '**/*.md']
-  # Nightly. GitHub runs scheduled workflows only from the default branch, so this starts once ci.yml reaches master.
+  # GitHub runs scheduled workflows only from the default branch, which doesn't have this file, so this schedule has
+  # never fired. The full matrix runs after each merge and on manual dispatch instead.
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
@@ -30,8 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      redis: ${{ steps.read.outputs.redis }}
-      secondary: ${{ steps.read.outputs.secondary }}
+      pr: ${{ steps.read.outputs.pr }}
+      full: ${{ steps.read.outputs.full }}
+      spark_reference: ${{ steps.read.outputs.spark_reference }}
       jdk: ${{ steps.read.outputs.jdk }}
       preview: ${{ steps.read.outputs.preview }}
       benchmark_redis: ${{ steps.read.outputs.benchmark_redis }}
@@ -41,8 +44,12 @@ jobs:
         name: Read the matrix and find the newest release-candidate tags
         run: |
           set -euo pipefail
-          echo "redis=$(yq -o=json -I=0 '.redis' versions.yml)" >> "$GITHUB_OUTPUT"
-          echo "secondary=$(yq -o=json -I=0 '.redis_secondary // []' versions.yml)" >> "$GITHUB_OUTPUT"
+          yq -o=json versions.yml > "$RUNNER_TEMP/versions.json"
+          # .github/matrix.jq builds both matrices; the full one leaves out the pull-request jobs, so each Spark,
+          # Redis and JDK combination runs once.
+          echo "pr=$(jq -c --arg which pr -f .github/matrix.jq "$RUNNER_TEMP/versions.json")" >> "$GITHUB_OUTPUT"
+          echo "full=$(jq -c --arg which full -f .github/matrix.jq "$RUNNER_TEMP/versions.json")" >> "$GITHUB_OUTPUT"
+          echo "spark_reference=$(yq '.spark_reference' versions.yml)" >> "$GITHUB_OUTPUT"
           echo "jdk=$(yq -o=json -I=0 '.jdk' versions.yml)" >> "$GITHUB_OUTPUT"
           echo "benchmark_redis=$(yq '.benchmark_redis' versions.yml)" >> "$GITHUB_OUTPUT"
           tags=()
@@ -60,15 +67,13 @@ jobs:
           echo "preview=$(printf '%s\n' "${tags[@]+"${tags[@]}"}" | jq -R . | jq -cs 'map(select(length > 0))')" >> "$GITHUB_OUTPUT"
 
   test:
-    name: Test (Redis ${{ matrix.redis }}, JDK ${{ matrix.jdk }})
+    name: Test (Spark ${{ matrix.spark }}, Redis ${{ matrix.redis }}, JDK ${{ matrix.jdk }})
     needs: matrix
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix:
-        redis: ${{ fromJSON(needs.matrix.outputs.redis) }}
-        jdk: ${{ fromJSON(needs.matrix.outputs.jdk) }}
+      matrix: ${{ fromJSON(needs.matrix.outputs.pr) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -79,31 +84,30 @@ jobs:
       - name: Show the Redis version under test
         run: docker run --rm "redis:${{ matrix.redis }}" redis-server --version
       - name: Test
-        run: ./mvnw -B verify -Dredis.image="redis:${{ matrix.redis }}"
+        run: ./mvnw -B verify -pl "spark-${{ matrix.spark }}" -Dredis.image="redis:${{ matrix.redis }}"
       - name: Upload test and coverage reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: reports-redis-${{ matrix.redis }}-jdk-${{ matrix.jdk }}
+          name: reports-spark-${{ matrix.spark }}-redis-${{ matrix.redis }}-jdk-${{ matrix.jdk }}
           path: |
-            spark-*/target/surefire-reports/
-            spark-*/target/site/jacoco/
+            spark-${{ matrix.spark }}/target/surefire-reports/
+            spark-${{ matrix.spark }}/target/site/jacoco/
           if-no-files-found: ignore
 
-  secondary:
-    # The other supported lines. They never run on pull requests, so a PR waits only on the `test` job. After a
-    # merge (a push to master, spike/phase-0 or spike/phase-1) they show whether that merge broke one of them.
-    name: Secondary (Redis ${{ matrix.redis }}, JDK ${{ matrix.jdk }}, allowed to fail)
+  full:
+    # Never on pull requests, so a PR waits only on the `test` jobs. After a merge they show whether it broke another
+    # Spark, Redis or JDK line. They may fail without failing the build during Phase 1 (D1); the exit review needs one
+    # run in which every one passes.
+    name: Full (Spark ${{ matrix.spark }}, Redis ${{ matrix.redis }}, JDK ${{ matrix.jdk }}, allowed to fail)
     needs: matrix
-    if: github.event_name != 'pull_request' && needs.matrix.outputs.secondary != '[]'
+    if: github.event_name != 'pull_request' && needs.matrix.outputs.full != '{"include":[]}'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     continue-on-error: true
     strategy:
       fail-fast: false
-      matrix:
-        redis: ${{ fromJSON(needs.matrix.outputs.secondary) }}
-        jdk: ${{ fromJSON(needs.matrix.outputs.jdk) }}
+      matrix: ${{ fromJSON(needs.matrix.outputs.full) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -114,19 +118,19 @@ jobs:
       - name: Show the Redis version under test
         run: docker run --rm "redis:${{ matrix.redis }}" redis-server --version
       - name: Test
-        run: ./mvnw -B verify -Dredis.image="redis:${{ matrix.redis }}"
+        run: ./mvnw -B verify -pl "spark-${{ matrix.spark }}" -Dredis.image="redis:${{ matrix.redis }}"
       - name: Upload test and coverage reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: reports-redis-${{ matrix.redis }}-jdk-${{ matrix.jdk }}
+          name: reports-spark-${{ matrix.spark }}-redis-${{ matrix.redis }}-jdk-${{ matrix.jdk }}
           path: |
-            spark-*/target/surefire-reports/
-            spark-*/target/site/jacoco/
+            spark-${{ matrix.spark }}/target/surefire-reports/
+            spark-${{ matrix.spark }}/target/site/jacoco/
           if-no-files-found: ignore
 
   preview:
-    name: Preview (Redis ${{ matrix.redis }}, allowed to fail)
+    name: Preview (Spark ${{ needs.matrix.outputs.spark_reference }}, Redis ${{ matrix.redis }}, allowed to fail)
     needs: matrix
     if: needs.matrix.outputs.preview != '[]'
     runs-on: ubuntu-24.04
@@ -146,13 +150,13 @@ jobs:
       - name: Show the Redis version under test
         run: docker run --rm "redis:${{ matrix.redis }}" redis-server --version
       - name: Test
-        run: ./mvnw -B verify -Dredis.image="redis:${{ matrix.redis }}"
+        run: ./mvnw -B verify -pl "spark-${{ needs.matrix.outputs.spark_reference }}" -Dredis.image="redis:${{ matrix.redis }}"
 
   benchmark:
     # The numbers come from a GitHub-hosted runner, so they are not comparable with the baseline in
     # doc/modernization/benchmarks/, which was measured on the owner's Mac. They are recorded, not gated,
     # until there is a stable runner.
-    name: Benchmarks (Redis ${{ needs.matrix.outputs.benchmark_redis }})
+    name: Benchmarks (Spark ${{ needs.matrix.outputs.spark_reference }}, Redis ${{ needs.matrix.outputs.benchmark_redis }})
     needs: matrix
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -166,7 +170,7 @@ jobs:
           java-version: ${{ fromJSON(needs.matrix.outputs.jdk)[0] }}
           cache: maven
       - name: Run the benchmark suites
-        run: ./mvnw -B -Pbenchmark verify -Dredis.image="redis:${{ needs.matrix.outputs.benchmark_redis }}"
+        run: ./mvnw -B -Pbenchmark verify -pl "spark-${{ needs.matrix.outputs.spark_reference }}" -Dredis.image="redis:${{ needs.matrix.outputs.benchmark_redis }}"
       - name: Add the timings to the job summary
         if: always()
         run: |
@@ -183,6 +187,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: benchmarks-redis-${{ needs.matrix.outputs.benchmark_redis }}
+          name: benchmarks-spark-${{ needs.matrix.outputs.spark_reference }}-redis-${{ needs.matrix.outputs.benchmark_redis }}
           path: target/benchmarks.csv
           if-no-files-found: ignore
