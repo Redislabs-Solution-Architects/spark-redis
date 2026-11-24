@@ -10,6 +10,8 @@
 > recommended. **Amended the same day by roadmap Amendment 1**, approved with PR #47: Phase 1
 > releases nothing, and the first 4.x release, 4.0.0-M1, is Phase 2's DataSource V2 core.
 >
+> **Exit:** [Phase 1 exit review](phase-1-exit-review.md), drafted on 2026-11-24 and awaiting the owner's sign-off.
+>
 > - **What the amendment does to Phase 1's steps:**
 >   - A3 and A4 are dropped;
 >   - B3 moves to Phase 2;
