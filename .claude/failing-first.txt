@@ -10,3 +10,13 @@
 # The PR that fixes the bug removes the test's line and leaves the test as it is: scripts/check-failing-first.sh
 # fails a PR that removes a line and also changes or deletes its test, and the test jobs show that it passes. A
 # line removed in the working tree keeps protecting its test until the removal is committed.
+
+# Upstream #441 and #442, ported to the 3.x baseline (owner's request and rule 1 exception, 2026-11-24):
+src/test/scala/com/redislabs/provider/redis/ConnectionPoolRetryTest.scala  # upstream #441
+src/test/scala/com/redislabs/provider/redis/ConnectionPoolMaxClientsSuite.scala  # upstream #441
+src/test/scala/com/redislabs/provider/redis/RedisConfigParseTest.scala  # upstream #441
+src/test/scala/com/redislabs/provider/redis/RedisConfigTopologySuite.scala  # upstream #441
+src/test/scala/com/redislabs/provider/redis/SchemaMigrationSuite.scala  # upstream #441
+src/test/scala/org/apache/spark/sql/redis/SchemaEncodingTest.scala  # upstream #441
+src/test/scala/com/redislabs/provider/redis/util/ConnectionUtilsTest.scala  # upstream #442
+src/test/scala/org/apache/spark/sql/redis/stream/RedisStreamSourceSuite.scala  # upstream #442
