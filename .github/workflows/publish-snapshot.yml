@@ -37,8 +37,8 @@ jobs:
           cache: maven
           # Writes ~/.m2/settings.xml with a "github" server that reads these environment variables.
           server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: GITHUB_TOKEN
+          server-username-env-var: GITHUB_ACTOR
+          server-password-env-var: GITHUB_TOKEN
       - name: Check that the version is a snapshot
         run: |
           version=$(./mvnw -B -q help:evaluate -Dexpression=project.version -DforceStdout)

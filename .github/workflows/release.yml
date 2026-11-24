@@ -101,8 +101,8 @@ jobs:
           # Writes ~/.m2/settings.xml with a "github" server (the id in the pom's distributionManagement) that reads
           # its credentials from these environment variables.
           server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: GITHUB_TOKEN
+          server-username-env-var: GITHUB_ACTOR
+          server-password-env-var: GITHUB_TOKEN
       - name: Set the version
         id: version
         run: |

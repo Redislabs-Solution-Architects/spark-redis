@@ -379,7 +379,7 @@ Lane A is one session working in sequence, because the port touches every file (
 
     The `scala` key goes.
   - **Pull requests run** the reference Spark line × the required Redis line × JDK 17.
-  - **After each merge, and on manual dispatch,** CI runs:
+  - **After each merge,** CI runs:
     - every Spark line × every supported Redis line × JDK 17;
     - every Spark line on JDK 21, with the required Redis line.
   - **Each job** runs `./mvnw -B verify -pl spark-<line> -Dredis.image=redis:<redis>`, so every job covers
@@ -494,7 +494,7 @@ Lane A is one session working in sequence, because the port touches every file (
 
 The owner signs off on each item:
 
-- [ ] For each Spark line, `./mvnw verify` passes on the full matrix (D1) in one run, after a merge or on manual dispatch, with nothing
+- [ ] For each Spark line, `./mvnw verify` passes on the full matrix (D1) in one run after a merge, with nothing
       quarantined.
 - [ ] The golden write and read fixtures and the legacy fixtures pass unchanged on every line, in standalone and
       cluster.
@@ -522,8 +522,9 @@ D1, as built in B2:
 - **JDK 21 runs on every Spark line,** not just the newest.
 - **Redis 8.6 only, for now** (owner decision, 2026-11-23). The other supported Redis lines (8.2–8.10) return to
   `redis_secondary` before 4.0.0-M1. Until then, a merge runs 6 jobs: every Spark line on JDK 17 and 21, all on 8.6.
-- **There's no nightly run.** GitHub runs schedules only from the default branch, which doesn't have `ci.yml`, so
-  the full matrix runs after each merge and on manual dispatch.
+- **There's no nightly or manual run.** GitHub runs a schedule, and dispatches a workflow by hand, only when the
+  default branch has the workflow, and the fork's `master` doesn't have `ci.yml`. So the full matrix runs after
+  each merge, re-running the last push run repeats it, and CI's benchmark job doesn't run.
 
 | # | Question | Decision |
 |---|---|---|
@@ -546,7 +547,7 @@ D1, as built in B2:
 | The Spark internals that the V1 streaming source uses (`Source`, `HDFSMetadataLog`, `internalCreateDataFrame`) change again in 4.2 or 4.3 | Each module compiles its own line, and an overlay can hold a per-line shim. Phase 3 replaces the source with DSv2 |
 | Binary-model rows read differently on Spark 4: `RestrictedDeserialization`'s allowlist names Spark 3.2–3.5 classes | The golden binary fixtures and `LegacyFixturesSuite` run on every line. Allowlist entries for Spark 4 come only with a test that reads a 3.x row |
 | ANSI mode changes a result | The connector parses with JVM parsers rather than Spark casts. Any change goes in the findings doc and is fixed back to the 3.x result |
-| The 17-job matrix is slow or flaky | PRs run one job (D1). The full matrix runs after each merge and on manual dispatch. A flaky test is fixed, never quarantined, without the owner |
+| The 17-job matrix is slow or flaky | PRs run one job (D1). The full matrix runs after each merge. A flaky test is fixed, never quarantined, without the owner |
 | Spark 4.1 reaches EOL (about June 2027) before 4.0.0 GA | The `spark-4.1` module and its CI jobs are deleted. GA ships with a 4.2 floor (roadmap) |
 | Users on the 3.x artifact pick up M1 by accident | M1 uses new coordinates (`com.redis:spark-redis-spark-<line>_2.13`), so no 3.x build resolves to it |
 
