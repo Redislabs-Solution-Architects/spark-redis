@@ -27,7 +27,7 @@ The caller gives you some of these. Use the defaults for the rest, and state the
 2. **Preflight.** Record the commit (`git rev-parse --short HEAD`), the JDK and Docker:
    - `JAVA_HOME` must be the JDK the branch builds with, which `CLAUDE.md`'s build command names: JDK 17 for
      `spike/phase-1` and its lane branches (`/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home` on the
-     owner's Mac), JDK 8 for `branch-3.x` and 3.x upstream work
+     owner's Mac), JDK 8 for 3.x upstream work
      (`/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home`). Check with `"$JAVA_HOME/bin/java" -version`.
    - `docker info` must succeed. Maven and Docker don't work inside Claude's sandbox, so run these commands
      outside it, which needs the owner's permission.

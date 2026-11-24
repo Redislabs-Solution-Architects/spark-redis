@@ -125,12 +125,13 @@ RESP3 (Phase 1's old item 4) would also have been thrown away: Phase 2a's `Redis
 Spark 3.5 supported until late 2027, and the migration guide and tooling, that's the trade this amendment
 proposes for a native Spark 4 design.
 
-**Open decisions:**
-- **A1. Lane C.** Does `branch-3.x` still need a schema migration jar, now that `SchemaMigration` runs on Spark 4?
-  The recommendation is to keep the branch, for `binary` rows only, and decide that in Phase 2e.
+**Decisions (the owner, 2026-11-23):**
+- **A1. Lane C moves to Phase 2e.** `SchemaMigration` already reads the 3.x schema keys on every Spark 4 line
+  (`LegacyFixturesSuite`), so `branch-3.x` doesn't need a schema migration jar, and Phase 1 doesn't cut the branch.
+  Phase 2e cuts it only if migrating `binary` rows needs Spark 3's classpath.
 - **A2. The issue record.** The issues Phase 1 used to close (#390, #386, #368, #373, #253, #294, #188, #377, #302
-  and #295, all "run on Spark 4") now close with 4.0.0-M1 in Phase 2. The recommendation is that `backlog.md` keeps
-  them under Phase 1, with a note, since the backlog is a record and not a plan.
+  and #295, all "run on Spark 4") now close with 4.0.0-M1 in Phase 2. `backlog.md` keeps them under Phase 1, with a
+  note, since the backlog is a record and not a plan.
 
 ## Release train
 
@@ -372,8 +373,8 @@ closed the "run on Spark 4" issue family, which now closes with 4.0.0-M1 in Phas
    Spark {4.1, 4.2, 4.3} × Redis {8.2, 8.4, 8.6, 8.8, 8.10} × {standalone, cluster, TLS}, on JDK 17, with
    JDK 21 on every Spark line. The connector supports JDK 17 and 21 only (spec §1). For now CI tests Redis 8.6
    only (owner decision, 2026-11-23), and the other Redis lines return before 4.0.0-M1.
-7. **`branch-3.x`:** set up the branch, on Spark 3.5 and Scala 2.12, that will host `spark-redis-migrate`
-   (Phase 2e). There is no bridge release.
+7. **`branch-3.x`:** moved to Phase 2e (Amendment 1, decision A1). Phase 2e cuts the branch, on Spark 3.5, only if
+   `spark-redis-migrate` needs Spark 3's classpath. There is no bridge release.
 8. **The release workflow** builds, signs and publishes the per-Spark artifacts. In Phase 1 it publishes
    snapshots only. Its first release is 4.0.0-M1 in Phase 2 (Amendment 1).
 
@@ -385,7 +386,7 @@ closed the "run on Spark 4" issue family, which now closes with 4.0.0-M1 in Phas
 The benchmark comparison moves to Phase 2's exit, which already requires 2× the baseline write throughput.
 
 **Lanes:** (a) keeping the 3.x code compiling and passing on each Spark line; (b) build, the CI matrix and the
-release workflow; (c) the `branch-3.x` skeleton for the migration tool.
+release workflow. Lane (c), the `branch-3.x` skeleton for the migration tool, moved to Phase 2e (Amendment 1, A1).
 
 **Risk.** If Spark 4.1 reaches EOL (expected around June 2027) before 4.0.0 GA, GA ships with a 4.2 floor.
 4.2 has the longest maintenance window of any current line (18 months, to about January 2028). That makes
@@ -436,7 +437,8 @@ The spec sections are §2.1–§2.4 and §2.6–§2.11.
   - `client.name`
 - **2e: Catalog and migration:**
   - JSON catalog entries
-  - `spark-redis-migrate`, which runs on `branch-3.x` and rewrites schema blobs and `binary` rows
+  - `spark-redis-migrate`, which rewrites schema blobs and `binary` rows. Phase 2e decides whether it needs Spark
+    3's classpath, and cuts `branch-3.x` for it only then (Amendment 1, A1)
   - the renamed-option errors (spec §2.11), with no aliases
   - removal of the RDD API and the old `org.apache.spark.sql.redis` package
   - the 3.x → 4.x migration guide, mapping every RDD function and 3.x option to its replacement
@@ -598,7 +600,7 @@ puts the matrix in one file and Phase 6 automates it.
 | ~Apr 2027 | Spark 4.3 EOL (6-month window) | Drop the 4.3 artifact |
 | ~Jun 2027 | Spark 4.1 EOL (our estimate; not published) | The floor moves to 4.2 |
 | ~mid-2027 | Spark 4.5 LTS GA | Make 4.5 the long-term reference line |
-| Nov 2027 | Spark 3.5 extended LTS ends | Archive `branch-3.x` once users have migrated their 3.x data |
+| Nov 2027 | Spark 3.5 extended LTS ends | Archive `branch-3.x`, if Phase 2e cut it, once users have migrated their 3.x data |
 | Sep 2030 | Redis 8.2 (extended) EOL | Review the Redis floor every year; it may move earlier as standard lines come and go |
 
 ## Feature coverage: where each Spark 4 and Redis 8 capability lands

@@ -52,8 +52,9 @@ cd spark-redis
 mvn clean package -DskipTests
 ```
 
-The build produces `target/spark-redis_2.13-<version>.jar` and `target/spark-redis_2.13-<version>-jar-with-dependencies.jar`.
-The 3.x build, for Spark 3.5 on Scala 2.12 or 2.13 and JDK 8, is on `branch-3.x`.
+The build produces one connector per Spark line, in `spark-4.<n>/target/`:
+`spark-redis-spark-4.<n>_2.13-<version>.jar` and its `-jar-with-dependencies.jar`. Use the one for your cluster's
+Spark line. The 3.x build, for Spark 3.5 and JDK 8, is upstream's `master` branch.
 
 See [Dev environment](dev.md) to run the tests.
 

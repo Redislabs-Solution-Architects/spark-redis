@@ -6,7 +6,7 @@ file wraps the common commands.
 You need the following. Check the Java version that `mvn -version` reports.
 
 - **A JDK 17** for this 4.x build, which Spark 4 needs, with `JAVA_HOME` pointing at it. The tests run on the same
-  JDK, whatever `java` comes first on your `PATH`. The 3.x build, on `branch-3.x`, needs a JDK 8.
+  JDK, whatever `java` comes first on your `PATH`. The 3.x build, upstream's `master` branch, needs a JDK 8.
 - **Docker.** The tests start their own Redis servers in containers through Testcontainers, on free ports chosen at
   run time, so no local `redis-server` is needed, and several test runs can happen at once.
 
@@ -40,15 +40,22 @@ mvn clean package -DskipTests
 
 ### Scala and Spark versions
 
-The build is Scala 2.13 and Spark 4.1 (see `pom.xml`): Spark 4 supports Scala 2.13 only. The 3.x build, for Scala
-2.12 and 2.13 on Spark 3.5, is on `branch-3.x`.
-
-To test against another Spark 4 version, pass it to Maven together with the Scala version that Spark release is built
-with (`<scala.version>` in its `spark-parent_2.13` pom), for example:
+The build is Scala 2.13, which is all Spark 4 supports, with one module per Spark line in `versions.yml`:
+`spark-4.<n>/` builds the shared `src/` against that line's latest patch release. `make test` builds and tests every
+line, one after the other. To test one line:
 
 ```
-make test MVN_ARGS="-Dspark.version=4.2.1 -Dscala.complete.version=2.13.18"
+make test SPARK=4.2
 ```
+
+To test another patch release of a line, pass it to Maven together with the Scala version that Spark release is
+built with (`<scala.version>` in its `spark-parent_2.13` pom), for example:
+
+```
+make test SPARK=4.2 MVN_ARGS="-Dspark.version=4.2.0 -Dscala.complete.version=2.13.18"
+```
+
+The 3.x build, for Spark 3.5, is upstream's `master` branch.
 
 Convert between Java and Scala collections with `scala.jdk.CollectionConverters._` and explicit `.asScala` / `.asJava`,
 and use `.asScala.toSeq` where a `Seq` is expected.

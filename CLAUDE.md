@@ -10,7 +10,7 @@ Redis 8.2+). We are in **Phase 1**: today's features, unchanged, on Spark 4, Sca
 JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home ./mvnw -B verify -Dredis.image=redis:$(scripts/redis-lines.sh required | head -n 1)
 ```
 
-- **JDK 17** for `spike/phase-1`. `branch-3.x` and upstream 3.x PRs build on JDK 8
+- **JDK 17** for `spike/phase-1`. Upstream 3.x PRs build on JDK 8
   (`/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home`). Always set `JAVA_HOME`: `java` on `PATH` is a jenv
   shim, and Maven and the test JVM both run on `JAVA_HOME`.
 - **Docker must be running.** Testcontainers starts the Redis servers each test JVM needs, on free ports, so runs can
@@ -69,15 +69,14 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home ./mvnw -B 
 
 ## Working on this repo
 
-- **PRs** go to `spike/phase-1` (lanes X, A and B) or `branch-3.x` (lane C) of `Redislabs-Solution-Architects/spark-redis`,
-  and the owner approves every merge. Each PR cites the plan step or spec section it implements and lists its proof.
+- **PRs** go to `spike/phase-1` of `Redislabs-Solution-Architects/spark-redis`, and the owner approves every merge.
+  Each PR cites the plan step or spec section it implements and lists its proof.
   **Wait for CI to finish before merging,** and check that a PR is still open before pushing to its branch.
 - **Upstream (`RedisLabs/spark-redis`, remote `origin`):** a fix or improvement from this work that also helps 3.x
   goes upstream as a PR of its own, at the owner's request, and the owner merges it. An upstream PR carries none of
-  the fork's files (`.claude/`, `doc/modernization/`, `evals/`), no Phase labels and no links to fork PRs. Upstream
-  changes come into `branch-3.x` by merging upstream `master`, never by rebasing; after each merge, look for tests
-  that both sides added. `spike/phase-1` doesn't merge upstream (plan, D5). Don't comment on or label upstream
-  issues. Inside the fork, write issue numbers as plain `#123`.
+  the fork's files (`.claude/`, `doc/modernization/`, `evals/`), no Phase labels and no links to fork PRs.
+  `spike/phase-1` doesn't merge upstream (plan, D5), and there's no `branch-3.x` until Phase 2e (roadmap
+  Amendment 1, A1). Don't comment on or label upstream issues. Inside the fork, write issue numbers as plain `#123`.
 - **Review rubric:** [`REVIEW.md`](REVIEW.md). **Skills:** [`golden-layout`](.claude/skills/golden-layout/SKILL.md),
   and drafts [`new-spark-line`](.claude/skills/new-spark-line/SKILL.md),
   [`redis-capabilities`](.claude/skills/redis-capabilities/SKILL.md) and

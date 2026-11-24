@@ -63,7 +63,7 @@ Phase 0 and the upstream fixes already did part of the roadmap's Phase 1 scope. 
 | 4. Jedis 8, and the legacy commands (spec §2.14) | **Done in 3.x:** `HSET`, `SET … EX`, `SSCAN` (#434), `ZRANGE … BYSCORE` (#434), a value and its TTL in one `MULTI`/`EXEC` (#433), `UNLINK` in `write.mode = replace`, `CLIENT SETNAME`/`SETINFO`. **Still to do:** Jedis 3.9 → 8; `HELLO 3` (today `HELLO` is only a capability probe); TLS hostname verification; `LRANGE 0 -1` and `HGETALL`; `DEL` in truncate; `INFO` parsing; `CLUSTER SLOTS`; the hand-rolled `XINFO` decoder | Dropped (Amendment 1): Phase 2a |
 | 5. Remove DStreams; deprecate the RDD API | Both present | A2 |
 | 6. One artifact per Spark minor; the CI matrix | One artifact, `com.redislabs:spark-redis_2.12`. CI runs Redis 8.6 × JDK 8 × Scala {2.12, 2.13} on PRs, and Redis 8.2 after merge | B1, B2 |
-| 7. `branch-3.x` | None. The schema migration (`SchemaMigration`, #429) exists in the 3.x code | C1–C3 |
+| 7. `branch-3.x` | None. The schema migration (`SchemaMigration`, #429) exists in the 3.x code | Moved to Phase 2e (Amendment 1, A1) |
 | 8. Publish 4.0.0-M1 | The snapshot pipeline to GitHub Packages works (Phase 0 C9) | B4, snapshots only (Amendment 1) |
 
 **What the port touches.** This comes from a read of the code at `987aba1`, checked against the Spark 4.1.4 and
@@ -104,8 +104,8 @@ Jedis 8.0.2 jars:
 
 | Where | Setup |
 |---|---|
-| Owner's Mac (arm64) | **Zulu 17** (17.0.21.1) at `/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home` builds and tests 4.x. Homebrew's `openjdk@17` (the same version, jenv's global default) and `openjdk@21` are also installed, the latter for local JDK 21 runs. **Zulu 8** stays for `branch-3.x`. As in Phase 0, always set `JAVA_HOME`, because `java` on `PATH` comes from jenv. Docker Desktop for Testcontainers; the Maven Wrapper |
-| CI | GitHub Actions, `ubuntu-24.04`, Temurin 17, plus 21 on every Spark line (the connector supports JDK 17 and 21, spec §1). Docker on the runners. `branch-3.x` keeps Temurin 8 |
+| Owner's Mac (arm64) | **Zulu 17** (17.0.21.1) at `/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home` builds and tests 4.x. Homebrew's `openjdk@17` (the same version, jenv's global default) and `openjdk@21` are also installed, the latter for local JDK 21 runs. **Zulu 8** stays for upstream 3.x work. As in Phase 0, always set `JAVA_HOME`, because `java` on `PATH` comes from jenv. Docker Desktop for Testcontainers; the Maven Wrapper |
+| CI | GitHub Actions, `ubuntu-24.04`, Temurin 17, plus 21 on every Spark line (the connector supports JDK 17 and 21, spec §1). Docker on the runners |
 | Claude's sandbox | Reaches the Docker socket. It can't read `src/test/resources/tls/*.key`, so suites that start the TLS container run outside the sandbox. It can't write `.claude/hooks/` or `.claude/skills/`, so the owner writes or approves those edits (X1) |
 
 ## Branches, lanes and file ownership
@@ -115,9 +115,9 @@ Jedis 8.0.2 jars:
 | **X: guardrails for Phase 1** | `spike/phase-1-x` | `CLAUDE.md`, `REVIEW.md`, `.claude/`, `evals/`, `scripts/check-*.sh` | First, together with A1 |
 | **A: the code port** | `spike/phase-1-a` | `src/main/`, `src/test/scala/`, `scripts/spark-internal-allowlist.txt`, `dev/`; plus `pom.xml`, `versions.yml` and `ci.yml` **during A1 only** | First. A1 lands before anything else in A and B |
 | **B: build, CI and release** | `spike/phase-1-b` | `pom.xml` and the module poms (after A1), `versions.yml`, `.github/workflows/`, `Makefile`, `doc/modernization/benchmarks/`, the release docs in `README.md` | After A1 merges |
-| **C: `branch-3.x`** | `branch-3.x`, with PRs from `branch-3.x-*` | Everything on `branch-3.x` | Right away. It doesn't depend on A or B |
+| **C: `branch-3.x`** | — | — | Moved to Phase 2e (Amendment 1, decision A1) |
 
-Each lane merges into `spike/phase-1` (or, for lane C, into `branch-3.x`) through a PR in the fork, which the owner
+Each lane merges into `spike/phase-1` through a PR in the fork, which the owner
 approves. Three rules prevent conflicts:
 
 - **After A1, the build belongs to lane B.** Lane A's later `pom.xml` edits are only dependency versions and
@@ -125,7 +125,8 @@ approves. Three rules prevent conflicts:
   conflict with lane B stays small.
 - **Lane A never edits `.github/workflows/` after A1.**
 - **`spike/phase-1` stops merging upstream `master` after A1** (decision [D5](#decisions-for-the-owner)). Upstream
-  is 3.x, so its changes would conflict with the port. `branch-3.x` follows upstream instead (C3).
+  is 3.x, so its changes would conflict with the port. With lane C moved to Phase 2e, no fork branch follows
+  upstream in Phase 1.
 
 ## Steps
 
@@ -443,6 +444,12 @@ Lane A is one session working in sequence, because the port touches every file (
 
 ### Lane C: `branch-3.x`
 
+> **Moved to Phase 2e by roadmap Amendment 1, decision A1** (the owner, 2026-11-23). `SchemaMigration` already
+> reads the legacy schema fixtures on every Spark 4 line (`LegacyFixturesSuite`), so C2's schema jar isn't needed,
+> and Phase 1 doesn't cut `branch-3.x`. Phase 2e cuts it only if migrating `binary` rows needs Spark 3's classpath,
+> and can start from C1–C3 below. A trial merge on 2026-11-23 of upstream `master` (#436–#439) into `987aba1` had
+> three conflicts: `integration.yml` and `version-and-release.yml`, which the fork deleted, and `doc/dev.md`.
+
 **C1. Cut `branch-3.x`**
 
 - **Files:** the new branch, cut from `spike/phase-0` at `987aba1`: Spark 3.5.10, Scala 2.12, JDK 8.
@@ -486,7 +493,7 @@ Lane A is one session working in sequence, because the port touches every file (
 2. **In parallel, up to three sessions:**
    - **lane A:** A2. A3 and A4 are dropped (Amendment 1);
    - **lane B:** B1, then B2. B1 starts first, so lane A's later pom edits land on the new layout;
-   - **lane C:** C1–C3, at any time.
+   - **lane C:** moved to Phase 2e (Amendment 1, A1).
 3. **B4,** narrowed to the release workflow and snapshots (Amendment 1). B3 moves to Phase 2.
 4. **The exit review.**
 
@@ -502,20 +509,22 @@ The owner signs off on each item:
       `release.yml`'s dry run passes (B4, narrowed).
 - [ ] **No DStreams:** nothing in `src/` imports `org.apache.spark.streaming`.
 
+- [ ] **Guardrails:** `CLAUDE.md`, `REVIEW.md` and the evals are updated for Phase 1, and the eval pass rate is
+      recorded.
+
 **Moved by roadmap Amendment 1:**
 - the benchmark comparison (B3), to Phase 2;
 - publishing 4.0.0-M1, to Phase 2;
-- the RESP3-only and legacy-command criteria, to Phase 2a and 2e.
-- [ ] **`branch-3.x`:** CI passes, and `spark-redis-migrate --dry-run` runs against the legacy fixtures.
-- [ ] **Guardrails:** `CLAUDE.md`, `REVIEW.md` and the evals are updated for Phase 1, and the eval pass rate is
-      recorded.
+- the RESP3-only and legacy-command criteria, to Phase 2a and 2e;
+- `branch-3.x` and `spark-redis-migrate` (lane C), to Phase 2e (decision A1).
 
 ## Decisions for the owner
 
 **All seven accepted by the owner on 2026-11-23, as recommended.** The steps above follow them. After roadmap
 Amendment 1:
 - D4 (signing) and D7 (the benchmark baseline) apply to Phase 2's 4.0.0-M1;
-- D6 (keep the package names in M1) no longer applies, because no release carries the 3.x packages.
+- D6 (keep the package names in M1) no longer applies, because no release carries the 3.x packages;
+- D5's second half, upstream merging into `branch-3.x`, moves to Phase 2e with lane C (decision A1).
 
 D1, as built in B2:
 - **JDKs:** the connector supports JDK 17 and 21 only (owner decision, 2026-11-23), so JDK 25 is out of the matrix.
