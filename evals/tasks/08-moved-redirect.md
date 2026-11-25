@@ -7,7 +7,15 @@ that exposes a bug is kept as it is and listed in `.claude/failing-first.txt`.
 
 ## Setup
 
-None.
+From `eval-base-phase-0`: none. From `eval-base-phase-1`, where Phase 0's #19 already made `toRedisKV` follow `MOVED`
+and `ASK`, remove it first, with its tests. The patch puts back `toRedisKV`'s writer from before #19, so the bug the
+prompt describes is there again and a correct test fails. The other writers still follow redirects, and `ClusterSlots`
+stays, since their tests use it:
+
+```bash
+git apply "$EVALS/setup/08-moved-redirect-phase-1.patch"
+./mvnw -B -q test-compile
+```
 
 ## Prompt
 

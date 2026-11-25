@@ -183,7 +183,7 @@ the work up to each gate, and named humans pass the gates.
 | Design | `spec.md` (done) | Drafts it and flags concerns; updates it when upstream changes | **Product owner** accepts it; **tech lead** reviews the risky parts (§2.4 row-level ops, §2.5 streaming, §2.11 migration) |
 | Build | `plans/phase-N[-lane].md`, then code | Writes the plan in plan mode, then implements it in a worktree per lane | **Tech lead** accepts each plan before code starts |
 | Test | Tests in the same PR | Golden and characterization tests first; for a bug, a failing test first, then the fix | Reviewed as part of the PR |
-| Deploy | PR, then release | Claude review using `REVIEW.md`; release notes from Release Drafter | **Code owner** approves the merge; the **release manager** publishes to Central and PyPI |
+| Deploy | PR, then release | Claude review using `REVIEW.md`; GitHub's generated release notes | **Code owner** approves the merge; the **release manager** publishes to Central and PyPI |
 | Maintain | Matrix bumps, CVE scans, incidents | Opens PRs for upstream patch releases; turns user-reported regressions into evals and new intents | Humans triage: fix now, schedule, or dismiss |
 
 ### Guardrails built in Phase 0, before any port work

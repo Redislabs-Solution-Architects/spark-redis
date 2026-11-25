@@ -5,7 +5,7 @@
 # return to `redis_secondary` before 4.0.0-M1.
 
 # The Spark lines: one artifact, built by the module spark-<line>/, per line (see .claude/skills/new-spark-line).
-# After each merge, CI tests every line.
+# After each merge, nightly, and on manual dispatch, CI tests every line.
 spark: ["4.1", "4.2", "4.3"]
 
 # The Spark line pull requests test, and the reference for docs and examples: the line with the longest maintenance
@@ -16,8 +16,8 @@ spark_reference: "4.2"
 # merge, on every Spark line.
 redis: ["8.6"]
 
-# The other supported Redis lines. CI runs them after each merge to spike/phase-1, on every Spark line, never on
-# pull requests. These jobs may fail without failing the build. Empty for now: see the top.
+# The other supported Redis lines. CI runs them after each merge to spike/phase-1, nightly, and on manual dispatch, on
+# every Spark line, never on pull requests. These jobs may fail without failing the build. Empty for now: see the top.
 redis_secondary: []
 
 # Upcoming Redis lines. CI tests the newest release-candidate tag of each (for example 8.12-rc3), on
@@ -28,10 +28,10 @@ redis_preview: []
 jdk: ["17"]
 
 # The other supported JDK. The connector supports JDK 17 and 21, the JDKs every Spark 4 line supports. CI tests it
-# after each merge on every Spark line with every `redis` line, never on pull requests. These jobs may fail without
-# failing the build.
+# after each merge, nightly, and on manual dispatch, on every Spark line with every `redis` line, never on pull
+# requests. These jobs may fail without failing the build.
 jdk_secondary: ["21"]
 
-# The Redis line for CI's benchmark job: the floor, the same as doc/modernization/benchmarks/. The job runs only on
-# a schedule or by hand, which GitHub allows only once the fork's master has ci.yml, so for now it doesn't run.
+# The Redis line for CI's benchmark job, which runs nightly and on manual dispatch: the floor, the same as
+# doc/modernization/benchmarks/.
 benchmark_redis: "8.2"

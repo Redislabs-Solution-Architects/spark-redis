@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import com.redislabs.provider.redis.{ReadWriteConfig, RedisConfig, RedisEndpoint, toRedisContext}
 import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
 import com.redislabs.provider.redis.util.TestUtils.generateTableName
-import com.redislabs.provider.redis.util.{RedisCapabilities, WriteCapabilities}
+import com.redislabs.provider.redis.util.{AclUsers, RedisCapabilities, WriteCapabilities}
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark.sql.redis._
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -28,7 +28,7 @@ import redis.clients.jedis.util.{JedisClusterCRC16, SafeEncoder}
   * The commands a write sent are counted with `INFO commandstats` on every primary. Only the test reads them, to watch
   * the server; the connector never parses `INFO` to choose a path.
   */
-trait BinaryTtlWriteSuite extends RedisDataframeSuite with Matchers {
+trait BinaryTtlWriteSuite extends RedisDataframeSuite with AclUsers with Matchers {
 
   /** True for the cluster suite: keys of one multi-key command must then share a hash slot. */
   protected def clusterMode: Boolean
@@ -183,13 +183,6 @@ trait BinaryTtlWriteSuite extends RedisDataframeSuite with Matchers {
 
   protected def distinctSlots(table: String): Long =
     rows.map(row => JedisClusterCRC16.getSlot(dataKey(table, row))).distinct.size.toLong
-
-  /** Runs `body` while every primary has an extra ACL user with the test password and `rules`, then removes it. */
-  protected def withAclUser[A](user: String, rules: String*)(body: => A): A = {
-    onPrimaries(_.aclSetUser(user, Seq("reset", "on", s">$userPassword", "~*", "&*", "+@all") ++ rules: _*))
-    try body
-    finally onPrimaries(_.aclDelUser(user))
-  }
 
   test("the write capabilities come from the server: COMMAND INFO for MSETEX, HELLO for slot grouping") {
     RedisCapabilities.forWrite(redisConfig) shouldBe

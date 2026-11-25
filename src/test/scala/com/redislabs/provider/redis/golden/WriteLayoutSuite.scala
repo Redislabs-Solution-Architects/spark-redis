@@ -4,7 +4,9 @@ import java.nio.charset.StandardCharsets.UTF_8
 
 import com.redislabs.provider.redis.golden.GoldenData._
 import com.redislabs.provider.redis.golden.KeyspaceSnapshot.{JavaByteArrayIdentity, ValueRule}
+import com.redislabs.provider.redis.RedisConfig.PasswordOption
 import com.redislabs.provider.redis.toRedisContext
+import com.redislabs.provider.redis.util.AclUsers
 import org.apache.spark.sql.redis._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
@@ -16,14 +18,15 @@ import org.apache.spark.sql.{DataFrame, Row, SaveMode}
   * writes under its own table, `golden_<scenario>`, and compares every key under `golden_<scenario>:*` and the table's
   * `_spark:<table>:schema` key with `golden/write/<scenario>.json`.
   */
-trait WriteLayoutSuite extends GoldenSuite {
+trait WriteLayoutSuite extends GoldenSuite with AclUsers {
 
   private val Ttl = 3600
 
   def table(scenario: String): String = "golden_" + scenario.replace('-', '_')
 
-  private def scenario(name: String, rules: Seq[ValueRule] = Nil)(write: String => Unit): Unit =
-    test(s"write layout: $name") {
+  /** `variant` names another way to write the same scenario, which must give the same layout. */
+  private def scenario(name: String, rules: Seq[ValueRule] = Nil, variant: String = "")(write: String => Unit): Unit =
+    test(s"write layout: $name${if (variant.isEmpty) "" else s", $variant"}") {
       val t = table(name)
       val patterns = Seq(s"$t:*", s"_spark:$t:schema")
       KeyspaceSnapshot.delete(redisConfig, patterns)
@@ -86,6 +89,16 @@ trait WriteLayoutSuite extends GoldenSuite {
     val allTypesRules = if (model == SqlOptionModelHash) Seq(JavaByteArrayIdentity) else Nil
     scenario(s"df-$model-all-types", allTypesRules) { t =>
       save(rows(AllTypesSchema, allTypes), t, model, options = Map(SqlOptionKeyColumn -> "id"))
+    }
+  }
+
+  // The binary model writes rows with a ttl in MSETEX where every primary has it (Redis 8.4 and later), and with
+  // SET … EX otherwise. A user who may not run COMMAND gets SET … EX on every Redis line: the layout must be the same.
+  scenario("df-binary-ttl", variant = "as a user who may not run COMMAND, so with SET … EX") { t =>
+    val user = "golden_binary_ttl_no_command"
+    withAclUser(user, "-command") {
+      save(people, t, SqlOptionModelBinary, options = Map(SqlOptionKeyColumn -> "name", SqlOptionTTL -> Ttl.toString,
+        "user" -> user, PasswordOption -> userPassword))
     }
   }
 

@@ -6,7 +6,13 @@
 
 ## Setup
 
-None.
+From `eval-base-phase-0`: none. From `eval-base-phase-1`, where Phase 0's #20 already made parse errors name the key,
+field, value and type, remove it first:
+
+```bash
+git apply "$EVALS/setup/05-parse-errors-phase-1.patch"
+./mvnw -B -q test-compile
+```
 
 ## Prompt
 

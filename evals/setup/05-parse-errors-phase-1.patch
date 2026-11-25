@@ -1,0 +1,388 @@
+diff --git a/src/main/scala/com/redislabs/provider/redis/util/FieldParseException.scala b/src/main/scala/com/redislabs/provider/redis/util/FieldParseException.scala
+deleted file mode 100644
+index 4764d88..0000000
+--- a/src/main/scala/com/redislabs/provider/redis/util/FieldParseException.scala
++++ /dev/null
+@@ -1,88 +0,0 @@
+-package com.redislabs.provider.redis.util
+-
+-import org.apache.spark.sql.types.{DataType, DateType, TimestampType}
+-
+-/**
+-  * A value read from Redis that can't be parsed as its column's type (#358). The message names the Redis key (and
+-  * the stream entry, for a stream), the field, the value and the type.
+-  *
+-  * Each implementation extends the exception the parser itself throws, so code that catches that keeps working:
+-  * [[FieldNumberFormatException]] for numbers, [[FieldFormatException]] for dates and timestamps. The parser's
+-  * exception is the cause.
+-  */
+-sealed trait FieldParseException { self: IllegalArgumentException =>
+-  def field: String
+-  def value: String
+-  def dataType: DataType
+-  def key: Option[String]
+-  def entryId: Option[String]
+-
+-  /** The same failure, naming the Redis key (and stream entry) the value was read from. */
+-  def withKey(key: String, entryId: Option[String]): IllegalArgumentException with FieldParseException
+-}
+-
+-object FieldParseException {
+-
+-  /** Wraps the exception a parser threw for the value of a field. */
+-  private[util] def apply(field: String, value: String, dataType: DataType,
+-                          parseError: IllegalArgumentException): IllegalArgumentException with FieldParseException =
+-    parseError match {
+-      case e: NumberFormatException => new FieldNumberFormatException(field, value, dataType, None, None, e)
+-      case e => new FieldFormatException(field, value, dataType, None, None, e)
+-    }
+-
+-  /**
+-    * Runs body, adding the Redis key (and stream entry) to a parse failure it throws. The DataFrame and stream
+-    * sources wrap each row they parse in this.
+-    */
+-  def withKey[T](key: String, entryId: Option[String] = None)(body: => T): T =
+-    try {
+-      body
+-    } catch {
+-      case e: FieldParseException if e.key.isEmpty => throw e.withKey(key, entryId)
+-    }
+-
+-  private[util] def message(field: String, value: String, dataType: DataType, key: Option[String],
+-                            entryId: Option[String], parseError: IllegalArgumentException): String = {
+-    val where = key.map(k => s" in key '$k'" + entryId.map(id => s", entry $id").getOrElse("")).getOrElse("")
+-    // java.sql.Date.valueOf throws without a message
+-    val reason = dataType match {
+-      case DateType => Some("expected yyyy-[m]m-[d]d")
+-      case TimestampType =>
+-        Some("expected yyyy-[m]m-[d]d hh:mm:ss[.fffffffff] or an ISO-8601 date-time such as 2022-10-14T13:33:15")
+-      case _ => Option(parseError.getMessage)
+-    }
+-    s"Can't parse value '$value' of field '$field'$where as ${dataType.typeName}" + reason.map(": " + _).getOrElse("")
+-  }
+-}
+-
+-/** A number that can't be parsed. See [[FieldParseException]]. */
+-final class FieldNumberFormatException private[util] (val field: String, val value: String, val dataType: DataType,
+-                                                      val key: Option[String], val entryId: Option[String],
+-                                                      parseError: NumberFormatException)
+-    extends NumberFormatException(FieldParseException.message(field, value, dataType, key, entryId, parseError))
+-    with FieldParseException {
+-
+-  initCause(parseError)
+-
+-  override def withKey(key: String, entryId: Option[String]): FieldNumberFormatException = {
+-    val e = new FieldNumberFormatException(field, value, dataType, Some(key), entryId, parseError)
+-    e.setStackTrace(getStackTrace)
+-    e
+-  }
+-}
+-
+-/** A date or timestamp that can't be parsed. See [[FieldParseException]]. */
+-final class FieldFormatException private[util] (val field: String, val value: String, val dataType: DataType,
+-                                                val key: Option[String], val entryId: Option[String],
+-                                                parseError: IllegalArgumentException)
+-    extends IllegalArgumentException(FieldParseException.message(field, value, dataType, key, entryId, parseError),
+-      parseError)
+-    with FieldParseException {
+-
+-  override def withKey(key: String, entryId: Option[String]): FieldFormatException = {
+-    val e = new FieldFormatException(field, value, dataType, Some(key), entryId, parseError)
+-    e.setStackTrace(getStackTrace)
+-    e
+-  }
+-}
+diff --git a/src/main/scala/com/redislabs/provider/redis/util/ParseUtils.scala b/src/main/scala/com/redislabs/provider/redis/util/ParseUtils.scala
+index 3b06108..a491502 100644
+--- a/src/main/scala/com/redislabs/provider/redis/util/ParseUtils.scala
++++ b/src/main/scala/com/redislabs/provider/redis/util/ParseUtils.scala
+@@ -16,27 +16,19 @@ object ParseUtils {
+ 
+   /**
+     * Parses each field of the schema from its string value.
+-    *
+-    * @throws IllegalArgumentException a value can't be parsed as its field's type. It is a [[FieldParseException]]
+-    *                                  that names the field, the value and the type, and a NumberFormatException for
+-    *                                  a number. Wrap the call in [[FieldParseException.withKey]] to name the key.
+     */
+   def parseFields(value: Map[String, String], schema: StructType): Array[Any] =
+     schema.fields.map { field =>
+       val fieldName = field.name
+       val fieldValue = value(fieldName)
+-      parseValue(field, fieldValue)
++      parseValue(field.dataType, fieldValue)
+     }
+ 
+-  private def parseValue(field: StructField, fieldValueStr: String): Any = {
++  private def parseValue(dataType: DataType, fieldValueStr: String): Any = {
+     if (fieldValueStr == null) {
+       null
+     } else {
+-      try {
+-        parseNotNullValue(field.dataType, fieldValueStr)
+-      } catch {
+-        case e: IllegalArgumentException => throw FieldParseException(field.name, fieldValueStr, field.dataType, e)
+-      }
++      parseNotNullValue(dataType, fieldValueStr)
+     }
+   }
+ 
+diff --git a/src/main/scala/org/apache/spark/sql/redis/RedisSourceRelation.scala b/src/main/scala/org/apache/spark/sql/redis/RedisSourceRelation.scala
+index c856c6c..ccb7937 100644
+--- a/src/main/scala/org/apache/spark/sql/redis/RedisSourceRelation.scala
++++ b/src/main/scala/org/apache/spark/sql/redis/RedisSourceRelation.scala
+@@ -7,7 +7,7 @@ import java.util.{List => JList}
+ 
+ import com.redislabs.provider.redis.rdd.Keys
+ import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
+-import com.redislabs.provider.redis.util.{FieldParseException, Logging, RedisCapabilities, WriteCapabilities}
++import com.redislabs.provider.redis.util.{Logging, RedisCapabilities, WriteCapabilities}
+ import com.redislabs.provider.redis.util.PipelineUtils._
+ import com.redislabs.provider.redis.{ReadWriteConfig, RedisConfig, RedisDataTypeHash, RedisDataTypeString, RedisEndpoint, RedisNode, toRedisContext}
+ import org.apache.commons.lang3.SerializationException
+@@ -350,10 +350,8 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
+ 
+       filteredKeysAndValues.map { case (key, value) =>
+         val keyMap = keyName -> tableKey(keysPrefixPattern, key)
+-        FieldParseException.withKey(key) {
+-          ClassNotAllowedException.withKey(key) {
+-            persistence.decodeRow(keyMap, value, schema, requiredColumns)
+-          }
++        ClassNotAllowedException.withKey(key) {
++          persistence.decodeRow(keyMap, value, schema, requiredColumns)
+         }
+       }
+     }
+diff --git a/src/main/scala/org/apache/spark/sql/redis/stream/RedisSource.scala b/src/main/scala/org/apache/spark/sql/redis/stream/RedisSource.scala
+index 0b75ba8..30514b5 100644
+--- a/src/main/scala/org/apache/spark/sql/redis/stream/RedisSource.scala
++++ b/src/main/scala/org/apache/spark/sql/redis/stream/RedisSource.scala
+@@ -6,7 +6,7 @@ import com.redislabs.provider.redis.util.StreamUtils.{
+   EntryIdEarliest, createConsumerGroupIfNotExist, nextEntryId,
+   resetConsumerGroup
+ }
+-import com.redislabs.provider.redis.util.{FieldParseException, Logging, ParseUtils}
++import com.redislabs.provider.redis.util.{Logging, ParseUtils}
+ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+ import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
+ import org.apache.spark.sql.execution.streaming.{Offset, Source}
+@@ -100,19 +100,15 @@ class RedisSource(sqlContext: SQLContext, metadataPath: String,
+     // the batch is read from its offset ranges, the consumer groups only record the progress
+     setConsumerGroupsToEnd(end)
+ 
+-    // read data. Partition i of RedisSourceRdd reads offsetRanges(i).
+-    val streamKeys = offsetRanges.map(_.config.streamKey)
++    // read data
+     val internalRdd = new RedisSourceRdd(sc, redisConfig, offsetRanges)
+-      .mapPartitionsWithIndex { case (partition, entries) =>
+-        val streamKey = streamKeys(partition)
++      .mapPartitions { entries =>
+         // ParseUtils returns external values (String, java.sql.Date, java.sql.Timestamp, ...), but an
+         // InternalRow must hold Catalyst's internal representation (UTF8String, Int days, Long micros)
+         val toCatalyst = CatalystTypeConverters.createToCatalystConverter(localSchema)
+         entries.map { case (id, fields) =>
+           val fieldMap = fields.asScala.toMap + ("_id" -> id.toString)
+-          val values = FieldParseException.withKey(streamKey, Some(id.toString)) {
+-            ParseUtils.parseFields(fieldMap, localSchema)
+-          }
++          val values = ParseUtils.parseFields(fieldMap, localSchema)
+           toCatalyst(Row.fromSeq(values)).asInstanceOf[InternalRow]
+         }
+       }
+diff --git a/src/test/scala/com/redislabs/provider/redis/df/HashDataframeSuite.scala b/src/test/scala/com/redislabs/provider/redis/df/HashDataframeSuite.scala
+index c954b7c..a60cbdc 100644
+--- a/src/test/scala/com/redislabs/provider/redis/df/HashDataframeSuite.scala
++++ b/src/test/scala/com/redislabs/provider/redis/df/HashDataframeSuite.scala
+@@ -383,44 +383,6 @@ trait HashDataframeSuite extends RedisDataframeSuite with Matchers with Logging
+     err.getMessage should include("WRONGTYPE")
+   }
+ 
+-  test("a value that can't be parsed names the key, the field, the value and the type (#358)") {
+-    val tableName = generateTableName("person")
+-    saveMap(tableName, "John", Map("birthday" -> "2022/10/14"))
+-    val schema = StructType(Array(StructField("name", StringType), StructField("birthday", DateType)))
+-    val e = interceptSparkErr[SparkException] {
+-      spark.read.format(RedisFormat)
+-        .option(SqlOptionKeysPattern, tableDataKeyPattern(tableName))
+-        .option(SqlOptionKeyColumn, "name")
+-        .schema(schema)
+-        .load()
+-        .collect()
+-    }
+-    val parseError = findCause[IllegalArgumentException](e)
+-    parseError.getMessage should include(s"'$tableName:John'")
+-    parseError.getMessage should include("'birthday'")
+-    parseError.getMessage should include("'2022/10/14'")
+-    parseError.getMessage should include("date")
+-  }
+-
+-  test("a key column that can't be parsed names the key, the field, the value and the type (#358)") {
+-    val tableName = generateTableName("person")
+-    saveMap(tableName, "John", Map("age" -> "30"))
+-    val schema = StructType(Array(StructField("person_id", IntegerType), StructField("age", IntegerType)))
+-    val e = interceptSparkErr[SparkException] {
+-      spark.read.format(RedisFormat)
+-        .option(SqlOptionKeysPattern, tableDataKeyPattern(tableName))
+-        .option(SqlOptionKeyColumn, "person_id")
+-        .schema(schema)
+-        .load()
+-        .collect()
+-    }
+-    val parseError = findCause[NumberFormatException](e)
+-    parseError.getMessage should include(s"'$tableName:John'")
+-    parseError.getMessage should include("'person_id'")
+-    parseError.getMessage should include("'John'")
+-    parseError.getMessage should include("integer")
+-  }
+-
+   def saveMap(tableName: String): Unit = {
+     Person.dataMaps.foreach { person =>
+       saveMap(tableName, person("name"), person)
+diff --git a/src/test/scala/com/redislabs/provider/redis/util/ParseUtilsTest.scala b/src/test/scala/com/redislabs/provider/redis/util/ParseUtilsTest.scala
+deleted file mode 100644
+index 462b104..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/util/ParseUtilsTest.scala
++++ /dev/null
+@@ -1,112 +0,0 @@
+-package com.redislabs.provider.redis.util
+-
+-import java.sql.{Date, Timestamp}
+-import java.time.Instant
+-
+-import org.apache.spark.sql.types._
+-import org.scalatest.{FunSuite, Matchers}
+-
+-/**
+-  * #358: a value that can't be parsed as its column's type fails with an error that names the field, the value and
+-  * the type, and keeps the exception type the parser has always thrown.
+-  */
+-class ParseUtilsTest extends FunSuite with Matchers {
+-
+-  private val Field = "col_358"
+-
+-  private def parse(dataType: DataType, value: String): Any =
+-    ParseUtils.parseFields(Map(Field -> value), StructType(Array(StructField(Field, dataType))))(0)
+-
+-  test("parses a valid value of every type") {
+-    parse(ByteType, "2") shouldBe (2: Byte)
+-    parse(ShortType, "7") shouldBe (7: Short)
+-    parse(IntegerType, "1") shouldBe 1
+-    parse(LongType, "3") shouldBe 3L
+-    parse(FloatType, "4.2") shouldBe 4.2f
+-    parse(DoubleType, "5.3") shouldBe 5.3d
+-    parse(BooleanType, "true") shouldBe true
+-    parse(BooleanType, "false") shouldBe false
+-    parse(DateType, "2022-10-14") shouldBe Date.valueOf("2022-10-14")
+-    parse(TimestampType, "2022-10-14 13:33:15.012345") shouldBe Timestamp.valueOf("2022-10-14 13:33:15.012345")
+-    parse(StringType, "str8") shouldBe "str8"
+-  }
+-
+-  test("a missing value reads as null for every type") {
+-    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, BooleanType, DateType, TimestampType,
+-      StringType).foreach { dataType =>
+-      parse(dataType, null) shouldBe (null: Any)
+-    }
+-  }
+-
+-  // (type, a value it can't parse, the exception the parser throws for it)
+-  private val badValues = Seq[(DataType, String, Class[_ <: IllegalArgumentException])](
+-    (ByteType, "300", classOf[NumberFormatException]),
+-    (ShortType, "7s", classOf[NumberFormatException]),
+-    (IntegerType, "thirty", classOf[NumberFormatException]),
+-    (IntegerType, "", classOf[NumberFormatException]),
+-    (LongType, "3.5", classOf[NumberFormatException]),
+-    (FloatType, "4,2", classOf[NumberFormatException]),
+-    (DoubleType, "five", classOf[NumberFormatException]),
+-    (DateType, "2022/10/14", classOf[IllegalArgumentException]),
+-    (TimestampType, "14/10/2022 13:33", classOf[IllegalArgumentException])
+-  )
+-
+-  badValues.foreach { case (dataType, value, parserException) =>
+-    test(s"a bad ${dataType.typeName} value '$value' names the field, the value and the type") {
+-      val e = intercept[IllegalArgumentException] {
+-        parse(dataType, value)
+-      }
+-      withClue(s"${e.getClass.getName} is not a ${parserException.getName}:") {
+-        parserException.isInstance(e) shouldBe true
+-      }
+-      e.getMessage should include(s"'$Field'")
+-      e.getMessage should include(s"'$value'")
+-      e.getMessage should include(dataType.typeName)
+-      withClue("the parser's own exception is kept as the cause:") {
+-        parserException.isInstance(e.getCause) shouldBe true
+-      }
+-    }
+-  }
+-
+-  // ISO-8601 timestamps parse, and an unparseable one names its value.
+-
+-  private val timestampSchema = StructType(Array(StructField("time", TimestampType)))
+-
+-  private def parseTimestamp(value: String): Any =
+-    ParseUtils.parseFields(Map("time" -> value), timestampSchema).head
+-
+-  test("parse primitive, string, date and timestamp fields") {
+-    val schema = StructType(Array(
+-      StructField("int", IntegerType),
+-      StructField("long", LongType),
+-      StructField("double", DoubleType),
+-      StructField("bool", BooleanType),
+-      StructField("str", StringType),
+-      StructField("date", DateType),
+-      StructField("time", TimestampType),
+-      StructField("missing", StringType)
+-    ))
+-    val values = Map("int" -> "1", "long" -> "2", "double" -> "3.5", "bool" -> "true", "str" -> "s",
+-      "date" -> "2022-10-14", "time" -> "2022-10-14 13:33:15.012345", "missing" -> null)
+-    ParseUtils.parseFields(values, schema) shouldBe Array(1, 2L, 3.5d, true, "s",
+-      Date.valueOf("2022-10-14"), Timestamp.valueOf("2022-10-14 13:33:15.012345"), null)
+-  }
+-
+-  test("parse ISO-8601 local date-time timestamps (#358)") {
+-    parseTimestamp("2022-10-14T13:33:15.012345") shouldBe Timestamp.valueOf("2022-10-14 13:33:15.012345")
+-    parseTimestamp("2022-10-14T13:33:15") shouldBe Timestamp.valueOf("2022-10-14 13:33:15")
+-    parseTimestamp("2022-10-14T13:33") shouldBe Timestamp.valueOf("2022-10-14 13:33:00")
+-  }
+-
+-  test("parse ISO-8601 timestamps with an offset") {
+-    parseTimestamp("2022-10-14T13:33:15.012345Z") shouldBe
+-      Timestamp.from(Instant.parse("2022-10-14T13:33:15.012345Z"))
+-    parseTimestamp("2022-10-14T15:33:15.012345+02:00") shouldBe
+-      Timestamp.from(Instant.parse("2022-10-14T13:33:15.012345Z"))
+-  }
+-
+-  test("reject unparseable timestamps") {
+-    val e = the[IllegalArgumentException] thrownBy parseTimestamp("14/10/2022 13:33")
+-    e.getMessage should include("14/10/2022 13:33")
+-  }
+-}
+diff --git a/src/test/scala/org/apache/spark/sql/redis/stream/RedisStreamSourceSuite.scala b/src/test/scala/org/apache/spark/sql/redis/stream/RedisStreamSourceSuite.scala
+index d79d3b7..616628e 100644
+--- a/src/test/scala/org/apache/spark/sql/redis/stream/RedisStreamSourceSuite.scala
++++ b/src/test/scala/org/apache/spark/sql/redis/stream/RedisStreamSourceSuite.scala
+@@ -223,25 +223,6 @@ trait RedisStreamSourceSuite extends FunSuite with Matchers with Env with Loggin
+     }
+   }
+ 
+-  test("a value that can't be parsed names the stream key, the entry, the field, the value and the type (#358)") {
+-    val streamKey = Person.generatePersonStreamKey()
+-    withConnection(streamKey) { conn =>
+-      readStream(streamKey) { spark =>
+-        conn.xadd(streamKey, new StreamEntryID(7, 3), (Person.dataMaps.head + ("age" -> "thirty")).asJava)
+-        val query = spark.streams.active.head
+-        val e = interceptSparkErr[StreamingQueryException] {
+-          query.awaitTermination(10000)
+-        }
+-        val parseError = findCause[NumberFormatException](e)
+-        parseError.getMessage should include(s"'$streamKey'")
+-        parseError.getMessage should include("7-3")
+-        parseError.getMessage should include("'age'")
+-        parseError.getMessage should include("'thirty'")
+-        parseError.getMessage should include("integer")
+-      }
+-    }
+-  }
+-
+   test("read stream source with date and timestamp fields") {
+     val streamKey = Person.generatePersonStreamKey()
+     val schema = StructType(Array(

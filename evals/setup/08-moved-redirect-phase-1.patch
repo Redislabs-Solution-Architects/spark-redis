@@ -1,0 +1,199 @@
+diff --git a/src/main/scala/com/redislabs/provider/redis/redisFunctions.scala b/src/main/scala/com/redislabs/provider/redis/redisFunctions.scala
+index 706c7b0..0b42069 100644
+--- a/src/main/scala/com/redislabs/provider/redis/redisFunctions.scala
++++ b/src/main/scala/com/redislabs/provider/redis/redisFunctions.scala
+@@ -408,10 +408,12 @@ object RedisContext extends Serializable {
+     */
+   def setKVs(arr: Iterator[(String, String)], ttl: Int, redisConfig: RedisConfig, readWriteConfig: ReadWriteConfig) {
+     implicit val rwConf: ReadWriteConfig = readWriteConfig
+-    val rows = arr.map(kv => (redisConfig.getHost(kv._1).endpoint, kv))
+-    writeKeys(rows) { case (k, v) =>
+-      List((pipeline: Pipeline) =>
+-        if (ttl <= 0) pipeline.set(k, v) else pipeline.set(k, v, SetParams.setParams().ex(ttl.toLong)))
++    arr.map(kv => (redisConfig.getHost(kv._1), kv)).toArray.groupBy(_._1).foreach { case (node, kvs) =>
++      val conn = node.endpoint.connect()
++      foreachWithPipeline(conn, kvs.map(_._2)) { case (pipeline, (k, v)) =>
++        if (ttl <= 0) pipeline.set(k, v) else pipeline.set(k, v, SetParams.setParams().ex(ttl.toLong))
++      }
++      conn.close()
+     }
+   }
+ 
+diff --git a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/AskWriteClusterSuite.scala b/src/test/scala/com/redislabs/provider/redis/rdd/cluster/AskWriteClusterSuite.scala
+deleted file mode 100644
+index a39948b..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/AskWriteClusterSuite.scala
++++ /dev/null
+@@ -1,53 +0,0 @@
+-package com.redislabs.provider.redis.rdd.cluster
+-
+-import java.util.UUID
+-
+-import com.redislabs.provider.redis._
+-import com.redislabs.provider.redis.env.RedisClusterEnv
+-import com.redislabs.provider.redis.util.ClusterSlots
+-import com.redislabs.provider.redis.util.ClusterSlots.withNode
+-import org.scalatest.Matchers
+-import redis.clients.jedis.util.JedisClusterCRC16
+-
+-/**
+-  * The connector writes keys in a slot that is being migrated to another primary. The old owner still owns the
+-  * slot, but it answers `ASK` for keys it doesn't hold, and every key must still be stored. The companion of
+-  * [[MovedWriteClusterSuite]], which covers `MOVED` after a migration ends.
+-  *
+-  * The slot is put back in a `finally` block, so the suites that run next in this JVM see the original layout.
+-  */
+-class AskWriteClusterSuite extends SparkRedisSuite with RedisClusterEnv with Matchers {
+-
+-  private val HashTag = "{ask-write}"
+-  private val Slot = JedisClusterCRC16.getSlot(HashTag)
+-  private val KeyCount = 100
+-
+-  test("toRedisKV stores every key while its slot is being migrated to another primary") {
+-    val all = ClusterSlots.primaries(redisHost, redisPort)
+-    val source = all.find(_.owns(Slot)).getOrElse(fail(s"no primary owns slot $Slot"))
+-    val target = all.find(_.id != source.id).getOrElse(fail("the cluster has only one primary"))
+-
+-    val run = UUID.randomUUID().toString.replace("-", "")
+-    val kvs = (1 to KeyCount).map(i => (s"$HashTag:$run:key:$i", s"value-$i"))
+-
+-    val config = new RedisConfig(RedisEndpoint(redisHost, redisPort))
+-    config.getHost(kvs.head._1).endpoint.port shouldBe source.port
+-
+-    try {
+-      // Mid-migration: `source` still owns the slot, and answers ASK for the new keys.
+-      ClusterSlots.beginMove(Slot, source, target)
+-      sc.toRedisKV(sc.parallelize(kvs, 4))(config, ReadWriteConfig.fromSparkConf(sc.getConf))
+-      ClusterSlots.finishMove(Slot, source, target, all)
+-
+-      val stored = withNode(target)(conn => kvs.map { case (key, _) => key -> conn.get(key) }.toMap)
+-      val missing = kvs.count { case (key, value) => stored(key) != value }
+-      withClue(s"$missing of $KeyCount keys not stored while slot $Slot was migrating:") {
+-        stored shouldBe kvs.toMap
+-      }
+-    } finally {
+-      ClusterSlots.moveSlot(Slot, source, target, all) // finishes the move if it stopped part way
+-      ClusterSlots.moveSlot(Slot, target, source, all)
+-      withNode(source)(conn => conn.del(kvs.map(_._1): _*))
+-    }
+-  }
+-}
+diff --git a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/ByteKVRedirectedWriteClusterSuite.scala b/src/test/scala/com/redislabs/provider/redis/rdd/cluster/ByteKVRedirectedWriteClusterSuite.scala
+index 93b7856..7e556ea 100644
+--- a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/ByteKVRedirectedWriteClusterSuite.scala
++++ b/src/test/scala/com/redislabs/provider/redis/rdd/cluster/ByteKVRedirectedWriteClusterSuite.scala
+@@ -12,7 +12,7 @@ import redis.clients.jedis.Jedis
+ /**
+   * `toRedisByteKV`, which came from upstream, writes to a slot that moved to another primary after the `RedisConfig`
+   * read the topology (`MOVED`), or that is being migrated (`ASK`). Every key must still be stored, with its TTL when
+-  * one is given, as [[MovedWriteClusterSuite]] and [[AskWriteClusterSuite]] require of `toRedisKV` (#347).
++  * one is given (#347).
+   */
+ class ByteKVRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClusterEnv with RedirectedWrites
+     with Matchers {
+diff --git a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/HashRedirectedWriteClusterSuite.scala b/src/test/scala/com/redislabs/provider/redis/rdd/cluster/HashRedirectedWriteClusterSuite.scala
+index 16ec309..ad71455 100644
+--- a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/HashRedirectedWriteClusterSuite.scala
++++ b/src/test/scala/com/redislabs/provider/redis/rdd/cluster/HashRedirectedWriteClusterSuite.scala
+@@ -14,7 +14,7 @@ import redis.clients.jedis.Jedis
+ /**
+   * The hash writers (`toRedisHASH`, `toRedisHASHes`, `toRedisByteHASHes`) write to a slot that moved to another
+   * primary after the `RedisConfig` read the topology (`MOVED`), or that is being migrated (`ASK`). Every field must
+-  * still be stored, as [[MovedWriteClusterSuite]] and [[AskWriteClusterSuite]] require of `toRedisKV` (#347).
++  * still be stored (#347).
+   */
+ class HashRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClusterEnv with RedirectedWrites
+     with Matchers {
+diff --git a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/ListRedirectedWriteClusterSuite.scala b/src/test/scala/com/redislabs/provider/redis/rdd/cluster/ListRedirectedWriteClusterSuite.scala
+index b44e785..dabcbc1 100644
+--- a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/ListRedirectedWriteClusterSuite.scala
++++ b/src/test/scala/com/redislabs/provider/redis/rdd/cluster/ListRedirectedWriteClusterSuite.scala
+@@ -14,8 +14,7 @@ import redis.clients.jedis.Jedis
+ /**
+   * The list writers (`toRedisLIST`, `toRedisLISTs`, `toRedisByteLISTs`, `toRedisFixedLIST`) write to a slot that
+   * moved to another primary after the `RedisConfig` read the topology (`MOVED`), or that is being migrated (`ASK`).
+-  * Every element must still be stored, as [[MovedWriteClusterSuite]] and [[AskWriteClusterSuite]] require of
+-  * `toRedisKV` (#347). The partitions run in parallel, so the checks ignore the order of the elements.
++  * Every element must still be stored (#347). The partitions run in parallel, so the checks ignore the order of the elements.
+   */
+ class ListRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClusterEnv with RedirectedWrites
+     with Matchers {
+diff --git a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/MovedWriteClusterSuite.scala b/src/test/scala/com/redislabs/provider/redis/rdd/cluster/MovedWriteClusterSuite.scala
+deleted file mode 100644
+index 341927c..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/MovedWriteClusterSuite.scala
++++ /dev/null
+@@ -1,60 +0,0 @@
+-package com.redislabs.provider.redis.rdd.cluster
+-
+-import java.util.UUID
+-
+-import com.redislabs.provider.redis._
+-import com.redislabs.provider.redis.env.RedisClusterEnv
+-import com.redislabs.provider.redis.util.ClusterSlots
+-import com.redislabs.provider.redis.util.ClusterSlots.{moveSlot, withNode}
+-import org.scalatest.Matchers
+-import redis.clients.jedis.util.JedisClusterCRC16
+-
+-/**
+-  * A slot moves to another primary after a `RedisConfig` has read the cluster topology, and the connector then
+-  * writes keys in that slot with the same `RedisConfig`. The cluster answers the old owner with `MOVED`, and every
+-  * key must still be stored (the #347 family: writes lost without an error).
+-  *
+-  * The test moves the slot with [[ClusterSlots]], the way `redis-cli --cluster reshard` does, and moves it back in
+-  * a `finally` block, so the suites that run next in this JVM see the original layout.
+-  */
+-class MovedWriteClusterSuite extends SparkRedisSuite with RedisClusterEnv with Matchers {
+-
+-  private val HashTag = "{moved-write}"
+-  private val Slot = JedisClusterCRC16.getSlot(HashTag)
+-  private val KeyCount = 100
+-  private val SeedKeyCount = 5
+-
+-  test("toRedisKV stores every key after its slot moved to another primary") {
+-    val all = ClusterSlots.primaries(redisHost, redisPort)
+-    val source = all.find(_.owns(Slot)).getOrElse(fail(s"no primary owns slot $Slot"))
+-    val target = all.find(_.id != source.id).getOrElse(fail("the cluster has only one primary"))
+-
+-    val run = UUID.randomUUID().toString.replace("-", "")
+-    val seedKeys = (1 to SeedKeyCount).map(i => s"$HashTag:$run:seed:$i")
+-    val kvs = (1 to KeyCount).map(i => (s"$HashTag:$run:key:$i", s"value-$i"))
+-
+-    // The connector reads the topology here, while the slot is still on `source`.
+-    val staleConfig = new RedisConfig(RedisEndpoint(redisHost, redisPort))
+-    staleConfig.getHost(kvs.head._1).endpoint.port shouldBe source.port
+-
+-    withNode(source)(conn => seedKeys.foreach(key => conn.set(key, "seed")))
+-    try {
+-      moveSlot(Slot, source, target, all)
+-      withClue("setup: the seed keys moved with the slot:") {
+-        withNode(target)(conn => seedKeys.map(conn.get)) shouldBe seedKeys.map(_ => "seed")
+-      }
+-
+-      sc.toRedisKV(sc.parallelize(kvs, 4))(staleConfig, ReadWriteConfig.fromSparkConf(sc.getConf))
+-
+-      val stored = withNode(target)(conn => kvs.map { case (key, _) => key -> conn.get(key) }.toMap)
+-      val missing = kvs.count { case (key, value) => stored(key) != value }
+-      withClue(s"$missing of $KeyCount keys not stored after slot $Slot moved:") {
+-        stored shouldBe kvs.toMap
+-      }
+-    } finally {
+-      moveSlot(Slot, source, target, all) // finishes the move if it stopped part way; a no-op if it finished
+-      moveSlot(Slot, target, source, all)
+-      withNode(source)(conn => conn.del((seedKeys ++ kvs.map(_._1)): _*))
+-    }
+-  }
+-}
+diff --git a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/SetRedirectedWriteClusterSuite.scala b/src/test/scala/com/redislabs/provider/redis/rdd/cluster/SetRedirectedWriteClusterSuite.scala
+index 58c9e00..f6c9e1e 100644
+--- a/src/test/scala/com/redislabs/provider/redis/rdd/cluster/SetRedirectedWriteClusterSuite.scala
++++ b/src/test/scala/com/redislabs/provider/redis/rdd/cluster/SetRedirectedWriteClusterSuite.scala
+@@ -14,7 +14,7 @@ import redis.clients.jedis.{Jedis, ScanParams}
+ /**
+   * The set and sorted-set writers (`toRedisSET`, `toRedisZSET`) write to a slot that moved to another primary after
+   * the `RedisConfig` read the topology (`MOVED`), or that is being migrated (`ASK`). Every member must still be
+-  * stored, as [[MovedWriteClusterSuite]] and [[AskWriteClusterSuite]] require of `toRedisKV` (#347).
++  * stored (#347).
+   */
+ class SetRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClusterEnv with RedirectedWrites
+     with Matchers {
