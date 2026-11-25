@@ -7,7 +7,13 @@ an atomic per-key write.
 
 ## Setup
 
-None.
+From `eval-base-phase-0`: none. From `eval-base-phase-1`, where Phase 0's #23 already added `write.mode`, remove it
+first:
+
+```bash
+git apply "$EVALS/setup/06-write-mode-replace-phase-1.patch"
+./mvnw -B -q test-compile
+```
 
 ## Prompt
 

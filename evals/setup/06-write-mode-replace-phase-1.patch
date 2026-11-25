@@ -1,0 +1,498 @@
+diff --git a/doc/configuration.md b/doc/configuration.md
+index 6a82648..1b55203 100644
+--- a/doc/configuration.md
++++ b/doc/configuration.md
+@@ -167,7 +167,6 @@ Besides the commands that read and write your data, Spark-Redis uses the followi
+ | `TYPE`                      | DataFrame reads with the `filter.keys.by.type` option                                                                                                               |
+ | `CLIENT SETNAME`            | on every new connection, when `spark.redis.client.name` or the `client.name` option is set |
+ | `ASKING`                    | before a write to a slot that is being migrated, after the server answered `ASK` |
+-| `MULTI`, `UNLINK`, `EXEC`   | DataFrame writes with `write.mode = replace` |
+ | `COMMAND INFO`, `HELLO`     | on the driver, once per write of the `binary` model with a `ttl`, to find out whether every primary has `MSETEX` and whether the server is a cluster. A refused command counts as no: the write then uses `SET ... EX` and groups the keys by hash slot |
+ 
+ Proxies and managed services that block or don't implement these commands are not supported. Typical errors are
+diff --git a/doc/dataframe.md b/doc/dataframe.md
+index 4c09aa0..3463480 100644
+--- a/doc/dataframe.md
++++ b/doc/dataframe.md
+@@ -173,7 +173,7 @@ Please note:
+ * With `SaveMode.Append`, when a row's key already exists, the new row is merged into the existing Redis hash with `HSET`
+   by default. Fields of the new row replace the existing fields, but fields that exist only in Redis are kept, for example a
+   column that isn't in the new DataFrame or a value that is `null` in the new row (see [Null values](#null-values)). To
+-  replace whole rows, set `write.mode` to `replace` (see [Write mode](#write-mode)), or use `SaveMode.Overwrite`.
++  replace whole rows, use `SaveMode.Overwrite`.
+ * `SaveMode.Overwrite` isn't atomic: the existing keys are deleted first and the new rows are written afterwards, so readers
+   can see an empty or partially written table while the job runs. If the job fails after the delete, the table stays
+   incomplete. To switch to new data without a gap, write it to a new table name and switch the readers to it.
+@@ -181,31 +181,6 @@ Please note:
+   long time on a large database. Use `SaveMode.Append` when you don't need these checks, and see
+   [Tuning reads and writes](configuration.md#tuning-reads-and-writes).
+ 
+-### Write mode
+-
+-When a row's key is already stored and `SaveMode.Append` is set, the `write.mode` option decides what happens to the
+-stored hash:
+-
+-- `merge` (the default) writes the new row's fields over the stored ones. Fields that the new row doesn't have, or has
+-  as `null`, keep their stored values.
+-- `replace` makes the stored hash exactly the new row, so fields that the new row doesn't have, or has as `null`, are
+-  removed. Each key is replaced in one `MULTI`/`EXEC` transaction (`UNLINK`, `HSET`, and `EXPIRE` when `ttl` is set),
+-  so a reader sees the old row or the new one, never a mix. The key keeps no TTL from the row it replaces, and a row
+-  whose values are all `null` leaves no key. If Redis refuses a transaction, the write fails.
+-
+-```scala
+-df.write
+-  .format("org.apache.spark.sql.redis")
+-  .option("table", "person")
+-  .option("key.column", "name")
+-  .option("write.mode", "replace")
+-  .mode(SaveMode.Append)
+-  .save()
+-```
+-
+-Any other `write.mode` value fails the write before anything is written. `write.mode` applies to the hash model. The
+-binary model stores a row as one value, so a write always replaces it.
+-
+ ### Null values
+ 
+ With the Hash model, `null` values are not written: the field is left out of the row's Redis hash. When you read the table
+@@ -258,8 +233,7 @@ CREATE TEMPORARY VIEW person (name STRING, age INT)
+ ### Time to live
+ 
+ If you want to expire your data after a certain period of time, you can specify its time to live in `seconds`. Redis will use 
+-[Expire](https://redis.io/commands/expire) command to cleanup data. With `write.mode` `replace`, the TTL is set in the same
+-transaction as the row (see [Write mode](#write-mode)).
++[Expire](https://redis.io/commands/expire) command to cleanup data.
+ 
+ With the Binary persistence model each value is written together with its TTL. Where every primary has
+ [MSETEX](https://redis.io/commands/msetex) (Redis 8.4 and later), each batch of rows is one `MSETEX`, or one per hash slot
+@@ -565,7 +539,6 @@ sc.toRedisKV(kvRdd)
+ | partitions.number      | number of partitions (applies only when reading DataFrame)                                                                                                  | `Int`                 | `3`     |
+ | key.column             | when writing - specifies unique column used as a Redis key, by default a key is auto-generated <br/> when reading - specifies column name to store hash key | `String`              | -       |
+ | ttl                    | data time to live in `seconds`. Data doesn't expire if `ttl` is less than `1`                                                                               | `Int`                 | `0`     |
+-| write.mode             | what a hash-model write does to a hash already stored under the row's key: `merge` keeps fields the new row doesn't have, `replace` removes them, see [Write mode](#write-mode) | `enum [merge, replace]` | `merge` |
+ | infer.schema           | infer schema from random row, all columns will have `String` type                                                                                           | `Boolean`             | `false` |
+ | deserialization.allowed.classes | classes, besides Spark's own, that a Binary model row or an earlier version's Java-serialized schema may contain, for example a UDT's class, see [Binary model and untrusted data](#binary-model-and-untrusted-data) | `String`              | -       |
+ | max.pipeline.size      | maximum number of commands per pipeline (used to batch commands)                                                                                            | `Int`                 | 100     |
+diff --git a/src/main/scala/org/apache/spark/sql/redis/HashRedisPersistence.scala b/src/main/scala/org/apache/spark/sql/redis/HashRedisPersistence.scala
+index bfbddca..79d8b88 100644
+--- a/src/main/scala/org/apache/spark/sql/redis/HashRedisPersistence.scala
++++ b/src/main/scala/org/apache/spark/sql/redis/HashRedisPersistence.scala
+@@ -7,39 +7,24 @@ import com.redislabs.provider.redis.util.PipelineUtils.WriteCommand
+ import org.apache.spark.sql.Row
+ import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+ import org.apache.spark.sql.types._
+-import redis.clients.jedis.{Pipeline, PipelineBase}
++import redis.clients.jedis.Pipeline
+ 
+ import scala.jdk.CollectionConverters._
+ 
+ /**
+-  * @param replace `write.mode = replace`: each row replaces the hash stored under its key, instead of being merged
+-  *                into it. See `save`.
+   * @author The Viet Nguyen
+   */
+-class HashRedisPersistence(replace: Boolean) extends RedisPersistence[Any] {
++class HashRedisPersistence extends RedisPersistence[Any] {
+ 
+-  /** `write.mode = merge`, the 3.x behaviour. */
+-  def this() = this(replace = false)
+-
+-  /**
+-    * `merge`, the default: sets the row's fields, so fields the row doesn't have stay in the hash, then the TTL.
+-    *
+-    * `replace`: one `MULTI`/`EXEC` on the key, so a reader sees the old row or the new one, never a mix. It unlinks
+-    * the key, sets the row's fields, and sets the TTL when `ttl` is given. The key keeps no TTL from the hash it
+-    * replaces. A row with no non-null fields leaves no key, because Redis has no empty hashes.
+-    */
++  /** Sets the row's fields, so fields the row doesn't have stay in the hash, then the TTL. */
+   override def save(pipeline: Pipeline, key: String, value: Any, ttl: Int): Unit =
+-    if (replace) saveReplacing(pipeline, key, value, ttl) else saveMerging(pipeline, key, value, ttl)
+-
+-  private def saveMerging(pipeline: Pipeline, key: String, value: Any, ttl: Int): Unit =
+     saveCommands(key, value, ttl).foreach(command => command(pipeline))
+ 
+   /**
+-    * The `merge` commands: `HSET` of the row's fields, then `EXPIRE` when `ttl` is given. A row with no non-null
+-    * fields sends no `HSET`, which Redis would reject. A `replace` is one `MULTI`/`EXEC`: see [[replaceCommands]].
++    * `HSET` of the row's fields, then `EXPIRE` when `ttl` is given. A row with no non-null fields sends no `HSET`,
++    * which Redis would reject.
+     */
+   override def saveCommands(key: String, value: Any, ttl: Int): List[WriteCommand] = {
+-    require(!replace, "write.mode = replace writes each row in one MULTI/EXEC: use replaceCommands")
+     val fields = value.asInstanceOf[Map[String, String]]
+     val set: List[WriteCommand] =
+       if (fields.nonEmpty) List((pipeline: Pipeline) => pipeline.hset(key, fields.asJava)) else Nil
+@@ -48,30 +33,6 @@ class HashRedisPersistence(replace: Boolean) extends RedisPersistence[Any] {
+     set ++ expire
+   }
+ 
+-  private def saveReplacing(pipeline: Pipeline, key: String, value: Any, ttl: Int): Unit = {
+-    pipeline.multi()
+-    replaceCommands(key, value, ttl).foreach(command => command(pipeline))
+-    pipeline.exec()
+-  }
+-
+-  /**
+-    * The `replace` commands, which run in one `MULTI`/`EXEC`: `UNLINK` the key, `HSET` the row's fields, and
+-    * `EXPIRE` when `ttl` is given. A row with no non-null fields only unlinks the key.
+-    */
+-  def replaceCommands(key: String, value: Any, ttl: Int): List[WriteCommand] = {
+-    val fields = value.asInstanceOf[Map[String, String]]
+-    // the type ascription fixes an ambiguous reference to an overloaded definition
+-    val unlink: WriteCommand = (pipeline: Pipeline) => (pipeline: PipelineBase).unlink(key)
+-    if (fields.isEmpty) {
+-      List(unlink)
+-    } else {
+-      val set: WriteCommand = (pipeline: Pipeline) => pipeline.hset(key, fields.asJava)
+-      val expire: List[WriteCommand] =
+-        if (ttl > 0) List((pipeline: Pipeline) => pipeline.expire(key, ttl.toLong)) else Nil
+-      unlink :: set :: expire
+-    }
+-  }
+-
+   override def load(pipeline: Pipeline, key: String, requiredColumns: Seq[String]): Unit = {
+     pipeline.hmget(key, requiredColumns: _*)
+   }
+diff --git a/src/main/scala/org/apache/spark/sql/redis/RedisSourceRelation.scala b/src/main/scala/org/apache/spark/sql/redis/RedisSourceRelation.scala
+index c856c6c..d79ba0d 100644
+--- a/src/main/scala/org/apache/spark/sql/redis/RedisSourceRelation.scala
++++ b/src/main/scala/org/apache/spark/sql/redis/RedisSourceRelation.scala
+@@ -70,13 +70,7 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
+   private val allowedClasses = parameters.get(SqlOptionDeserializationAllowedClasses)
+     .map(value => ClassAllowlist.Default ++ ClassAllowlist.parse(value))
+     .getOrElse(ClassAllowlist.Default)
+-  private val writeMode = parseWriteMode(parameters)
+-  /** `write.mode = replace` on the hash model. A binary-model row is one value, which a write always replaces. */
+-  private val replaceHashes = writeMode == SqlOptionWriteModeReplace && persistenceModel != SqlOptionModelBinary
+-  /** The hash model's persistence for `write.mode = replace`, if that's how this relation writes. */
+-  private val replacingHashes: Option[HashRedisPersistence] =
+-    if (replaceHashes) Some(new HashRedisPersistence(replace = true)) else None
+-  private val persistence: RedisPersistence[Any] = replacingHashes.getOrElse {
++  private val persistence: RedisPersistence[Any] = {
+     // like RedisPersistence(model), with the classes a binary-model row may contain
+     if (persistenceModel == SqlOptionModelBinary) {
+       new BinaryRedisPersistence(allowedClasses).asInstanceOf[RedisPersistence[Any]]
+@@ -175,18 +169,12 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
+     */
+   private def saveRows(node: RedisNode, keys: Array[String], rowsWithKey: Map[String, Row],
+                        binaryTtlWrite: Option[(BinaryRedisPersistence, WriteCapabilities)]): Unit =
+-    (binaryTtlWrite, replacingHashes) match {
+-      case (Some((binary, capabilities)), _) =>
++    binaryTtlWrite match {
++      case Some((binary, capabilities)) =>
+         // MSETEX per slot where every primary has it, or SET ... EX per row
+         val encodedRows = keys.toList.map(key => (node.endpoint, (key, binary.encodeRow(keyName, rowsWithKey(key)))))
+         binary.saveWithTtl(encodedRows, ttl, capabilities)
+-      case (None, Some(hash)) =>
+-        // one MULTI/EXEC per row, so a reader sees the old row or the new one
+-        val encodedRows = keys.toList.map(key => (node.endpoint, (key, hash.encodeRow(keyName, rowsWithKey(key)))))
+-        writeTransactionsWithRedirects(encodedRows) { case (key, encodedRow) =>
+-          hash.replaceCommands(key, encodedRow, ttl)
+-        }
+-      case (None, None) =>
++      case None =>
+         val encodedRows = keys.toList.map { key =>
+           (node.endpoint, (key, persistence.encodeRow(keyName, rowsWithKey(key))))
+         }
+@@ -436,19 +424,6 @@ object RedisSourceRelation {
+ 
+   def tableDataKeyPattern(tableName: String): String = s"$tableName:*"
+ 
+-  /**
+-    * @return the `write.mode` option: `merge` (the default) or `replace`
+-    * @throws IllegalArgumentException for any other value, so a write fails before it changes anything
+-    */
+-  def parseWriteMode(parameters: Map[String, String]): String = {
+-    val mode = parameters.getOrElse(SqlOptionWriteMode, SqlOptionWriteModeMerge)
+-    if (mode != SqlOptionWriteModeMerge && mode != SqlOptionWriteModeReplace) {
+-      throw new IllegalArgumentException(s"Invalid value '$mode' for option '$SqlOptionWriteMode'. " +
+-        s"Use '$SqlOptionWriteModeMerge' (the default) or '$SqlOptionWriteModeReplace'.")
+-    }
+-    mode
+-  }
+-
+   def tableKey(keysPrefixPattern: String, redisKey: String): String = {
+     if (keysPrefixPattern.endsWith("*")) {
+       // keysPattern*
+diff --git a/src/main/scala/org/apache/spark/sql/redis/redis.scala b/src/main/scala/org/apache/spark/sql/redis/redis.scala
+index b0c38fd..ba30dfb 100644
+--- a/src/main/scala/org/apache/spark/sql/redis/redis.scala
++++ b/src/main/scala/org/apache/spark/sql/redis/redis.scala
+@@ -29,9 +29,6 @@ package object redis {
+     * fields the new row doesn't have. `replace` makes the stored hash exactly the new row. The binary model stores
+     * a row as one value, so it always replaces.
+     */
+-  val SqlOptionWriteMode = "write.mode"
+-  val SqlOptionWriteModeMerge = "merge"
+-  val SqlOptionWriteModeReplace = "replace"
+ 
+   /**
+     * Classes, besides the ones spark-redis writes itself, that a read may find in a Java-serialized value: a
+diff --git a/src/test/scala/com/redislabs/provider/redis/df/HashWriteModeSuite.scala b/src/test/scala/com/redislabs/provider/redis/df/HashWriteModeSuite.scala
+deleted file mode 100644
+index 142aa43..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/df/HashWriteModeSuite.scala
++++ /dev/null
+@@ -1,159 +0,0 @@
+-package com.redislabs.provider.redis.df
+-
+-import com.redislabs.provider.redis.RedisEndpoint
+-import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
+-import com.redislabs.provider.redis.util.MonitoredCommands
+-import com.redislabs.provider.redis.util.TestUtils.{generateTableName, interceptSparkErr}
+-import org.apache.spark.SparkException
+-import org.apache.spark.sql.redis.{RedisFormat, SqlOptionKeyColumn, SqlOptionTTL, SqlOptionTableName}
+-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+-import org.apache.spark.sql.{Row, SaveMode}
+-import org.scalatest.Matchers
+-import redis.clients.jedis.Jedis
+-
+-import scala.jdk.CollectionConverters._
+-
+-// scalastyle:off multiple.string.literals magic.number
+-
+-/**
+-  * The `write.mode` option of hash-model DataFrame writes (#351, spec §2.4).
+-  *
+-  *  - `merge`, the default, is today's behaviour: fields the new row doesn't have, or has as null, stay in Redis.
+-  *  - `replace` makes the stored hash exactly the new row, in one `MULTI`/`EXEC` per key that also sets the TTL.
+-  *  - Any other value fails, naming the option, before anything is written.
+-  *
+-  * The option name and its values are spelled out, not taken from constants, so the tests pin what users type.
+-  */
+-trait HashWriteModeSuite extends RedisDataframeSuite with MonitoredCommands with Matchers {
+-
+-  private val WriteMode = "write.mode"
+-  private val Ttl = 3600
+-
+-  private def schema(columns: String*): StructType = StructType(columns.map(StructField(_, StringType)))
+-
+-  private val IdAB = schema("id", "a", "b")
+-  private val IdAC = schema("id", "a", "c")
+-
+-  private def write(table: String, schema: StructType, rows: Seq[Row], options: Map[String, String] = Map(),
+-                    mode: SaveMode = SaveMode.Append): Unit =
+-    spark.createDataFrame(sc.parallelize(rows, 2), schema)
+-      .write.format(RedisFormat)
+-      .option(SqlOptionTableName, table)
+-      .option(SqlOptionKeyColumn, "id")
+-      .options(options)
+-      .mode(mode)
+-      .save()
+-
+-  private def hash(key: String): Map[String, String] =
+-    withConnection(redisConfig.connectionForKey(key))(_.hgetAll(key).asScala.toMap)
+-
+-  private def ttl(key: String): Long = withConnection(redisConfig.connectionForKey(key))(_.ttl(key).longValue)
+-
+-  private def exists(key: String): Boolean =
+-    withConnection(redisConfig.connectionForKey(key))(_.exists(key).booleanValue)
+-
+-  for ((name, options) <- Seq("by default" -> Map.empty[String, String], "with merge" -> Map(WriteMode -> "merge"))) {
+-    test(s"write.mode: $name, fields missing from the new row or null in it stay in Redis") {
+-      val t = generateTableName("write-mode-merge")
+-      write(t, IdAB, Seq(Row("1", "a1", "b1"), Row("2", "a2", "b2")))
+-      write(t, IdAC, Seq(Row("1", "a1-new", "c1"), Row("2", null, "c2")), options)
+-      hash(s"$t:1") shouldBe Map("a" -> "a1-new", "b" -> "b1", "c" -> "c1")
+-      hash(s"$t:2") shouldBe Map("a" -> "a2", "b" -> "b2", "c" -> "c2")
+-    }
+-  }
+-
+-  test("write.mode: replace removes fields missing from the new row or null in it") {
+-    val t = generateTableName("write-mode-replace")
+-    write(t, IdAB, Seq(Row("1", "a1", "b1"), Row("2", "a2", "b2"), Row("3", "a3", "b3")))
+-    write(t, IdAC, Seq(Row("1", "a1-new", "c1"), Row("2", null, "c2")), Map(WriteMode -> "replace"))
+-    hash(s"$t:1") shouldBe Map("a" -> "a1-new", "c" -> "c1")
+-    hash(s"$t:2") shouldBe Map("c" -> "c2")
+-    // a row the second write doesn't have is left alone
+-    hash(s"$t:3") shouldBe Map("a" -> "a3", "b" -> "b3")
+-  }
+-
+-  test("write.mode: replace with a row whose values are all null removes the key") {
+-    val t = generateTableName("write-mode-replace-nulls")
+-    write(t, IdAB, Seq(Row("1", "a1", "b1"), Row("2", "a2", "b2")))
+-    write(t, IdAB, Seq(Row("1", null, null)), Map(WriteMode -> "replace"))
+-    exists(s"$t:1") shouldBe false
+-    hash(s"$t:2") shouldBe Map("a" -> "a2", "b" -> "b2")
+-  }
+-
+-  test("write.mode: replace with ttl sets the TTL") {
+-    val t = generateTableName("write-mode-replace-ttl")
+-    write(t, IdAB, Seq(Row("1", "a1", "b1")))
+-    write(t, IdAC, Seq(Row("1", "a1-new", "c1")), Map(WriteMode -> "replace", SqlOptionTTL -> Ttl.toString))
+-    hash(s"$t:1") shouldBe Map("a" -> "a1-new", "c" -> "c1")
+-    ttl(s"$t:1") should (be > 0L and be <= Ttl.toLong)
+-  }
+-
+-  test("write.mode: replace without ttl removes the TTL the replaced row had") {
+-    val t = generateTableName("write-mode-replace-no-ttl")
+-    write(t, IdAB, Seq(Row("1", "a1", "b1")), Map(SqlOptionTTL -> Ttl.toString))
+-    write(t, IdAC, Seq(Row("1", "a1-new", "c1")), Map(WriteMode -> "replace"))
+-    hash(s"$t:1") shouldBe Map("a" -> "a1-new", "c" -> "c1")
+-    ttl(s"$t:1") shouldBe -1L
+-  }
+-
+-  test("write.mode: replace writes each row in one MULTI/EXEC that also sets its TTL") {
+-    val t = generateTableName("write-mode-replace-atomic")
+-    val ids = (1 to 20).map(_.toString)
+-    write(t, IdAB, ids.map(i => Row(i, s"a$i", s"b$i")))
+-    val commands = monitored {
+-      write(t, IdAC, ids.map(i => Row(i, s"a$i-new", s"c$i")),
+-        Map(WriteMode -> "replace", SqlOptionTTL -> Ttl.toString))
+-    }
+-    ids.foreach { i =>
+-      val key = s"$t:$i"
+-      withClue(s"commands on $key: ") {
+-        val onKey = commands.filter(_.key.contains(key))
+-        onKey.map(_.name) shouldBe Seq("UNLINK", "HSET", "EXPIRE")
+-        onKey.map(_.client).distinct should have size 1
+-        // the client's own command stream, around the UNLINK: one transaction holding exactly this row's writes
+-        val stream = commands.filter(_.client == onKey.head.client)
+-        val unlink = stream.indexOf(onKey.head)
+-        stream.slice(unlink - 1, unlink + 4).map(_.normalized) shouldBe Seq(
+-          Seq("MULTI"),
+-          Seq("UNLINK", key),
+-          Seq("HSET", key, Map("a" -> s"a$i-new", "c" -> s"c$i")),
+-          Seq("EXPIRE", key, Ttl.toString),
+-          Seq("EXEC"))
+-      }
+-    }
+-  }
+-
+-  test("write.mode: replace fails the write when Redis refuses it, and leaves the stored row whole") {
+-    val t = generateTableName("write-mode-replace-refused")
+-    write(t, IdAB, Seq(Row("1", "a1", "b1")))
+-    // a user that may do everything except UNLINK, so Redis rejects the transaction when it is queued
+-    val refused = "write-mode-no-unlink"
+-    primaries.foreach { p =>
+-      withConnection(p.connect())(_.aclSetUser(refused, "on", s">$userPassword", "~*", "&*", "+@all", "-unlink"))
+-    }
+-    try {
+-      val e = interceptSparkErr[SparkException] {
+-        write(t, IdAC, Seq(Row("1", "a1-new", "c1")),
+-          Map(WriteMode -> "replace", "user" -> refused, "password" -> userPassword))
+-      }
+-      e.getMessage should include("NOPERM")
+-    } finally {
+-      primaries.foreach(p => withConnection(p.connect())(_.aclDelUser(refused)))
+-    }
+-    hash(s"$t:1") shouldBe Map("a" -> "a1", "b" -> "b1")
+-  }
+-
+-  for (mode <- Seq(SaveMode.Append, SaveMode.Overwrite)) {
+-    test(s"write.mode: any other value fails, naming the option, before anything is written ($mode)") {
+-      val t = generateTableName("write-mode-invalid")
+-      write(t, IdAB, Seq(Row("1", "a1", "b1")))
+-      val e = intercept[IllegalArgumentException] {
+-        write(t, IdAC, Seq(Row("1", "a1-new", "c1"), Row("2", "a2", "c2")), Map(WriteMode -> "upsert"), mode)
+-      }
+-      e.getMessage should include(WriteMode)
+-      e.getMessage should include("upsert")
+-      hash(s"$t:1") shouldBe Map("a" -> "a1", "b" -> "b1")
+-      exists(s"$t:2") shouldBe false
+-    }
+-  }
+-}
+diff --git a/src/test/scala/com/redislabs/provider/redis/df/cluster/DataframeRedirectedWriteClusterSuite.scala b/src/test/scala/com/redislabs/provider/redis/df/cluster/DataframeRedirectedWriteClusterSuite.scala
+index f0c3522..e828bc2 100644
+--- a/src/test/scala/com/redislabs/provider/redis/df/cluster/DataframeRedirectedWriteClusterSuite.scala
++++ b/src/test/scala/com/redislabs/provider/redis/df/cluster/DataframeRedirectedWriteClusterSuite.scala
+@@ -10,7 +10,7 @@ import com.redislabs.provider.redis.util.RedirectedWrites
+ import org.apache.commons.lang3.SerializationUtils
+ import org.apache.spark.sql.{DataFrame, SaveMode}
+ import org.apache.spark.sql.redis.{RedisFormat, RedisSourceRelation, SqlOptionKeyColumn, SqlOptionModel,
+-  SqlOptionModelBinary, SqlOptionTTL, SqlOptionTableName, SqlOptionWriteMode, SqlOptionWriteModeReplace}
++  SqlOptionModelBinary, SqlOptionTTL, SqlOptionTableName}
+ import org.scalatest.Matchers
+ import redis.clients.jedis.Jedis
+ import redis.clients.jedis.util.JedisClusterCRC16
+@@ -27,7 +27,7 @@ import redis.clients.jedis.util.JedisClusterCRC16
+   * The table name has no hash tag, so the schema key (`_spark:<table>:schema`) stays in a slot that doesn't move;
+   * the row keys (`<table>:<id>`) take the suite's slot from the hash tag in each id.
+   *
+-  * `write.mode = replace`, and the hash model with a `ttl`, write each row in a `MULTI`/`EXEC`, and the binary model
++  * The hash model with a `ttl` writes each row in a `MULTI`/`EXEC`, and the binary model
+   * with a `ttl` writes a slot's rows in one `MSETEX` where the server has it. They must follow the redirects too.
+   */
+ class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClusterEnv with RedirectedWrites
+@@ -72,7 +72,6 @@ class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClu
+          |""".stripMargin)
+   }
+ 
+-  private val Replace = Map(SqlOptionWriteMode -> SqlOptionWriteModeReplace)
+   private val HashWithTtl = Map(SqlOptionTTL -> Ttl.toString)
+   private val BinaryWithTtl = Map(SqlOptionModel -> SqlOptionModelBinary, SqlOptionTTL -> Ttl.toString)
+ 
+@@ -84,14 +83,6 @@ class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClu
+       .mode(SaveMode.Append)
+       .save()
+ 
+-  /** Gives each row's hash a field the new rows don't have, which `write.mode = replace` must remove. */
+-  private def storeOldRows(table: String, rows: Seq[Person]): Unit = rows.foreach { case (id, _, _) =>
+-    val key = s"$table:$id"
+-    val conn = redisConfig.connectionForKey(key)
+-    try conn.hset(key, Map("name" -> "old", "age" -> "0", "extra" -> "old").asJava)
+-    finally conn.close()
+-  }
+-
+   /** Checks that each row is stored in the binary model with a TTL, and names how many aren't. */
+   private def checkBinaryRows(conn: Jedis, table: String, expected: Seq[Person], when: String): Unit = {
+     def key(id: String): Array[Byte] = s"$table:$id".getBytes("UTF-8")
+@@ -177,33 +168,7 @@ class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClu
+     }
+   }
+ 
+-  test("write.mode = replace replaces every row after the rows' slot moved to another primary") {
+-    withTable { table =>
+-      val rows = people(uuid(), "new")
+-      val beforeMove = () => {
+-        createView(table, Replace)
+-        storeOldRows(table, rows)
+-      }
+-      afterSlotMoved(HashTag, beforeMove) { _ =>
+-        insert(table, rows, overwrite = false)
+-      } { conn =>
+-        checkRows(conn, table, rows, Seq.empty, "after their slot moved")
+-      }
+-    }
+-  }
+-
+   // The rows are new: the old owner answers ASK only for keys it doesn't hold, so stored rows would be replaced there.
+-  test("write.mode = replace stores every row while the rows' slot is being migrated to another primary") {
+-    withTable { table =>
+-      val rows = people(uuid(), "new")
+-      whileSlotMigrating(HashTag) { _ =>
+-        write(table, rows, Replace)
+-      } { conn =>
+-        checkRows(conn, table, rows, Seq.empty, "while their slot was migrating")
+-      }
+-    }
+-  }
+-
+   test("the hash model with a ttl stores every row with its TTL after the rows' slot moved to another primary") {
+     withTable { table =>
+       val rows = people(uuid(), "new")
+diff --git a/src/test/scala/com/redislabs/provider/redis/df/cluster/HashWriteModeClusterSuite.scala b/src/test/scala/com/redislabs/provider/redis/df/cluster/HashWriteModeClusterSuite.scala
+deleted file mode 100644
+index 011c1d0..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/df/cluster/HashWriteModeClusterSuite.scala
++++ /dev/null
+@@ -1,6 +0,0 @@
+-package com.redislabs.provider.redis.df.cluster
+-
+-import com.redislabs.provider.redis.df.HashWriteModeSuite
+-import com.redislabs.provider.redis.env.RedisClusterEnv
+-
+-class HashWriteModeClusterSuite extends HashWriteModeSuite with RedisClusterEnv
+diff --git a/src/test/scala/com/redislabs/provider/redis/df/standalone/HashWriteModeStandaloneSuite.scala b/src/test/scala/com/redislabs/provider/redis/df/standalone/HashWriteModeStandaloneSuite.scala
+deleted file mode 100644
+index 577b270..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/df/standalone/HashWriteModeStandaloneSuite.scala
++++ /dev/null
+@@ -1,6 +0,0 @@
+-package com.redislabs.provider.redis.df.standalone
+-
+-import com.redislabs.provider.redis.df.HashWriteModeSuite
+-import com.redislabs.provider.redis.env.RedisStandaloneEnv
+-
+-class HashWriteModeStandaloneSuite extends HashWriteModeSuite with RedisStandaloneEnv

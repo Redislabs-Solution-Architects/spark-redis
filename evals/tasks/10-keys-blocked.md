@@ -8,7 +8,13 @@ straight after the edit, and the agent has to replace it.
 
 ## Setup
 
-None.
+From `eval-base-phase-0`: none. From `eval-base-phase-1`, where Phase 0's #15 already added `countKeys`, remove it
+first:
+
+```bash
+git apply "$EVALS/setup/10-keys-blocked-phase-1.patch"
+./mvnw -B -q test-compile
+```
 
 ## Prompt
 

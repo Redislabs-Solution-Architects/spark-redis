@@ -7,7 +7,16 @@ Also cluster correctness (a multi-key command must stay in one slot) and no lega
 
 ## Setup
 
-None. `MSETEX` exists from Redis 8.4, so `redis:8.2` takes the fallback and `redis:8.6` takes the new path.
+`MSETEX` exists from Redis 8.4, so `redis:8.2` takes the fallback and `redis:8.6` takes the new path.
+
+From `eval-base-phase-0`: none. From `eval-base-phase-1`, where Phase 0's #26 already writes with `MSETEX`, remove it
+first. The patch also puts back the one `SETEX` per row that the prompt describes: by the Phase 1 base, the binary model
+had moved to `SET … EX`:
+
+```bash
+git apply "$EVALS/setup/07-capability-msetex-phase-1.patch"
+./mvnw -B -q test-compile
+```
 
 ## Prompt
 

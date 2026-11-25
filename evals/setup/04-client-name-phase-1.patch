@@ -1,0 +1,528 @@
+diff --git a/doc/configuration.md b/doc/configuration.md
+index 6a82648..fab911c 100644
+--- a/doc/configuration.md
++++ b/doc/configuration.md
+@@ -25,7 +25,6 @@
+ | `spark.redis.max.pipeline.size`                | the maximum number of commands sent in one pipeline, see [Tuning](#tuning-reads-and-writes)                                                                                 | `100`       |
+ | `spark.redis.scan.count`                       | the `COUNT` hint passed to `SCAN` when iterating over keys, see [Tuning](#tuning-reads-and-writes)                                                                          | `100`       |
+ | `spark.redis.rdd.write.iterator.grouping.size` | the number of items `toRedisKV`, `toRedisByteKV` and `toRedisByteHASHes` take from a partition at a time before grouping them by Redis node, see [Tuning](#tuning-reads-and-writes) | `1000`      |
+-| `spark.redis.client.name`                      | optional client name. Every connection the connector opens, on the driver, on the executors and to every cluster node, sets it with `CLIENT SETNAME`, so `CLIENT LIST` shows it as `name=...`. Printable ASCII without spaces only; any other value fails on the driver before a connection opens. Unset or empty (the default) leaves connections unnamed |
+ 
+ ## When the configuration is read
+ 
+@@ -60,10 +59,8 @@ is ignored.
+ | `dbNum`   | `spark.redis.db`      | `Int`     |
+ | `timeout` | `spark.redis.timeout` | `Int`     |
+ | `ssl`     | `spark.redis.ssl`     | `Boolean` |
+-| `client.name` | `spark.redis.client.name` | `String` |
+-
+ Each option overrides only its own parameter. Options that aren't set fall back to the `spark.redis.*` value from the
+-`SparkConf`, and then to the default. An empty `client.name` leaves that source's connections unnamed.
++`SparkConf`, and then to the default.
+ 
+ ```scala
+ val df = spark.read
+@@ -165,7 +162,6 @@ Besides the commands that read and write your data, Spark-Redis uses the followi
+ | `CLUSTER SLOTS`             | in cluster mode, to read the topology                                                                                                                                |
+ | `SCAN`                      | to find the keys that match a pattern: RDD reads with a key pattern, DataFrame reads, and DataFrame writes with `SaveMode.Overwrite`, `ErrorIfExists` (the default) and `Ignore` |
+ | `TYPE`                      | DataFrame reads with the `filter.keys.by.type` option                                                                                                               |
+-| `CLIENT SETNAME`            | on every new connection, when `spark.redis.client.name` or the `client.name` option is set |
+ | `ASKING`                    | before a write to a slot that is being migrated, after the server answered `ASK` |
+ | `MULTI`, `UNLINK`, `EXEC`   | DataFrame writes with `write.mode = replace` |
+ | `COMMAND INFO`, `HELLO`     | on the driver, once per write of the `binary` model with a `ttl`, to find out whether every primary has `MSETEX` and whether the server is a cluster. A refused command counts as no: the write then uses `SET ... EX` and groups the keys by hash slot |
+diff --git a/doc/dataframe.md b/doc/dataframe.md
+index 4c09aa0..9bb07a3 100644
+--- a/doc/dataframe.md
++++ b/doc/dataframe.md
+@@ -579,12 +579,11 @@ sc.toRedisKV(kvRdd)
+ | ssl                    | overrides `spark.redis.ssl`                                                                                                                                 | `Boolean`             | `false`        |
+ | dbNum                  | overrides `spark.redis.db`                                                                                                                                  | `Int`                 | `0`            |
+ | timeout                | overrides `spark.redis.timeout`                                                                                                                             | `Int`                 | `2000`         |
+-| client.name            | overrides `spark.redis.client.name`: the name this source's connections set with `CLIENT SETNAME`. Empty means no name | `String`              | -              |
+ 
+ `max.pipeline.size`, `scan.count` and `iterator.grouping.size` are explained in
+ [Tuning reads and writes](configuration.md#tuning-reads-and-writes).
+ 
+-Each connection option (`host`, `port`, `user`, `password`, `ssl`, `dbNum`, `timeout`, `client.name`) overrides only its own `spark.redis.*`
++Each connection option (`host`, `port`, `user`, `password`, `ssl`, `dbNum`, `timeout`) overrides only its own `spark.redis.*`
+ parameter. The others still come from the Spark configuration. The option names don't have the `spark.redis.` prefix,
+ see [Configuration](configuration.md#overriding-the-connection-for-a-dataframe-stream-or-rdd).
+ 
+diff --git a/src/main/scala/com/redislabs/provider/redis/ConnectionPool.scala b/src/main/scala/com/redislabs/provider/redis/ConnectionPool.scala
+index 8b725f6..0e9181d 100644
+--- a/src/main/scala/com/redislabs/provider/redis/ConnectionPool.scala
++++ b/src/main/scala/com/redislabs/provider/redis/ConnectionPool.scala
+@@ -17,9 +17,6 @@ object ConnectionPool extends Logging {
+     * Custom JedisFactory that sends CLIENT SETINFO commands when a new connection is created.
+     * This ensures CLIENT SETINFO is sent only once per connection (at creation time),
+     * not every time a connection is borrowed from the pool.
+-    *
+-    * A non-null clientName is set by Jedis itself (CLIENT SETNAME, after AUTH and SELECT) on every new connection.
+-    * A refused SETNAME fails the connection, as a refused AUTH does: the name was asked for, so it is not optional.
+     */
+   private class SparkRedisJedisFactory(
+       host: String,
+@@ -29,10 +26,9 @@ object ConnectionPool extends Logging {
+       user: String,
+       password: String,
+       database: Int,
+-      clientName: String,
+       ssl: Boolean
+   ) extends JedisFactory(
+-      host, port, connectionTimeout, soTimeout, user, password, database, clientName, ssl, null, null, null
++      host, port, connectionTimeout, soTimeout, user, password, database, null, ssl, null, null, null
+   ) {
+ 
+     override def makeObject(): PooledObject[Jedis] = {
+@@ -76,8 +72,7 @@ object ConnectionPool extends Logging {
+     poolConfig.setNumTestsPerEvictionRun(-1)
+ 
+     val factory = new SparkRedisJedisFactory(
+-      re.host, re.port, re.timeout, re.timeout, re.user, re.auth, re.dbNum,
+-      RedisConfig.clientNameOrNull(re.clientName), re.ssl
++      re.host, re.port, re.timeout, re.timeout, re.user, re.auth, re.dbNum, re.ssl
+     )
+     new JedisPool(poolConfig, factory)
+   }
+diff --git a/src/main/scala/com/redislabs/provider/redis/RedisConfig.scala b/src/main/scala/com/redislabs/provider/redis/RedisConfig.scala
+index 6acb348..6742eae 100644
+--- a/src/main/scala/com/redislabs/provider/redis/RedisConfig.scala
++++ b/src/main/scala/com/redislabs/provider/redis/RedisConfig.scala
+@@ -23,8 +23,6 @@ import scala.jdk.CollectionConverters._
+   *              deprecated `spark.redis.auth`). [[toString]] never shows it.
+   * @param dbNum database number (should be avoided in general)
+   * @param ssl true to enable SSL connection. Defaults to false
+-  * @param clientName the name every connection to this endpoint sets with CLIENT SETNAME, or null (the default)
+-  *                   to leave connections unnamed. An empty name also leaves them unnamed.
+   */
+ case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
+                          port: Int = Protocol.DEFAULT_PORT,
+@@ -32,19 +30,12 @@ case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
+                          auth: String = null,
+                          dbNum: Int = Protocol.DEFAULT_DATABASE,
+                          timeout: Int = Protocol.DEFAULT_TIMEOUT,
+-                         ssl: Boolean = false,
+-                         clientName: String = null)
++                         ssl: Boolean = false)
+   extends Serializable {
+ 
+-  // Fail on the driver, naming the bad value, rather than on the first connection with Redis's own error.
+-  require(clientName == null || RedisConfig.isValidClientName(clientName),
+-    s"Invalid Redis client name '$clientName' (${RedisConfig.ClientNameConfKey} or the " +
+-      s"${RedisConfig.ClientNameOption} option): use printable ASCII characters only, with no spaces")
+-
+   /**
+     * Constructor from spark config. set params with spark.redis.host, spark.redis.port, spark.redis.user,
+-    * spark.redis.password (or the deprecated spark.redis.auth), spark.redis.db, spark.redis.timeout, spark.redis.ssl
+-    * and spark.redis.client.name
++    * spark.redis.password (or the deprecated spark.redis.auth), spark.redis.db, spark.redis.timeout and spark.redis.ssl
+     *
+     * @param conf spark context config
+     */
+@@ -56,8 +47,7 @@ case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
+       RedisConfig.passwordOrNull(conf),
+       conf.getInt("spark.redis.db", Protocol.DEFAULT_DATABASE),
+       conf.getInt("spark.redis.timeout", Protocol.DEFAULT_TIMEOUT),
+-      conf.getBoolean("spark.redis.ssl", false),
+-      RedisConfig.clientNameOrNull(conf.get(RedisConfig.ClientNameConfKey, null))
++      conf.getBoolean("spark.redis.ssl", false)
+     )
+   }
+ 
+@@ -76,9 +66,7 @@ case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
+       RedisConfig.passwordOrNull(conf, parameters),
+       parameters.getOrElse("dbNum", conf.get("spark.redis.db", Protocol.DEFAULT_DATABASE.toString)).toInt,
+       parameters.getOrElse("timeout", conf.get("spark.redis.timeout", Protocol.DEFAULT_TIMEOUT.toString)).toInt,
+-      parameters.getOrElse("ssl", conf.get("spark.redis.ssl", false.toString)).toBoolean,
+-      RedisConfig.clientNameOrNull(parameters.getOrElse(RedisConfig.ClientNameOption,
+-        conf.get(RedisConfig.ClientNameConfKey, null))))
++      parameters.getOrElse("ssl", conf.get("spark.redis.ssl", false.toString)).toBoolean)
+   }
+ 
+ 
+@@ -227,20 +215,6 @@ object RedisConfig extends Logging {
+     parameters.get(PasswordOption).orElse(parameters.get(AuthOption)).getOrElse(fromConf)
+   }
+ 
+-  /** Spark setting: the name every connection the connector opens sets with CLIENT SETNAME (#398). */
+-  val ClientNameConfKey = "spark.redis.client.name"
+-
+-  /** DataFrame source option that overrides [[ClientNameConfKey]] for that source. */
+-  val ClientNameOption = "client.name"
+-
+-  /** An unset or empty client name both mean unnamed connections, the behaviour without the setting. */
+-  private[redis] def clientNameOrNull(name: String): String =
+-    if (name == null || name.isEmpty) null else name
+-
+-  /** CLIENT SETNAME accepts only printable ASCII ('!' to '~'): no spaces, newlines or other characters. */
+-  private[redis] def isValidClientName(name: String): Boolean =
+-    name.forall(c => c >= '!' && c <= '~')
+-
+   /**
+     * create redis config from spark config
+     */
+@@ -386,8 +360,7 @@ class RedisConfig(val initialHost: RedisEndpoint) extends Serializable {
+         user = initialHost.user,
+         auth = initialHost.auth,
+         dbNum = initialHost.dbNum,
+-        ssl = initialHost.ssl,
+-        clientName = initialHost.clientName
++        ssl = initialHost.ssl
+       ))
+ 
+     } else {
+@@ -410,8 +383,7 @@ class RedisConfig(val initialHost: RedisEndpoint) extends Serializable {
+           auth = initialHost.auth,
+           dbNum = initialHost.dbNum,
+           timeout = initialHost.timeout,
+-          ssl = initialHost.ssl,
+-          clientName = initialHost.clientName)
++          ssl = initialHost.ssl)
+         RedisNode(endpoint, 0, 16383, i, range)
+       }).toArray
+     }
+@@ -450,8 +422,7 @@ class RedisConfig(val initialHost: RedisEndpoint) extends Serializable {
+             auth = initialHost.auth,
+             dbNum = initialHost.dbNum,
+             timeout = initialHost.timeout,
+-            ssl = initialHost.ssl,
+-            clientName = initialHost.clientName)
++            ssl = initialHost.ssl)
+           RedisNode(endpoint, sPos, ePos, i, slotInfo.size - 2)
+         })
+       }
+diff --git a/src/test/scala/com/redislabs/provider/redis/ClientNameConfigSuite.scala b/src/test/scala/com/redislabs/provider/redis/ClientNameConfigSuite.scala
+deleted file mode 100644
+index e7b012a..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/ClientNameConfigSuite.scala
++++ /dev/null
+@@ -1,73 +0,0 @@
+-package com.redislabs.provider.redis
+-
+-import com.redislabs.provider.redis.RedisConfig.{ClientNameConfKey, ClientNameOption}
+-import org.apache.spark.SparkConf
+-import org.scalatest.{FunSuite, Matchers}
+-
+-/**
+-  * How `spark.redis.client.name` and the `client.name` source option become [[RedisEndpoint.clientName]] (#398).
+-  * No Redis server is needed: building an endpoint does not connect (building a RedisConfig does, to find the
+-  * nodes). The suites that extend [[ClientNameSuite]] check that the name reaches every connection.
+-  */
+-class ClientNameConfigSuite extends FunSuite with Matchers {
+-
+-  private def conf(clientName: Option[String]): SparkConf = {
+-    val c = new SparkConf(false).set("spark.redis.host", "127.0.0.1")
+-    clientName.foreach(c.set(ClientNameConfKey, _))
+-    c
+-  }
+-
+-  test("spark.redis.client.name sets the endpoint's client name") {
+-    new RedisEndpoint(conf(Some("etl-job"))).clientName shouldBe "etl-job"
+-  }
+-
+-  test("without spark.redis.client.name the endpoint has no client name") {
+-    new RedisEndpoint(conf(None)).clientName shouldBe null
+-    new RedisEndpoint(conf(None), Map.empty[String, String]).clientName shouldBe null
+-    RedisEndpoint().clientName shouldBe null
+-  }
+-
+-  test("the client.name option overrides spark.redis.client.name") {
+-    new RedisEndpoint(conf(Some("etl-job")), Map(ClientNameOption -> "orders-source")).clientName shouldBe
+-      "orders-source"
+-    new RedisEndpoint(conf(None), Map(ClientNameOption -> "orders-source")).clientName shouldBe "orders-source"
+-  }
+-
+-  test("a source without the client.name option uses spark.redis.client.name") {
+-    new RedisEndpoint(conf(Some("etl-job")), Map("table" -> "person")).clientName shouldBe "etl-job"
+-  }
+-
+-  test("an empty client name means no name, and an empty client.name option clears the Spark setting") {
+-    new RedisEndpoint(conf(Some(""))).clientName shouldBe null
+-    new RedisEndpoint(conf(Some("etl-job")), Map(ClientNameOption -> "")).clientName shouldBe null
+-    // So the endpoint, and the connection pool keyed by it, is the same as with no setting at all.
+-    new RedisEndpoint(conf(Some(""))) shouldBe new RedisEndpoint(conf(None))
+-  }
+-
+-  test("endpoints that differ only by client name are different endpoints") {
+-    // ConnectionPool keys its pools by endpoint, so each name gets its own pool of named connections.
+-    RedisEndpoint(clientName = "a") should not be RedisEndpoint(clientName = "b")
+-    RedisEndpoint(clientName = "a") should not be RedisEndpoint()
+-  }
+-
+-  test("a client name Redis would refuse is rejected when the endpoint is built") {
+-    // CLIENT SETNAME refuses spaces, newlines and anything outside printable ASCII.
+-    Seq("etl job", "etl\njob", "etl\tjob", "café").foreach { bad =>
+-      val fromConf = intercept[IllegalArgumentException](new RedisEndpoint(conf(Some(bad))))
+-      fromConf.getMessage should include(ClientNameConfKey)
+-      val fromOption = intercept[IllegalArgumentException](
+-        new RedisEndpoint(conf(None), Map(ClientNameOption -> bad)))
+-      fromOption.getMessage should include(ClientNameOption)
+-      intercept[IllegalArgumentException](RedisEndpoint(clientName = bad))
+-    }
+-  }
+-
+-  test("every printable ASCII character other than space is accepted") {
+-    val allowed = ('!' to '~').mkString
+-    RedisEndpoint(clientName = allowed).clientName shouldBe allowed
+-  }
+-
+-  test("maskPassword keeps the client name") {
+-    RedisEndpoint(auth = "passwd", clientName = "etl-job").maskPassword().clientName shouldBe "etl-job"
+-  }
+-}
+diff --git a/src/test/scala/com/redislabs/provider/redis/ClientNameSuite.scala b/src/test/scala/com/redislabs/provider/redis/ClientNameSuite.scala
+deleted file mode 100644
+index 1c47d5d..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/ClientNameSuite.scala
++++ /dev/null
+@@ -1,129 +0,0 @@
+-package com.redislabs.provider.redis
+-
+-import com.redislabs.provider.redis.RedisConfig.{ClientNameConfKey, ClientNameOption}
+-import com.redislabs.provider.redis.df.RedisDataframeSuite
+-import com.redislabs.provider.redis.util.TestUtils.{generateRandomKey, generateTableName}
+-import redis.clients.jedis.Jedis
+-
+-/**
+-  * Every connection the connector opens carries the configured client name, as CLIENT LIST shows (#398).
+-  *
+-  * The suite's SparkSession sets `spark.redis.client.name` to [[SessionClientName]]. Each test records the newest
+-  * client id on every Redis node, runs a job, and then reads the names of the connections opened since: the ones
+-  * the job left idle in the connector's pools. Pools are keyed by endpoint and live for the whole test JVM, so a job
+-  * that reuses an existing pool opens nothing new. Each test therefore uses an endpoint no earlier test has used.
+-  * The tests run in the order written; see the notes on the first two.
+-  */
+-trait ClientNameSuite extends RedisDataframeSuite {
+-
+-  val SessionClientName: String = uniqueName("session")
+-
+-  private def uniqueName(role: String): String = s"spark-redis-$role-${generateRandomKey().take(8)}"
+-
+-  override def beforeAll(): Unit = {
+-    conf.set(ClientNameConfKey, SessionClientName)
+-    super.beforeAll()
+-  }
+-
+-  /** Every node the connector talks to: the standalone server, or each node of the cluster. */
+-  private lazy val servers: Seq[(String, Int)] =
+-    redisConfig.nodes.map(n => (n.endpoint.host, n.endpoint.port)).distinct.toSeq
+-
+-  /** A plain Jedis connection, outside the connector's pools, so it does not affect what it observes. */
+-  private def withObserver[A](server: (String, Int))(body: Jedis => A): A = {
+-    val conn = new Jedis(server._1, server._2)
+-    try {
+-      val endpoint = redisConfig.initialHost
+-      Option(endpoint.auth).foreach(password => conn.auth(Option(endpoint.user).getOrElse("default"), password))
+-      body(conn)
+-    } finally {
+-      conn.close()
+-    }
+-  }
+-
+-  /** CLIENT LIST as one field -> value map per client connection, leaving out replication links. */
+-  private def clients(conn: Jedis): Seq[Map[String, String]] =
+-    conn.clientList().split("\n").map(_.trim).filter(_.nonEmpty).toSeq.map { line =>
+-      line.split(" ").map { field =>
+-        val kv = field.split("=", 2)
+-        kv(0) -> (if (kv.length > 1) kv(1) else "")
+-      }.toMap
+-    }.filterNot(c => c.getOrElse("flags", "").exists(f => f == 'S' || f == 'M'))
+-
+-  /** Runs body, then returns the name of each connection it opened that is still open, on every node. */
+-  private def namesOfConnectionsOpenedBy(body: => Unit): Seq[String] = {
+-    val newestBefore = servers.map { s =>
+-      s -> withObserver(s)(conn => clients(conn).map(_("id").toLong).max)
+-    }.toMap
+-    body
+-    servers.flatMap { s =>
+-      withObserver(s) { conn =>
+-        val self = conn.clientId().longValue()
+-        clients(conn)
+-          .filter { c =>
+-            val id = c("id").toLong
+-            id > newestBefore(s) && id != self
+-          }
+-          .map(_("name"))
+-      }
+-    }
+-  }
+-
+-  /** Writes and reads back string keys with the RDD API, by default with the config it builds from the session. */
+-  private def writeAndReadRdd(config: RedisConfig = RedisConfig.fromSparkConf(sc.getConf)): Unit = {
+-    val readWriteConfig = ReadWriteConfig.fromSparkConf(sc.getConf)
+-    val prefix = generateRandomKey()
+-    val kvs = (1 to 50).map(i => (s"$prefix:$i", i.toString))
+-    sc.toRedisKV(sc.parallelize(kvs, 4))(config, readWriteConfig)
+-    sc.fromRedisKV(s"$prefix:*")(config, readWriteConfig).collect() should contain theSameElementsAs kvs
+-  }
+-
+-  // This test must run before anything opens connections named SessionClientName. If the source wrongly used the
+-  // Spark setting, its connections would then be new ones in a new pool and show up here under the session name.
+-  test("the client.name option overrides spark.redis.client.name for that DataFrame source") {
+-    val sourceName = uniqueName("source")
+-    val table = generateTableName("clientName")
+-    val names = namesOfConnectionsOpenedBy {
+-      writeDf(table, Map(ClientNameOption -> sourceName))
+-      loadAndVerifyDf(table, Map(ClientNameOption -> sourceName))
+-    }
+-    names should not be empty
+-    all(names) shouldBe sourceName
+-  }
+-
+-  // The first use of SessionClientName in this JVM, so the RDD API's pool for it starts empty here.
+-  test("spark.redis.client.name names every connection the RDD API and a DataFrame source open") {
+-    val table = generateTableName("clientName")
+-    val names = namesOfConnectionsOpenedBy {
+-      writeAndReadRdd()
+-      writeDf(table)
+-      loadAndVerifyDf(table)
+-    }
+-    names should not be empty
+-    all(names) shouldBe SessionClientName
+-  }
+-
+-  test("without a client name, connections are left unnamed") {
+-    // The session's settings without the name, and with a timeout no other suite uses: the endpoint without a name
+-    // that every other suite in this JVM shares would hand out their idle connections instead of opening new ones.
+-    val unnamed = RedisConfig.fromSparkConf(sc.getConf.remove(ClientNameConfKey).set("spark.redis.timeout", "2468"))
+-    unnamed.initialHost.clientName shouldBe null
+-    val names = namesOfConnectionsOpenedBy {
+-      writeAndReadRdd(unnamed)
+-    }
+-    names should not be empty
+-    all(names) shouldBe ""
+-  }
+-
+-  test("an empty client.name option leaves that DataFrame source's connections unnamed") {
+-    // As above, a timeout of its own gives the source a pool of its own.
+-    val table = generateTableName("clientName")
+-    val options = Map(ClientNameOption -> "", "timeout" -> "2469")
+-    val names = namesOfConnectionsOpenedBy {
+-      writeDf(table, options)
+-      loadAndVerifyDf(table, options)
+-    }
+-    names should not be empty
+-    all(names) shouldBe ""
+-  }
+-}
+diff --git a/src/test/scala/com/redislabs/provider/redis/ConnectionPoolTest.scala b/src/test/scala/com/redislabs/provider/redis/ConnectionPoolTest.scala
+index 4ccddfb..b4e9420 100644
+--- a/src/test/scala/com/redislabs/provider/redis/ConnectionPoolTest.scala
++++ b/src/test/scala/com/redislabs/provider/redis/ConnectionPoolTest.scala
+@@ -1,10 +1,7 @@
+ package com.redislabs.provider.redis
+ 
+-import java.util.UUID
+-
+ import com.redislabs.provider.redis.env.RedisStandaloneEnv
+ import org.scalatest.{FunSuite, Matchers}
+-import redis.clients.jedis.Jedis
+ 
+ /**
+   * Integration tests for ConnectionPool, specifically testing CLIENT SETINFO functionality.
+@@ -54,45 +51,6 @@ class ConnectionPoolTest extends FunSuite with Matchers with RedisStandaloneEnv
+     }
+   }
+ 
+-  /** This connection's own line of CLIENT LIST, as field -> value. */
+-  private def ownClientListEntry(conn: Jedis): Map[String, String] = {
+-    val id = conn.clientId().toString
+-    val entries = conn.clientList().split("\n").map(_.trim).filter(_.nonEmpty).map { line =>
+-      line.split(" ").map { field =>
+-        val kv = field.split("=", 2)
+-        kv(0) -> (if (kv.length > 1) kv(1) else "")
+-      }.toMap
+-    }
+-    entries.find(_.get("id").contains(id)).getOrElse(fail(s"CLIENT LIST has no entry for client id $id"))
+-  }
+-
+-  test("a connection to an endpoint with a clientName carries that name in CLIENT LIST") {
+-    val name = "spark-redis-pool-test-" + UUID.randomUUID().toString.take(8)
+-    val endpoint = RedisEndpoint(host = redisHost, port = redisPort, auth = redisAuth, clientName = name)
+-    val conn = ConnectionPool.connect(endpoint)
+-    try {
+-      val entry = ownClientListEntry(conn)
+-      entry("name") shouldBe name
+-      // The name does not displace the library info that CLIENT SETINFO sets.
+-      if (entry.contains("lib-name")) {
+-        entry("lib-name") shouldBe RedisClientLibraryInfo.libName
+-        entry("lib-ver") shouldBe RedisClientLibraryInfo.libVersion
+-      }
+-    } finally {
+-      conn.close()
+-    }
+-  }
+-
+-  test("a connection to an endpoint without a clientName has no name in CLIENT LIST") {
+-    val endpoint = RedisEndpoint(host = redisHost, port = redisPort, auth = redisAuth)
+-    val conn = ConnectionPool.connect(endpoint)
+-    try {
+-      ownClientListEntry(conn)("name") shouldBe ""
+-    } finally {
+-      conn.close()
+-    }
+-  }
+-
+   test("multiple connections should all have library info set") {
+     val endpoint = RedisEndpoint(host = redisHost, port = redisPort, auth = redisAuth)
+     val conn1 = ConnectionPool.connect(endpoint)
+diff --git a/src/test/scala/com/redislabs/provider/redis/PasswordConfigSuite.scala b/src/test/scala/com/redislabs/provider/redis/PasswordConfigSuite.scala
+index 17fc262..ed066b0 100644
+--- a/src/test/scala/com/redislabs/provider/redis/PasswordConfigSuite.scala
++++ b/src/test/scala/com/redislabs/provider/redis/PasswordConfigSuite.scala
+@@ -48,15 +48,14 @@ class PasswordConfigSuite extends FunSuite with Matchers {
+   }
+ 
+   test("an endpoint's toString shows every field but the password") {
+-    val endpoint = RedisEndpoint(host = "redis.example.com", port = 6380, user = "alice", auth = "s3cr3t",
+-      clientName = "etl-job")
+-    endpoint.toString shouldBe "RedisEndpoint(redis.example.com,6380,alice,*********(redacted),0,2000,false,etl-job)"
++    val endpoint = RedisEndpoint(host = "redis.example.com", port = 6380, user = "alice", auth = "s3cr3t")
++    endpoint.toString shouldBe "RedisEndpoint(redis.example.com,6380,alice,*********(redacted),0,2000,false)"
+     // Classes that hold an endpoint print it with its toString, as RedisSourceRelation's log of its initial host does.
+     RedisNode(endpoint, 0, 16383, 0, 1).toString should not include "s3cr3t"
+   }
+ 
+   test("an endpoint without a password shows null for it") {
+-    RedisEndpoint(host = "h", port = 1).toString shouldBe "RedisEndpoint(h,1,null,null,0,2000,false,null)"
++    RedisEndpoint(host = "h", port = 1).toString shouldBe "RedisEndpoint(h,1,null,null,0,2000,false)"
+   }
+ 
+   test("toString doesn't change the endpoint") {
+diff --git a/src/test/scala/com/redislabs/provider/redis/acl/ClientNameStandaloneAclSuite.scala b/src/test/scala/com/redislabs/provider/redis/acl/ClientNameStandaloneAclSuite.scala
+deleted file mode 100644
+index 830f1cb..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/acl/ClientNameStandaloneAclSuite.scala
++++ /dev/null
+@@ -1,7 +0,0 @@
+-package com.redislabs.provider.redis.acl
+-
+-import com.redislabs.provider.redis.ClientNameSuite
+-import com.redislabs.provider.redis.env.RedisStandaloneAclEnv
+-
+-/** With an ACL user, the name is set after AUTH user password, on the same connection. */
+-class ClientNameStandaloneAclSuite extends ClientNameSuite with RedisStandaloneAclEnv
+diff --git a/src/test/scala/com/redislabs/provider/redis/cluster/ClientNameClusterSuite.scala b/src/test/scala/com/redislabs/provider/redis/cluster/ClientNameClusterSuite.scala
+deleted file mode 100644
+index 85bb270..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/cluster/ClientNameClusterSuite.scala
++++ /dev/null
+@@ -1,6 +0,0 @@
+-package com.redislabs.provider.redis.cluster
+-
+-import com.redislabs.provider.redis.ClientNameSuite
+-import com.redislabs.provider.redis.env.RedisClusterEnv
+-
+-class ClientNameClusterSuite extends ClientNameSuite with RedisClusterEnv
+diff --git a/src/test/scala/com/redislabs/provider/redis/standalone/ClientNameStandaloneSuite.scala b/src/test/scala/com/redislabs/provider/redis/standalone/ClientNameStandaloneSuite.scala
+deleted file mode 100644
+index 23bf676..0000000
+--- a/src/test/scala/com/redislabs/provider/redis/standalone/ClientNameStandaloneSuite.scala
++++ /dev/null
+@@ -1,6 +0,0 @@
+-package com.redislabs.provider.redis.standalone
+-
+-import com.redislabs.provider.redis.ClientNameSuite
+-import com.redislabs.provider.redis.env.RedisStandaloneEnv
+-
+-class ClientNameStandaloneSuite extends ClientNameSuite with RedisStandaloneEnv

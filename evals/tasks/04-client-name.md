@@ -6,7 +6,13 @@
 
 ## Setup
 
-None.
+From `eval-base-phase-0`: none. From `eval-base-phase-1`, where Phase 0's #21 already added `client.name`, remove it
+first:
+
+```bash
+git apply "$EVALS/setup/04-client-name-phase-1.patch"
+./mvnw -B -q test-compile
+```
 
 ## Prompt
 

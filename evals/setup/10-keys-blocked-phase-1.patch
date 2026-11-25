@@ -1,0 +1,55 @@
+diff --git a/src/test/scala/com/redislabs/provider/redis/util/TestUtils.scala b/src/test/scala/com/redislabs/provider/redis/util/TestUtils.scala
+index 389dcf7..8107cd8 100644
+--- a/src/test/scala/com/redislabs/provider/redis/util/TestUtils.scala
++++ b/src/test/scala/com/redislabs/provider/redis/util/TestUtils.scala
+@@ -1,14 +1,8 @@
+ package com.redislabs.provider.redis.util
+ 
+-import java.nio.ByteBuffer
+ import java.util.UUID
+ 
+-import com.redislabs.provider.redis.RedisConfig
+-import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
+ import org.scalatest.Assertions
+-import redis.clients.jedis.{Jedis, ScanParams}
+-import scala.jdk.CollectionConverters._
+-import scala.collection.mutable
+ import scala.reflect.Manifest
+ 
+ object TestUtils {
+@@ -41,35 +35,6 @@ object TestUtils {
+     interceptRes
+   }
+ 
+-  /**
+-    * How many keys match the glob `pattern` across the whole deployment `config` points at: the one server when
+-    * standalone, every primary when clustered. Replicas are skipped so no key is counted twice, and a primary that
+-    * owns several slot ranges is scanned once.
+-    */
+-  def countKeys(config: RedisConfig, pattern: String): Long = {
+-    val primaries = config.hosts.map(node => (node.endpoint.host, node.endpoint.port) -> node.endpoint).toMap.values
+-    primaries.map(endpoint => withConnection(endpoint.connect())(conn => countKeys(conn, pattern))).sum
+-  }
+-
+-  /**
+-    * How many keys on the server behind `conn` match the glob `pattern`. Uses SCAN ... MATCH, not KEYS (spec section
+-    * 2.14), and counts each key once even when SCAN returns it more than once. On a cluster it counts one node only;
+-    * use the `RedisConfig` overload to count across the cluster.
+-    */
+-  def countKeys(conn: Jedis, pattern: String): Long = {
+-    val params = new ScanParams().`match`(pattern).count(1000)
+-    val keys = mutable.Set[ByteBuffer]()
+-    var cursor = ScanParams.SCAN_POINTER_START_BINARY
+-    var done = false
+-    while (!done) {
+-      val reply = conn.scan(cursor, params)
+-      reply.getResult.asScala.foreach(key => keys += ByteBuffer.wrap(key))
+-      cursor = reply.getCursorAsBytes
+-      done = reply.isCompleteIteration
+-    }
+-    keys.size.toLong
+-  }
+-
+   /**
+     * The first exception of type T in the chain of causes of e, starting with e itself. Fails the test if there is
+     * none.
