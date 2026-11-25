@@ -16,6 +16,9 @@
 >
 > **And after the end-of-Phase-1 eval run** (2026-11-24): 9 of 9 tasks pass with the guardrails at `a495462`, so the
 > pass rate is measured at both ends of Phase 1 (open item 1).
+>
+> **And after the owner's decision on merges before CI** (2026-11-25): `spike/phase-1` stays unprotected, and the
+> owner accepts the risk (open item 4).
 
 ## Verdict
 
@@ -121,9 +124,18 @@ The plan's list, from the roadmap's "How we measure it":
 3. **Approved: the legacy fixtures README wording (rule 6).** The owner approved #51's wording for
    `src/test/resources/legacy/README.md` on 2026-11-24. Agents can't edit that folder, so the owner applies it, and
    this PR commits it.
-4. **Merges before CI.** 7 of 11 fork PRs merged with checks still running. If merges should wait, the owner can:
-   - require the `Test` check on `spike/phase-1` with branch protection (it's unprotected so far, the owner's choice);
-   - or turn on auto-merge for each PR, so GitHub merges it when the checks pass.
+4. **Decided: merges may go ahead of CI** (the owner, 2026-11-25). 7 of 11 fork PRs merged with checks still running.
+   The options were:
+   - require the `Test` check on `spike/phase-1` with branch protection;
+   - or turn on auto-merge for each PR. Auto-merge waits only for required checks, so it needs that protection too.
+
+   The owner chose neither. `spike/phase-1` stays unprotected, the owner merges by hand, and accepts that a failing
+   check can show up after its merge. `CLAUDE.md`'s "Wait for CI to finish before merging" still binds agents.
+   - **Since this review,** 2 of the 9 PRs merged into `spike/phase-1` (#54–#67) went in with checks running:
+     - #55, with 1 of its 9 checks running;
+     - #65, with 8 of its 17 running: the test matrix and the release dry run.
+
+     All of those checks passed within 4 minutes of the merge.
 5. **Decided: GitHub's generated release notes** (the owner, 2026-11-24). Release Drafter, which ran only on pushes
    to `master` and drafted 3.x releases, is removed: from `spike/phase-1` in this PR, and from the fork's `master` in
    `95a488f`. Spec §2.13, the roadmap and the plan say GitHub's notes. A `.github/release.yml` can group them by PR
