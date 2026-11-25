@@ -234,7 +234,9 @@ object RedisConfig extends Logging {
     */
   val ClientNameConfKey = "spark.redis.client.name"
 
-  /** DataFrame and stream option that overrides [[ClientNameConfKey]]. Empty, that source's connections have no name. */
+  /**
+    * DataFrame and stream option that overrides [[ClientNameConfKey]]. Empty, that source's connections have no name.
+    */
   val ClientNameOption = "client.name"
 
   /** The client name in the Spark settings, or null for none. */

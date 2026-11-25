@@ -42,8 +42,11 @@ trait ClientNameSuite extends RedisDataframeSuite {
   private def admin[A](endpoint: RedisEndpoint)(body: Jedis => A): A = {
     val conn = new Jedis(endpoint.host, endpoint.port)
     try {
-      if (endpoint.user != null) conn.auth(endpoint.user, endpoint.auth)
-      else if (endpoint.auth != null) conn.auth(endpoint.auth)
+      if (endpoint.user != null) {
+        conn.auth(endpoint.user, endpoint.auth)
+      } else if (endpoint.auth != null) {
+        conn.auth(endpoint.auth)
+      }
       body(conn)
     } finally {
       conn.close()
@@ -58,7 +61,8 @@ trait ClientNameSuite extends RedisDataframeSuite {
     nodes.flatMap { endpoint =>
       val lines = admin(endpoint)(_.clientList()).split("\n").toSeq.map(_.trim).filter(_.nonEmpty)
       lines.map(fields).filter(_.get("lib-name").contains(RedisClientLibraryInfo.libName)).map { f =>
-        val commands = f.getOrElse("tot-cmds", fail(s"CLIENT LIST has no tot-cmds (Redis 8.2 has it, 7.4 doesn't): $f")).toLong
+        val commands =
+          f.getOrElse("tot-cmds", fail(s"CLIENT LIST has no tot-cmds (Redis 8.2 has it, 7.4 doesn't): $f")).toLong
         Client(s"${endpoint.host}:${endpoint.port}", f("id"), f("name"), commands)
       }
     }.toSet
