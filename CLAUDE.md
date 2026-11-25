@@ -84,3 +84,6 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home ./mvnw -B 
 - **Docs:** [intent](doc/modernization/intent.md), [spec](doc/modernization/spec.md),
   [roadmap](doc/modernization/roadmap.md), [Phase 1 plan](doc/modernization/plans/phase-1.md),
   [Phase 0 exit review](doc/modernization/plans/phase-0-exit-review.md), [backlog](doc/modernization/backlog.md).
+- **`doc/modernization/` is the owner's record.** Its decisions, findings and open items are dated, and say what
+  was true then. Edit it only when your task is to write or amend one of its documents, or the owner asks. When
+  your change makes something there out of date, leave the file alone and say what's out of date when you report.
