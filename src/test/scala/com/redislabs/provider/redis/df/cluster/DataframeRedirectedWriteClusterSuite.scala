@@ -10,7 +10,7 @@ import com.redislabs.provider.redis.util.RedirectedWrites
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.redis.{RedisFormat, RedisSourceRelation, SqlOptionKeyColumn, SqlOptionModel,
-  SqlOptionModelBinary, SqlOptionTTL, SqlOptionTableName, SqlOptionWriteMode, SqlOptionWriteModeReplace}
+  SqlOptionModelBinary, SqlOptionTTL, SqlOptionTableName}
 import org.scalatest.Matchers
 import redis.clients.jedis.Jedis
 import redis.clients.jedis.util.JedisClusterCRC16
@@ -27,8 +27,8 @@ import redis.clients.jedis.util.JedisClusterCRC16
   * The table name has no hash tag, so the schema key (`_spark:<table>:schema`) stays in a slot that doesn't move;
   * the row keys (`<table>:<id>`) take the suite's slot from the hash tag in each id.
   *
-  * `write.mode = replace`, and the hash model with a `ttl`, write each row in a `MULTI`/`EXEC`, and the binary model
-  * with a `ttl` writes a slot's rows in one `MSETEX` where the server has it. They must follow the redirects too.
+  * The hash model with a `ttl` or with `write.mode` `replace` writes each row in a `MULTI`/`EXEC`, and the binary
+  * model with a `ttl` writes a slot's rows in one `MSETEX` where the server has it. They must follow the redirects too.
   */
 class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClusterEnv with RedirectedWrites
     with Matchers {
@@ -72,9 +72,19 @@ class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClu
          |""".stripMargin)
   }
 
-  private val Replace = Map(SqlOptionWriteMode -> SqlOptionWriteModeReplace)
   private val HashWithTtl = Map(SqlOptionTTL -> Ttl.toString)
   private val BinaryWithTtl = Map(SqlOptionModel -> SqlOptionModelBinary, SqlOptionTTL -> Ttl.toString)
+  private val ReplaceRows = Map("write.mode" -> "replace")
+  private val ReplaceRowsWithTtl = ReplaceRows + (SqlOptionTTL -> Ttl.toString)
+
+  /** Stores `rows` as hashes with a field, `city`, that the DataFrame's rows don't have, which `replace` removes. */
+  private def storeWithExtraField(table: String, rows: Seq[Person]): Unit = {
+    val conn = redisConfig.connectionForKey(HashTag)
+    try rows.foreach { case (id, name, age) =>
+      conn.hset(s"$table:$id", Map("name" -> name, "age" -> age.toString, "city" -> "London").asJava)
+    }
+    finally conn.close()
+  }
 
   private def write(table: String, rows: Seq[Person], options: Map[String, String]): Unit =
     df(rows).write.format(RedisFormat)
@@ -83,14 +93,6 @@ class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClu
       .options(options)
       .mode(SaveMode.Append)
       .save()
-
-  /** Gives each row's hash a field the new rows don't have, which `write.mode = replace` must remove. */
-  private def storeOldRows(table: String, rows: Seq[Person]): Unit = rows.foreach { case (id, _, _) =>
-    val key = s"$table:$id"
-    val conn = redisConfig.connectionForKey(key)
-    try conn.hset(key, Map("name" -> "old", "age" -> "0", "extra" -> "old").asJava)
-    finally conn.close()
-  }
 
   /** Checks that each row is stored in the binary model with a TTL, and names how many aren't. */
   private def checkBinaryRows(conn: Jedis, table: String, expected: Seq[Person], when: String): Unit = {
@@ -177,33 +179,7 @@ class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClu
     }
   }
 
-  test("write.mode = replace replaces every row after the rows' slot moved to another primary") {
-    withTable { table =>
-      val rows = people(uuid(), "new")
-      val beforeMove = () => {
-        createView(table, Replace)
-        storeOldRows(table, rows)
-      }
-      afterSlotMoved(HashTag, beforeMove) { _ =>
-        insert(table, rows, overwrite = false)
-      } { conn =>
-        checkRows(conn, table, rows, Seq.empty, "after their slot moved")
-      }
-    }
-  }
-
   // The rows are new: the old owner answers ASK only for keys it doesn't hold, so stored rows would be replaced there.
-  test("write.mode = replace stores every row while the rows' slot is being migrated to another primary") {
-    withTable { table =>
-      val rows = people(uuid(), "new")
-      whileSlotMigrating(HashTag) { _ =>
-        write(table, rows, Replace)
-      } { conn =>
-        checkRows(conn, table, rows, Seq.empty, "while their slot was migrating")
-      }
-    }
-  }
-
   test("the hash model with a ttl stores every row with its TTL after the rows' slot moved to another primary") {
     withTable { table =>
       val rows = people(uuid(), "new")
@@ -246,6 +222,34 @@ class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClu
         write(table, rows, BinaryWithTtl)
       } { conn =>
         checkBinaryRows(conn, table, rows, "while their slot was migrating")
+      }
+    }
+  }
+
+  test("write.mode replace replaces every stored row after the rows' slot moved to another primary") {
+    withTable { table =>
+      val stored = people(uuid(), "row")
+      val rows = stored.map { case (id, name, age) => (id, s"new-$name", age + 1) }
+      val beforeMove = () => {
+        createView(table, ReplaceRows)
+        storeWithExtraField(table, stored)
+      }
+      afterSlotMoved(HashTag, beforeMove) { _ =>
+        insert(table, rows, overwrite = false)
+      } { conn =>
+        checkRows(conn, table, rows, Seq.empty, "after their slot moved")
+      }
+    }
+  }
+
+  test("write.mode replace with a ttl stores every row with its TTL while the rows' slot is being migrated") {
+    withTable { table =>
+      val rows = people(uuid(), "new")
+      whileSlotMigrating(HashTag) { _ =>
+        write(table, rows, ReplaceRowsWithTtl)
+      } { conn =>
+        checkRows(conn, table, rows, Seq.empty, "while their slot was migrating")
+        checkTtls(conn, table, rows, "while their slot was migrating")
       }
     }
   }

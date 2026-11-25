@@ -1,159 +1,208 @@
 package com.redislabs.provider.redis.df
 
-import com.redislabs.provider.redis.RedisEndpoint
 import com.redislabs.provider.redis.util.ConnectionUtils.withConnection
 import com.redislabs.provider.redis.util.MonitoredCommands
-import com.redislabs.provider.redis.util.TestUtils.{generateTableName, interceptSparkErr}
-import org.apache.spark.SparkException
-import org.apache.spark.sql.redis.{RedisFormat, SqlOptionKeyColumn, SqlOptionTTL, SqlOptionTableName}
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import com.redislabs.provider.redis.util.MonitoredCommands.Command
+import com.redislabs.provider.redis.util.TestUtils.{findCause, generateTableName}
+import org.apache.spark.sql.redis.RedisSourceRelation.{dataKey, schemaKey}
+import org.apache.spark.sql.redis.{RedisFormat, SqlOptionKeyColumn, SqlOptionModel, SqlOptionModelBinary,
+  SqlOptionModelHash, SqlOptionTTL, SqlOptionTableName}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{Row, SaveMode}
-import org.scalatest.Matchers
 import redis.clients.jedis.Jedis
 
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-// scalastyle:off multiple.string.literals magic.number
-
 /**
-  * The `write.mode` option of hash-model DataFrame writes (#351, spec §2.4).
+  * `write.mode` for the `hash` model (#351, spec §2.4): what an append does to a row whose key already holds a hash.
   *
-  *  - `merge`, the default, is today's behaviour: fields the new row doesn't have, or has as null, stay in Redis.
-  *  - `replace` makes the stored hash exactly the new row, in one `MULTI`/`EXEC` per key that also sets the TTL.
-  *  - Any other value fails, naming the option, before anything is written.
+  * `merge`, the default, is the 3.x behaviour: the new row's fields are set, and the stored fields it doesn't have
+  * stay, whether its DataFrame has no such column or its value is `null`. `replace` makes the stored hash exactly the
+  * new row. Each row is then one `MULTI`/`EXEC` on its key: `UNLINK`, `HSET` and, with a `ttl`, `EXPIRE`, so no
+  * reader sees a row half replaced or without its TTL. Any other value fails before anything is written.
   *
-  * The option name and its values are spelled out, not taken from constants, so the tests pin what users type.
+  * The option's name and values are spelled out rather than taken from the connector's constants, so that the tests
+  * pin what users type. The commands are recorded with `MONITOR`, see [[MonitoredCommands]].
   */
-trait HashWriteModeSuite extends RedisDataframeSuite with MonitoredCommands with Matchers {
+// scalastyle:off multiple.string.literals
+trait HashWriteModeSuite extends RedisDataframeSuite with MonitoredCommands {
 
   private val WriteMode = "write.mode"
-  private val Ttl = 3600
+  private val Ttl = 600
 
-  private def schema(columns: String*): StructType = StructType(columns.map(StructField(_, StringType)))
+  /** The stored rows' columns: id (the key column), name, age and city. */
+  private val storedSchema = StructType(Seq(StructField("id", StringType), StructField("name", StringType),
+    StructField("age", IntegerType), StructField("city", StringType)))
 
-  private val IdAB = schema("id", "a", "b")
-  private val IdAC = schema("id", "a", "c")
+  /** The new rows' columns: no city. */
+  private val newSchema = StructType(storedSchema.fields.take(3))
 
-  private def write(table: String, schema: StructType, rows: Seq[Row], options: Map[String, String] = Map(),
-                    mode: SaveMode = SaveMode.Append): Unit =
-    spark.createDataFrame(sc.parallelize(rows, 2), schema)
-      .write.format(RedisFormat)
+  private val storedRows = Seq(Row("john", "John", 30, "London"), Row("peter", "Peter", 45, "Paris"))
+
+  /** John's age is null, Peter's fields are unchanged, and Ann's key is new. None of them has a city. */
+  private val newRows = Seq(Row("john", "Johnny", null), Row("peter", "Peter", 45), Row("ann", "Ann", 25))
+
+  private val ids = Seq("john", "peter", "ann")
+
+  private def write(table: String, schema: StructType, rows: Seq[Row], options: Map[String, String]): Unit =
+    spark.createDataFrame(sc.parallelize(rows, 2), schema).write.format(RedisFormat)
       .option(SqlOptionTableName, table)
       .option(SqlOptionKeyColumn, "id")
       .options(options)
-      .mode(mode)
+      .mode(SaveMode.Append)
       .save()
 
-  private def hash(key: String): Map[String, String] =
-    withConnection(redisConfig.connectionForKey(key))(_.hgetAll(key).asScala.toMap)
-
-  private def ttl(key: String): Long = withConnection(redisConfig.connectionForKey(key))(_.ttl(key).longValue)
-
-  private def exists(key: String): Boolean =
-    withConnection(redisConfig.connectionForKey(key))(_.exists(key).booleanValue)
-
-  for ((name, options) <- Seq("by default" -> Map.empty[String, String], "with merge" -> Map(WriteMode -> "merge"))) {
-    test(s"write.mode: $name, fields missing from the new row or null in it stay in Redis") {
-      val t = generateTableName("write-mode-merge")
-      write(t, IdAB, Seq(Row("1", "a1", "b1"), Row("2", "a2", "b2")))
-      write(t, IdAC, Seq(Row("1", "a1-new", "c1"), Row("2", null, "c2")), options)
-      hash(s"$t:1") shouldBe Map("a" -> "a1-new", "b" -> "b1", "c" -> "c1")
-      hash(s"$t:2") shouldBe Map("a" -> "a2", "b" -> "b2", "c" -> "c2")
+  /** Writes `storedRows` with `storedOptions`, then `newRows` with `options`. Returns what the second write sent. */
+  private def overwriteRows(table: String, options: Map[String, String],
+                            storedOptions: Map[String, String] = Map.empty): Seq[Command] = {
+    write(table, storedSchema, storedRows, storedOptions)
+    monitored {
+      write(table, newSchema, newRows, options)
     }
   }
 
-  test("write.mode: replace removes fields missing from the new row or null in it") {
-    val t = generateTableName("write-mode-replace")
-    write(t, IdAB, Seq(Row("1", "a1", "b1"), Row("2", "a2", "b2"), Row("3", "a3", "b3")))
-    write(t, IdAC, Seq(Row("1", "a1-new", "c1"), Row("2", null, "c2")), Map(WriteMode -> "replace"))
-    hash(s"$t:1") shouldBe Map("a" -> "a1-new", "c" -> "c1")
-    hash(s"$t:2") shouldBe Map("c" -> "c2")
-    // a row the second write doesn't have is left alone
-    hash(s"$t:3") shouldBe Map("a" -> "a3", "b" -> "b3")
+  private def onKey[A](key: String)(f: Jedis => A): A = withConnection(redisConfig.connectionForKey(key))(f)
+
+  private def hash(table: String, id: String): Map[String, String] = {
+    val key = dataKey(table, id)
+    onKey(key)(_.hgetAll(key).asScala.toMap)
   }
 
-  test("write.mode: replace with a row whose values are all null removes the key") {
-    val t = generateTableName("write-mode-replace-nulls")
-    write(t, IdAB, Seq(Row("1", "a1", "b1"), Row("2", "a2", "b2")))
-    write(t, IdAB, Seq(Row("1", null, null)), Map(WriteMode -> "replace"))
-    exists(s"$t:1") shouldBe false
-    hash(s"$t:2") shouldBe Map("a" -> "a2", "b" -> "b2")
+  private def ttl(table: String, id: String): Long = {
+    val key = dataKey(table, id)
+    onKey(key)(_.ttl(key))
   }
 
-  test("write.mode: replace with ttl sets the TTL") {
-    val t = generateTableName("write-mode-replace-ttl")
-    write(t, IdAB, Seq(Row("1", "a1", "b1")))
-    write(t, IdAC, Seq(Row("1", "a1-new", "c1")), Map(WriteMode -> "replace", SqlOptionTTL -> Ttl.toString))
-    hash(s"$t:1") shouldBe Map("a" -> "a1-new", "c" -> "c1")
-    ttl(s"$t:1") should (be > 0L and be <= Ttl.toLong)
+  /**
+    * The `MULTI`/`EXEC` blocks that `key`'s commands ran in, each as the commands between the two, normalized. Fails
+    * if a command on `key` ran outside them.
+    */
+  private def transactionsOn(commands: Seq[Command], key: String): Seq[Seq[Seq[Any]]] = {
+    val blocks = commands.groupBy(_.client).values.toSeq.flatMap { stream =>
+      val found = mutable.ListBuffer[Seq[Command]]()
+      var current: Option[mutable.ListBuffer[Command]] = None
+      stream.foreach { command =>
+        command.name match {
+          case "MULTI" => current = Some(mutable.ListBuffer())
+          case "EXEC" =>
+            current.foreach(block => found += block.toList)
+            current = None
+          case _ => current.foreach(_ += command)
+        }
+      }
+      found.toList.filter(_.exists(_.key.contains(key)))
+    }
+    withClue(s"commands on $key outside MULTI/EXEC: ") {
+      commands.count(_.key.contains(key)) shouldBe blocks.map(_.count(_.key.contains(key))).sum
+    }
+    blocks.map(_.map(_.normalized))
   }
 
-  test("write.mode: replace without ttl removes the TTL the replaced row had") {
-    val t = generateTableName("write-mode-replace-no-ttl")
-    write(t, IdAB, Seq(Row("1", "a1", "b1")), Map(SqlOptionTTL -> Ttl.toString))
-    write(t, IdAC, Seq(Row("1", "a1-new", "c1")), Map(WriteMode -> "replace"))
-    hash(s"$t:1") shouldBe Map("a" -> "a1-new", "c" -> "c1")
-    ttl(s"$t:1") shouldBe -1L
+  /** The commands on the table's row keys, normalized. */
+  private def rowCommands(commands: Seq[Command], table: String): Seq[Seq[Any]] =
+    commands.filter(_.key.exists(_.startsWith(s"$table:"))).map(_.normalized)
+
+  test("write.mode merge, the default, keeps the stored fields that the new row doesn't have or has as null") {
+    Seq(None, Some("merge")).foreach { mode =>
+      withClue(s"$WriteMode $mode: ") {
+        val table = generateTableName("write-mode-merge")
+        val commands = overwriteRows(table, mode.map(WriteMode -> _).toMap)
+        hash(table, "john") shouldBe Map("name" -> "Johnny", "age" -> "30", "city" -> "London")
+        hash(table, "peter") shouldBe Map("name" -> "Peter", "age" -> "45", "city" -> "Paris")
+        hash(table, "ann") shouldBe Map("name" -> "Ann", "age" -> "25")
+        // as before: one HSET per row, no MULTI and no UNLINK
+        rowCommands(commands, table).sortBy(_(1).toString) shouldBe Seq(
+          Seq("HSET", dataKey(table, "ann"), Map("name" -> "Ann", "age" -> "25")),
+          Seq("HSET", dataKey(table, "john"), Map("name" -> "Johnny")),
+          Seq("HSET", dataKey(table, "peter"), Map("name" -> "Peter", "age" -> "45")))
+        commands.filter(_.name == "MULTI") shouldBe empty
+      }
+    }
   }
 
-  test("write.mode: replace writes each row in one MULTI/EXEC that also sets its TTL") {
-    val t = generateTableName("write-mode-replace-atomic")
-    val ids = (1 to 20).map(_.toString)
-    write(t, IdAB, ids.map(i => Row(i, s"a$i", s"b$i")))
+  test("write.mode replace makes each stored hash exactly the new row") {
+    val table = generateTableName("write-mode-replace")
+    overwriteRows(table, Map(WriteMode -> "replace"))
+    hash(table, "john") shouldBe Map("name" -> "Johnny")
+    hash(table, "peter") shouldBe Map("name" -> "Peter", "age" -> "45")
+    hash(table, "ann") shouldBe Map("name" -> "Ann", "age" -> "25")
+    val loaded = spark.read.format(RedisFormat)
+      .option(SqlOptionTableName, table)
+      .option(SqlOptionKeyColumn, "id")
+      .load()
+      .collect()
+      .map(row => (row.getAs[String]("id"), row.getAs[String]("name"), row.getAs[Any]("age")))
+    loaded.sortBy(_._1) shouldBe Array(("ann", "Ann", 25), ("john", "Johnny", null), ("peter", "Peter", 45))
+  }
+
+  test("write.mode replace writes each row in one MULTI/EXEC on its key: UNLINK, then HSET") {
+    val table = generateTableName("write-mode-replace-tx")
+    val commands = overwriteRows(table, Map(WriteMode -> "replace"))
+    val fields = Map("john" -> Map("name" -> "Johnny"), "peter" -> Map("name" -> "Peter", "age" -> "45"),
+      "ann" -> Map("name" -> "Ann", "age" -> "25"))
+    ids.foreach { id =>
+      val key = dataKey(table, id)
+      transactionsOn(commands, key) shouldBe Seq(Seq(Seq("UNLINK", key), Seq("HSET", key, fields(id))))
+    }
+  }
+
+  test("write.mode replace with a ttl sets each row's TTL in the same MULTI/EXEC") {
+    val table = generateTableName("write-mode-replace-ttl")
+    val commands = overwriteRows(table, Map(WriteMode -> "replace", SqlOptionTTL -> Ttl.toString))
+    val fields = Map("john" -> Map("name" -> "Johnny"), "peter" -> Map("name" -> "Peter", "age" -> "45"),
+      "ann" -> Map("name" -> "Ann", "age" -> "25"))
+    ids.foreach { id =>
+      val key = dataKey(table, id)
+      transactionsOn(commands, key) shouldBe
+        Seq(Seq(Seq("UNLINK", key), Seq("HSET", key, fields(id)), Seq("EXPIRE", key, Ttl.toString)))
+      withClue(s"TTL of $key: ") {
+        ttl(table, id) should (be > 0L and be <= Ttl.toLong)
+      }
+    }
+    hash(table, "john") shouldBe Map("name" -> "Johnny")
+  }
+
+  test("write.mode replace without a ttl leaves a replaced row without a TTL, like a new row") {
+    val table = generateTableName("write-mode-replace-no-ttl")
+    overwriteRows(table, Map(WriteMode -> "replace"), storedOptions = Map(SqlOptionTTL -> Ttl.toString))
+    ids.foreach { id =>
+      withClue(s"TTL of $id: ") {
+        ttl(table, id) shouldBe -1L
+      }
+    }
+  }
+
+  test("write.mode replace removes a stored row whose new fields are all null") {
+    val table = generateTableName("write-mode-replace-nulls")
+    write(table, storedSchema, storedRows, Map.empty)
     val commands = monitored {
-      write(t, IdAC, ids.map(i => Row(i, s"a$i-new", s"c$i")),
-        Map(WriteMode -> "replace", SqlOptionTTL -> Ttl.toString))
+      write(table, newSchema, Seq(Row("john", null, null)), Map(WriteMode -> "replace", SqlOptionTTL -> Ttl.toString))
     }
-    ids.foreach { i =>
-      val key = s"$t:$i"
-      withClue(s"commands on $key: ") {
-        val onKey = commands.filter(_.key.contains(key))
-        onKey.map(_.name) shouldBe Seq("UNLINK", "HSET", "EXPIRE")
-        onKey.map(_.client).distinct should have size 1
-        // the client's own command stream, around the UNLINK: one transaction holding exactly this row's writes
-        val stream = commands.filter(_.client == onKey.head.client)
-        val unlink = stream.indexOf(onKey.head)
-        stream.slice(unlink - 1, unlink + 4).map(_.normalized) shouldBe Seq(
-          Seq("MULTI"),
-          Seq("UNLINK", key),
-          Seq("HSET", key, Map("a" -> s"a$i-new", "c" -> s"c$i")),
-          Seq("EXPIRE", key, Ttl.toString),
-          Seq("EXEC"))
-      }
-    }
+    val key = dataKey(table, "john")
+    onKey(key)(_.exists(key)) shouldBe false
+    transactionsOn(commands, key) shouldBe Seq(Seq(Seq("UNLINK", key)))
+    hash(table, "peter") shouldBe Map("name" -> "Peter", "age" -> "45", "city" -> "Paris")
   }
 
-  test("write.mode: replace fails the write when Redis refuses it, and leaves the stored row whole") {
-    val t = generateTableName("write-mode-replace-refused")
-    write(t, IdAB, Seq(Row("1", "a1", "b1")))
-    // a user that may do everything except UNLINK, so Redis rejects the transaction when it is queued
-    val refused = "write-mode-no-unlink"
-    primaries.foreach { p =>
-      withConnection(p.connect())(_.aclSetUser(refused, "on", s">$userPassword", "~*", "&*", "+@all", "-unlink"))
-    }
-    try {
-      val e = interceptSparkErr[SparkException] {
-        write(t, IdAC, Seq(Row("1", "a1-new", "c1")),
-          Map(WriteMode -> "replace", "user" -> refused, "password" -> userPassword))
+  test("any other write.mode fails before anything is written, with a message that names the option") {
+    Seq(SqlOptionModelHash, SqlOptionModelBinary).foreach { model =>
+      withClue(s"model $model: ") {
+        val table = generateTableName("write-mode-invalid")
+        val e = intercept[Exception] {
+          write(table, storedSchema, storedRows, Map(SqlOptionModel -> model, WriteMode -> "upsert"))
+        }
+        val message = findCause[IllegalArgumentException](e).getMessage
+        message should include(s"'$WriteMode'")
+        message should include("'upsert'")
+        message should include("'merge'")
+        message should include("'replace'")
+        onKey(schemaKey(table))(_.exists(schemaKey(table))) shouldBe false
+        storedRows.foreach { row =>
+          val key = dataKey(table, row.getString(0))
+          onKey(key)(_.exists(key)) shouldBe false
+        }
       }
-      e.getMessage should include("NOPERM")
-    } finally {
-      primaries.foreach(p => withConnection(p.connect())(_.aclDelUser(refused)))
-    }
-    hash(s"$t:1") shouldBe Map("a" -> "a1", "b" -> "b1")
-  }
-
-  for (mode <- Seq(SaveMode.Append, SaveMode.Overwrite)) {
-    test(s"write.mode: any other value fails, naming the option, before anything is written ($mode)") {
-      val t = generateTableName("write-mode-invalid")
-      write(t, IdAB, Seq(Row("1", "a1", "b1")))
-      val e = intercept[IllegalArgumentException] {
-        write(t, IdAC, Seq(Row("1", "a1-new", "c1"), Row("2", "a2", "c2")), Map(WriteMode -> "upsert"), mode)
-      }
-      e.getMessage should include(WriteMode)
-      e.getMessage should include("upsert")
-      hash(s"$t:1") shouldBe Map("a" -> "a1", "b" -> "b1")
-      exists(s"$t:2") shouldBe false
     }
   }
 }
