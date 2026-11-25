@@ -111,6 +111,7 @@ These tests can fail at the starting commit itself, whatever the agent did.
 | 2026-11-22 | `94decd7` (PR #18) | Claude Opus 5.5, xhigh | | pass | | | | | | | | | 1 / 1 | 0 | Only 02, to test PR #18's fix for 02's failure |
 | 2026-11-24 | `13885f1` (`eval-base-phase-1`) | Claude Opus 5.5, xhigh | pass | **fail** | n/a | pass | pass | pass | pass | pass | pass | pass | **8 / 9** | 0 | Phase 1 baseline, on JDK 17. See [the notes below](#phase-1-baseline-2026-11-24) |
 | 2026-11-24 | `d701e64` (PR #65) | Claude Opus 5.5, xhigh | | **fail** | | | | | | | | | 0 / 1 | 1 | Only 02, from `eval-base-phase-1`, to test PR #65's fix for 02's failure in #57. See [the notes below](#02-re-run-on-the-phase-1-base-2026-11-24) |
+| 2026-11-24 | `a495462` (the records rule) | Claude Opus 5.5, xhigh | | pass | | | | | | | | | 1 / 1 | 0 | Only 02, from `eval-base-phase-1`, to test `CLAUDE.md`'s new line on `doc/modernization/`. See [the notes below](#02-with-the-records-rule-2026-11-24) |
 
 ### Baseline (2026-11-22)
 
@@ -211,4 +212,38 @@ rewords them, and this run tests that fix.
   The other acceptance steps pass, and every review item holds. It also dropped "8.2 to 8.10" from
   `versions.yml`'s header, and PR #65 now does the same.
 - **The comments no longer cause the failure: the records that name a Redis line do.** The owner decides whether
-  02 allows a note on D1, or whether the records stop naming lines.
+  02 allows a note on D1, or whether the records stop naming lines. **Since then:** neither. A `CLAUDE.md` line
+  says the records stay as they are, and 02 passes with it ([below](#02-with-the-records-rule-2026-11-24)).
+
+### 02 with the records rule (2026-11-24)
+
+The [re-run above](#02-re-run-on-the-phase-1-base-2026-11-24) failed on the dated notes the agent added to decision
+D1 and to Phase 0's open item 8. Nothing told it those documents record what was true when they were written. So
+`a495462` adds one line to `CLAUDE.md`: `doc/modernization/` is the owner's record, edited only when the task is to
+write or amend one of its documents, or when the owner asks. A change that makes something there out of date is
+reported instead. Task 02's acceptance block and review items are unchanged.
+
+- **Setup.** As in the re-run above, from `eval-start-phase-1/02-versions-redis-line`, with the same paths taken from
+  `a495462` instead of `d701e64` (starting state `be19f06`). The starting state differs from that run's only by #65's
+  last changes to `ci.yml` and `versions.yml`, and by the new line. The session was headless and top level, with the
+  same flags, model and input, and it could read the repository's auto-memory. Owner interventions: 0.
+- **Pass.** The agent changed one line: `redis: ["8.6", "8.8"]`. The acceptance block exited 0:
+  `HashDataframeStandaloneSuite` ran 21 tests on `redis:8.8`, and none failed. Every review item holds. Hook blocks: 0.
+- **It reported the records instead of editing them.** Its report lists two places in `plans/phase-1.md` as out of
+  date, "left alone, per repo rules": B2's "the required Redis line", in the singular, and decision D1's PR matrix.
+- **Also in its report:** the full suite on 8.8 in the sandbox (610 passed, 1 canceled, by its count), and
+  `ConnectionSSLUtilsTest` run on its own outside the sandbox, because this base still has `tls/*.key`. It asked
+  before committing or opening a PR.
+
+**What the run taught about the procedure:**
+
+- **The guardrail overlay doesn't fit this base.** `ci.yml`, `release.yml`, the `Makefile`'s `SPARK=` and the
+  `verifier` agent come from the candidate, and they select a module with `-pl spark-<line>`. But `eval-base-phase-1`
+  is still one Maven project: B1 (#48) added the modules after the tag. So every `-pl` run fails with "Could not find
+  the selected project in the reactor", and the verifier returned no results. The agent ran Maven without `-pl`,
+  which tests Spark 4.1 only. 02's acceptance block doesn't use `-pl`, so the score is unaffected. Phase 2's runner
+  should start from a base that has the modules.
+- **The session wrote to the shared auto-memory:** a new note on previewing the CI matrices without `yq`, and a
+  paragraph on the missing modules in the base's flake note. The owner installed `yq` during the run, so the new note
+  was already wrong, and it was deleted afterwards. A later eval session could read anything left there, so Phase 2's
+  runner should give each session an empty memory.
