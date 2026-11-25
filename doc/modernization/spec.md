@@ -627,8 +627,8 @@ before Spark 3.5's extended LTS ends in November 2027.
   are a download that needs no token.
 - **Maven Central** (through the Central Portal) and **PyPI** wait for an official release, after the
   spike. Both can be added to the same GitHub Actions workflow, with PyPI using trusted publishing (OIDC).
-- `4.0.0` is the first release for Spark 4. Release Drafter, which the repo already uses, writes release
-  notes from PR labels.
+- `4.0.0` is the first release for Spark 4. Each GitHub Release carries GitHub's generated release notes: the PRs
+  merged since the previous tag, which a `.github/release.yml` file can group by PR label.
 
 
 ### 2.14 Modern only: legacy patterns and APIs we do not keep
