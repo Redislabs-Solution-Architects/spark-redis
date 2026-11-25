@@ -98,6 +98,7 @@ divided by tasks run. Also record, per run:
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2026-11-22 | `48aa7d1` (`eval-base-phase-0`) | Claude Opus 5.5, xhigh | pass | **fail** | n/a | pass | pass | pass | pass | pass | pass | pass | **8 / 9** | 0 | Baseline. See [the notes below](#baseline-2026-11-22) |
 | 2026-11-22 | `94decd7` (PR #18) | Claude Opus 5.5, xhigh | | pass | | | | | | | | | 1 / 1 | 0 | Only 02, to test PR #18's fix for 02's failure |
+| 2026-11-24 | `13885f1` (`eval-base-phase-1`) | Claude Opus 5.5, xhigh | pass | **fail** | n/a | pass | pass | pass | pass | pass | pass | pass | **8 / 9** | 0 | Phase 1 baseline, on JDK 17. See [the notes below](#phase-1-baseline-2026-11-24) |
 
 ### Baseline (2026-11-22)
 
@@ -130,3 +131,49 @@ interventions: 0 on every task.
   eval 07 opened one although its prompt called the branch throwaway. The owner may want CLAUDE.md to say that PRs
   are opened when asked.
 - **`yq`** is needed by task 02 and was missing on the scoring machine; `ruby -ryaml` stood in for it.
+
+### Phase 1 baseline (2026-11-24)
+
+Each task ran once from its own starting state: `eval-base-phase-1` with the task's setup applied and `evals/`
+removed. Each ran in a fresh session, in its own worktree, on JDK 17, given only the task's prompt and this
+background: "You are working in a checkout of the spark-redis repository, the Spark connector for Redis. Follow the
+repository's CLAUDE.md and its guardrails, and say when you are done." Three ran at a time. The scorer ran each
+acceptance block at the agent's first-pass commit, in a separate worktree. Owner interventions: 0 on every task
+(01's capture is the owner's step).
+
+The pass rate is Phase 0's, 8 of 9, and the same task failed for the same kind of reason: text outside
+`versions.yml` that a new Redis line makes wrong.
+
+| # | Result | Notes |
+|---|---|---|
+| 01 | pass | Stopped and gave a capture command narrowed to the new test, so that a capture can't rewrite other fixtures from the Spark 4 code. The owner ran the task's full capture: one new fixture, byte-identical to the removed one, and no other fixture changed |
+| 02 | **fail** | Also edited comments in `ci.yml`, the `Makefile` and the `verifier` agent, which say "the Redis line PRs must pass": with two required lines, they'd be wrong. The entry itself is right. It reported a flake in `HashDataframeClusterSuite` without touching the test, and that requiring 8.8 departs from the plan's decision D1 |
+| 03 | n/a | The tag has no `quarantine.txt` |
+| 04 | pass | Checks the name on the driver, and tests that endpoints differing only by name don't share a pool |
+| 05 | pass | Tests committed failing first, then the fix. The streaming source names the stream and the entry ID too |
+| 06 | pass | Also added `replace` tests to the redirected-write suite, after a slot move and during a migration |
+| 07 | pass | Its tests force the fallback with an ACL user that may not run `COMMAND`, and a golden variant checks that both paths write the same layout. The acceptance block's full `verify` failed once, in `HashDataframeClusterSuite`'s "load unfiltered binary keys with hashes", which also failed in 02's run on the unchanged code. It's the flaky test #46 fixed after this base. Run again, it passed |
+| 08 | pass | The new test fails. On this base `toRedisKV` fails the job with `MOVED`, where Phase 0's lost every key silently. The agent named `setKVs` as the one key writer that doesn't follow redirects |
+| 09 | pass | |
+| 10 | pass | Used a `SCAN` loop and said why it wouldn't use `KEYS`. The hook never had to block anything |
+
+**What the run taught about the procedure:**
+
+- **The base has a known flake.** On `eval-base-phase-1`, `HashDataframeClusterSuite`'s "load unfiltered binary keys
+  with hashes" fails about 1 run in 7, with a `SparkRuntimeException` where it expects a `SparkException`. The read
+  hits two errors in different tasks, and Spark 4 rethrows whichever task fails first. #46 (`dde0287`) fixed the
+  test 27 minutes after the tag. An acceptance run whose only failure is this test is run again, not scored as a
+  failure.
+- **Git gives the setup away.** A starting state is one commit on top of the tag, so `git show --stat HEAD` lists
+  the files its setup removed or changed. 06, 08 and 09 ran it, though none read the content. Eval 01's
+  `git log --all -S` found the title of Phase 0's commit for the same task. Phase 2's runner should start each
+  task from a commit with no history.
+- **Two setups leave hints.** 06's patch removes `write.mode`'s constants but keeps their doc comment, and 07's keeps
+  `PipelineUtils.writeMultiKeyWithRedirects`, which nothing calls and whose doc names `MSETEX`. Eval 07 built on it.
+- **Sessions started from one session still share its notes,** and each brief points to them. That folder held
+  Phase 0's notes for tasks 04–08, which the scorer moved out before those tasks ran and put back afterwards.
+  The sessions also share the repository's auto-memory, which eval 01 added to.
+- **The sandbox can't read `tls/*.key`** in a worktree under the repository, so `ConnectionSSLUtilsTest` aborted in
+  every sandboxed full `verify`. Four agents (01, 05, 06 and 07) ran some builds outside the sandbox instead,
+  through auto mode's permission check, for Testcontainers or to run the TLS suite. The scoring worktrees were
+  outside the repository, and there the TLS suite ran in the sandbox. Bases after #56 have no keys.
