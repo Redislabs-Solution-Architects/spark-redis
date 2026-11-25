@@ -13,16 +13,19 @@
 >
 > **And after the owner's decision on criterion 2** (2026-11-24): the legacy fixtures running on standalone only is
 > enough, so criterion 2 is met without a caveat.
+>
+> **And after the end-of-Phase-1 eval run** (2026-11-24): 9 of 9 tasks pass with the guardrails at `a495462`, so the
+> pass rate is measured at both ends of Phase 1 (open item 1).
 
 ## Verdict
 
-**Phase 1 can exit when the owner signs off: all 5 criteria are met,** criterion 5 once #57 merges.
+**Phase 1 can exit when the owner signs off: all 5 criteria are met.**
 
 - **Met:** the full matrix passes in one run after a merge, the golden and legacy fixtures pass unchanged (the legacy
   ones on standalone only), snapshots publish with their SBOMs, DStreams are gone, and the Phase 1 eval baseline is
   recorded: 8 of 9, as in Phase 0.
-- **Not measured:** the eval pass rate at the end of Phase 1, which the plan's list of measurements also asks for.
-  The owner decides whether Phase 1 exits without it (open item 1).
+- **Measured at both ends:** the eval pass rate, which the plan's list of measurements also asks for. 8 of 9 at the
+  start of Phase 1, and 9 of 9 at the end (open item 1).
 
 The rest of the roadmap's Phase 1, as Amendment 1 narrowed it, is built:
 
@@ -85,7 +88,7 @@ The plan's list, from the roadmap's "How we measure it":
 | PRs merged before their CI finished | **7 of 11** in the fork; **3 of 4** upstream | Fork: #44, #45, #48, #49, #50, #52, #53. Upstream: #437, #438, #439. The target was none, and Phase 0 had nine. All of them later passed except one PR check: #45's failed after the merge, probably on the flaky test that #46 fixed (its log isn't readable here), and the run on #45's merge commit passed. #50 merged while the release dry run for its second commit was still running; it passed |
 | Repeat mistakes that needed a `CLAUDE.md` line | **0** | `CLAUDE.md` already says "Wait for CI to finish before merging", and the merges above still happened, because the owner merges by hand (open item 4). The agent repeated two shell mistakes, both caught before anything merged. It committed the sandbox's phantom deletions of the `.key` files in a format-only commit, twice. And zsh read `$var:x` as a modifier, twice. They're sandbox and shell habits, so they went into the agent's own notes rather than `CLAUDE.md` |
 | Concurrent sessions in flight | **1** | Every step ran in one session, one after another. The plan allowed three lanes at once. Only the eval baseline ran three sessions at a time |
-| Eval pass rate, start and end of Phase 1 | **8 of 9** at the start. The end isn't measured | The start: from `eval-base-phase-1` (criterion 5). Phase 0's baseline was 8 of 9 too, and task 02 failed both times. The end, the same tasks with the guardrails at `5e7a6a0`, hasn't run (open item 1) |
+| Eval pass rate, start and end of Phase 1 | **8 of 9** at the start, **9 of 9** at the end | The start: from `eval-base-phase-1` (criterion 5). Phase 0's baseline was 8 of 9 too, and task 02 failed both times. The end: the same tasks from the same base, with the guardrails at `a495462` (#66), where 02 passes too (open item 1) |
 | Benchmarks against the re-measured baseline | **n/a** | B3 moved to Phase 2 (Amendment 1) |
 | 3.x fixes found during the port and sent upstream | **1**: upstream #439 | Starting from a replica, the master lost the configured timeout. Found during the port, merged upstream on 2026-11-24, and ported back with #52. #53's JDK 21 fix doesn't go upstream: Spark 3.5 supports JDK 8, 11 and 17 |
 | Quarantined tests | **0** | As in Phase 0 |
@@ -99,9 +102,12 @@ The plan's list, from the roadmap's "How we measure it":
    - **02 failed, as in Phase 0, for the same kind of reason.** The agent added 8.8 to `versions.yml` correctly, but
      also edited comments in `ci.yml`, the `Makefile` and the `verifier` agent that speak of "the Redis line PRs
      must pass", in the singular. They still do at `5e7a6a0`, so B2's proof, that task 02 still passes, doesn't
-     hold yet.
-   - **Not run: the pass rate at the end of Phase 1,** the same tasks with the guardrails at `5e7a6a0`. Because of
-     those comments, 02 would most likely fail there too.
+     hold yet. **Since then:** #65 reworded those comments, and #66 added `CLAUDE.md`'s line on `doc/modernization/`
+     after a re-run failed on dated notes the agent added to the records. 02 passes with both, so B2's proof holds.
+   - **Done: the pass rate at the end of Phase 1, 9 of 9.** The same tasks, from the same base, with the guardrails at
+     `a495462`. Every review item holds. 06's one test failure was the base's known flake. `evals/README.md` has the
+     results and the run's procedure gaps: the guardrails' `-pl` commands don't fit the base, sandboxed sessions
+     share one `$TMPDIR`, and sessions write to the shared auto-memory.
    - **#46's flaky test is still on the eval base:** `HashDataframeClusterSuite`'s "load unfiltered binary keys
      with hashes" failed once in eval 02's runs and once in eval 07's scoring, both times passing when run again.
      #46 fixed it (`dde0287`) after `13885f1`. On `spike/phase-1` it passed 20 of 20 runs. #58 lists it in
