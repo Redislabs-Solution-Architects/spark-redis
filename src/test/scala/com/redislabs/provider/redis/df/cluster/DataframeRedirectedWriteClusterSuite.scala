@@ -4,9 +4,10 @@ import java.util.UUID
 
 import scala.jdk.CollectionConverters._
 
+import com.redislabs.provider.redis.RedisConfig.PasswordOption
 import com.redislabs.provider.redis.SparkRedisSuite
 import com.redislabs.provider.redis.env.RedisClusterEnv
-import com.redislabs.provider.redis.util.RedirectedWrites
+import com.redislabs.provider.redis.util.{AclUsers, RedirectedWrites}
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.redis.{RedisFormat, RedisSourceRelation, SqlOptionKeyColumn, SqlOptionModel,
@@ -28,10 +29,11 @@ import redis.clients.jedis.util.JedisClusterCRC16
   * the row keys (`<table>:<id>`) take the suite's slot from the hash tag in each id.
   *
   * `write.mode = replace`, and the hash model with a `ttl`, write each row in a `MULTI`/`EXEC`, and the binary model
-  * with a `ttl` writes a slot's rows in one `MSETEX` where the server has it. They must follow the redirects too.
+  * with a `ttl` writes a slot's rows in one `MSETEX` where the server has it. They must follow the redirects too. A
+  * user who may not run `COMMAND` gets the binary model's other path, one `SET … EX` per row, on every Redis line.
   */
 class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClusterEnv with RedirectedWrites
-    with Matchers {
+    with AclUsers with Matchers {
 
   private val HashTag = "{redirected-df}"
   private val Slot = JedisClusterCRC16.getSlot(HashTag)
@@ -246,6 +248,36 @@ class DataframeRedirectedWriteClusterSuite extends SparkRedisSuite with RedisClu
         write(table, rows, BinaryWithTtl)
       } { conn =>
         checkBinaryRows(conn, table, rows, "while their slot was migrating")
+      }
+    }
+  }
+
+  /** Runs `body` with the options of a new user who may not run `COMMAND`, so the binary model writes `SET … EX`. */
+  private def asNoCommandUser(user: String)(body: Map[String, String] => Unit): Unit =
+    withAclUser(user, "-command")(body(Map("user" -> user, PasswordOption -> userPassword)))
+
+  test("the binary model with a ttl, without MSETEX, stores every row after the rows' slot moved to another primary") {
+    withTable { table =>
+      asNoCommandUser("redirected_df_no_command_moved") { asUser =>
+        val rows = people(uuid(), "new")
+        afterSlotMoved(HashTag, beforeMove = () => createView(table, BinaryWithTtl ++ asUser)) { _ =>
+          insert(table, rows, overwrite = false)
+        } { conn =>
+          checkBinaryRows(conn, table, rows, "after their slot moved")
+        }
+      }
+    }
+  }
+
+  test("the binary model with a ttl, without MSETEX, stores every row while the rows' slot is being migrated") {
+    withTable { table =>
+      asNoCommandUser("redirected_df_no_command_migrating") { asUser =>
+        val rows = people(uuid(), "new")
+        whileSlotMigrating(HashTag) { _ =>
+          write(table, rows, BinaryWithTtl ++ asUser)
+        } { conn =>
+          checkBinaryRows(conn, table, rows, "while their slot was migrating")
+        }
       }
     }
   }
