@@ -168,6 +168,7 @@ Similarly to Dataframe API, we can override connection options on the individual
 | ssl        | overrides `spark.redis.ssl` configured in SparkSession       | `Boolean`  | `false`     |
 | dbNum      | overrides `spark.redis.db` configured in SparkSession        | `Int`      | `0`         |
 | timeout    | overrides `spark.redis.timeout` configured in SparkSession   | `Int`      | `2000`      |
+| client.name | overrides `spark.redis.client.name` configured in SparkSession, see [Client name](configuration.md#client-name) | `String` | - |
 
 Each option overrides only its own parameter, see [Configuration](configuration.md#overriding-the-connection-for-a-dataframe-stream-or-rdd).
 

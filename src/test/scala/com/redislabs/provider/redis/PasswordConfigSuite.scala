@@ -48,14 +48,15 @@ class PasswordConfigSuite extends FunSuite with Matchers {
   }
 
   test("an endpoint's toString shows every field but the password") {
-    val endpoint = RedisEndpoint(host = "redis.example.com", port = 6380, user = "alice", auth = "s3cr3t")
-    endpoint.toString shouldBe "RedisEndpoint(redis.example.com,6380,alice,*********(redacted),0,2000,false)"
+    val endpoint =
+      RedisEndpoint(host = "redis.example.com", port = 6380, user = "alice", auth = "s3cr3t", clientName = "etl")
+    endpoint.toString shouldBe "RedisEndpoint(redis.example.com,6380,alice,*********(redacted),0,2000,false,etl)"
     // Classes that hold an endpoint print it with its toString, as RedisSourceRelation's log of its initial host does.
     RedisNode(endpoint, 0, 16383, 0, 1).toString should not include "s3cr3t"
   }
 
   test("an endpoint without a password shows null for it") {
-    RedisEndpoint(host = "h", port = 1).toString shouldBe "RedisEndpoint(h,1,null,null,0,2000,false)"
+    RedisEndpoint(host = "h", port = 1).toString shouldBe "RedisEndpoint(h,1,null,null,0,2000,false,null)"
   }
 
   test("toString doesn't change the endpoint") {

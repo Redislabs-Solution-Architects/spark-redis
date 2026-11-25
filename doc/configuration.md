@@ -6,6 +6,7 @@
   - [Authentication](#authentication)
     - [Keeping the password out of the Spark UI and logs](#keeping-the-password-out-of-the-spark-ui-and-logs)
   - [TLS](#tls)
+  - [Client name](#client-name)
   - [Connection pool](#connection-pool)
   - [Redis server requirements](#redis-server-requirements)
   - [Tuning reads and writes](#tuning-reads-and-writes)
@@ -22,6 +23,7 @@
 | `spark.redis.db`                               | DB number. Avoid using this, especially in cluster mode.                                                                                                                    | `0`         |
 | `spark.redis.timeout`                          | connection timeout **and** socket read timeout, in milliseconds                                                                                                             | `2000`      |
 | `spark.redis.ssl`                              | set to `true` to connect with TLS, see [TLS](#tls)                                                                                                                          | `false`     |
+| `spark.redis.client.name`                      | the name every connection gives itself with `CLIENT SETNAME`, as `CLIENT LIST` shows it, see [Client name](#client-name). Unset or empty, connections have no name.       | -           |
 | `spark.redis.max.pipeline.size`                | the maximum number of commands sent in one pipeline, see [Tuning](#tuning-reads-and-writes)                                                                                 | `100`       |
 | `spark.redis.scan.count`                       | the `COUNT` hint passed to `SCAN` when iterating over keys, see [Tuning](#tuning-reads-and-writes)                                                                          | `100`       |
 | `spark.redis.rdd.write.iterator.grouping.size` | the number of items `toRedisKV`, `toRedisByteKV` and `toRedisByteHASHes` take from a partition at a time before grouping them by Redis node, see [Tuning](#tuning-reads-and-writes) | `1000`      |
@@ -59,6 +61,8 @@ is ignored.
 | `dbNum`   | `spark.redis.db`      | `Int`     |
 | `timeout` | `spark.redis.timeout` | `Int`     |
 | `ssl`     | `spark.redis.ssl`     | `Boolean` |
+| `client.name` | `spark.redis.client.name`. Empty, this source's connections have no name | `String` |
+
 Each option overrides only its own parameter. Options that aren't set fall back to the `spark.redis.*` value from the
 `SparkConf`, and then to the default.
 
@@ -145,6 +149,43 @@ a relative path. On other cluster managers, make the files available at the same
 
 A custom `SSLSocketFactory`, `SSLParameters` or `HostnameVerifier` can't be passed to Spark-Redis.
 
+## Client name
+
+Set `spark.redis.client.name` to name the job's connections. Every connection Spark-Redis opens, on the driver and on
+the executors, to every node of a cluster, sends `CLIENT SETNAME` with that name when it opens, so `CLIENT LIST` and
+the slow log show which connections are the job's. Without the setting, connections send no `CLIENT SETNAME` and have
+no name, as before.
+
+```bash
+spark-submit --conf "spark.redis.client.name=nightly-etl" ...
+```
+
+```text
+redis> CLIENT LIST
+id=42 addr=10.0.0.7:51234 ... name=nightly-etl ... lib-name=jedis(spark-redis_v...) ...
+```
+
+The `client.name` option sets the name for one DataFrame or stream instead, and an empty `client.name` gives that
+source's connections no name. The RDD and DStream functions take the name from their `RedisConfig`, so to name them
+differently from `spark.redis.client.name`, pass a `RedisConfig` with its own `RedisEndpoint`:
+
+```scala
+val df = spark.read
+  .format("org.apache.spark.sql.redis")
+  .option("table", "person")
+  .option("client.name", "person-report")
+  .load()
+
+implicit val redisConfig: RedisConfig =
+  new RedisConfig(RedisEndpoint(host = "redis.example.com", port = 6379, clientName = "person-backfill"))
+sc.toRedisKV(kvs)
+```
+
+Redis accepts only printable ASCII characters other than a space in a name (`!` to `~`), so a name such as
+`nightly etl` fails on the driver before any connection opens, with a message that names the setting.
+A server that refuses `CLIENT SETNAME` fails the connection with the server's reply, for example an ACL user without
+`+client|setname`: give the user that command, or leave the name unset.
+
 ## Connection pool
 
 Each Spark JVM (the driver and every executor) keeps one Jedis connection pool per Redis endpoint, with at most 250
@@ -165,6 +206,7 @@ Besides the commands that read and write your data, Spark-Redis uses the followi
 | `ASKING`                    | before a write to a slot that is being migrated, after the server answered `ASK` |
 | `MULTI`, `UNLINK`, `EXEC`   | DataFrame writes with `write.mode = replace` |
 | `COMMAND INFO`, `HELLO`     | on the driver, once per write of the `binary` model with a `ttl`, to find out whether every primary has `MSETEX` and whether the server is a cluster. A refused command counts as no: the write then uses `SET ... EX` and groups the keys by hash slot |
+| `CLIENT SETNAME`            | on each new connection, when `spark.redis.client.name` or the `client.name` option is set, see [Client name](#client-name). A refusal fails the connection |
 
 Proxies and managed services that block or don't implement these commands are not supported. Typical errors are
 `ERR unknown command 'CLUSTER'`, `ERR data connection don't process admin command` (blocked `INFO`) and

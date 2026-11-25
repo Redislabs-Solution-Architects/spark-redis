@@ -23,6 +23,9 @@ import scala.jdk.CollectionConverters._
   *              deprecated `spark.redis.auth`). [[toString]] never shows it.
   * @param dbNum database number (should be avoided in general)
   * @param ssl true to enable SSL connection. Defaults to false
+  * @param clientName the name each connection gives itself with `CLIENT SETNAME`, as `CLIENT LIST` shows it, or null
+  *                   for no name. Set from `spark.redis.client.name` or the `client.name` option. Redis accepts only
+  *                   printable ASCII characters other than a space, `!` to `~`.
   */
 case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
                          port: Int = Protocol.DEFAULT_PORT,
@@ -30,12 +33,20 @@ case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
                          auth: String = null,
                          dbNum: Int = Protocol.DEFAULT_DATABASE,
                          timeout: Int = Protocol.DEFAULT_TIMEOUT,
-                         ssl: Boolean = false)
+                         ssl: Boolean = false,
+                         clientName: String = null)
   extends Serializable {
+
+  // Checked when the endpoint is built from the settings, on the driver, before any connection opens: a bad name
+  // fails once with this message, rather than every connection failing with the server's reply to CLIENT SETNAME.
+  require(clientName == null || RedisConfig.isValidClientName(clientName),
+    s"Invalid Redis client name '$clientName' (${RedisConfig.ClientNameConfKey} or the " +
+      s"'${RedisConfig.ClientNameOption}' option): Redis accepts only printable ASCII characters other than a space")
 
   /**
     * Constructor from spark config. set params with spark.redis.host, spark.redis.port, spark.redis.user,
-    * spark.redis.password (or the deprecated spark.redis.auth), spark.redis.db, spark.redis.timeout and spark.redis.ssl
+    * spark.redis.password (or the deprecated spark.redis.auth), spark.redis.db, spark.redis.timeout, spark.redis.ssl
+    * and spark.redis.client.name
     *
     * @param conf spark context config
     */
@@ -47,7 +58,8 @@ case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
       RedisConfig.passwordOrNull(conf),
       conf.getInt("spark.redis.db", Protocol.DEFAULT_DATABASE),
       conf.getInt("spark.redis.timeout", Protocol.DEFAULT_TIMEOUT),
-      conf.getBoolean("spark.redis.ssl", false)
+      conf.getBoolean("spark.redis.ssl", false),
+      RedisConfig.clientNameOrNull(conf)
     )
   }
 
@@ -66,7 +78,8 @@ case class RedisEndpoint(host: String = Protocol.DEFAULT_HOST,
       RedisConfig.passwordOrNull(conf, parameters),
       parameters.getOrElse("dbNum", conf.get("spark.redis.db", Protocol.DEFAULT_DATABASE.toString)).toInt,
       parameters.getOrElse("timeout", conf.get("spark.redis.timeout", Protocol.DEFAULT_TIMEOUT.toString)).toInt,
-      parameters.getOrElse("ssl", conf.get("spark.redis.ssl", false.toString)).toBoolean)
+      parameters.getOrElse("ssl", conf.get("spark.redis.ssl", false.toString)).toBoolean,
+      RedisConfig.clientNameOrNull(conf, parameters))
   }
 
 
@@ -216,6 +229,29 @@ object RedisConfig extends Logging {
   }
 
   /**
+    * Spark setting: the name every connection gives itself with `CLIENT SETNAME`, so `CLIENT LIST` and the slow log
+    * show which job a connection belongs to. Unset or empty, connections have no name.
+    */
+  val ClientNameConfKey = "spark.redis.client.name"
+
+  /** DataFrame and stream option that overrides [[ClientNameConfKey]]. Empty, that source's connections have no name. */
+  val ClientNameOption = "client.name"
+
+  /** The client name in the Spark settings, or null for none. */
+  private[redis] def clientNameOrNull(conf: SparkConf): String =
+    conf.getOption(ClientNameConfKey).filter(_.nonEmpty).orNull
+
+  /** The client name for a DataFrame or stream: the [[ClientNameOption]] option, else the Spark settings. */
+  private[redis] def clientNameOrNull(conf: SparkConf, parameters: Map[String, String]): String =
+    parameters.get(ClientNameOption).orElse(conf.getOption(ClientNameConfKey)).filter(_.nonEmpty).orNull
+
+  /**
+    * Whether Redis accepts `name` in `CLIENT SETNAME`: every character is printable ASCII other than a space, from
+    * `!` to `~`. An empty name is accepted too, and means no name.
+    */
+  private[redis] def isValidClientName(name: String): Boolean = name.forall(c => c >= '!' && c <= '~')
+
+  /**
     * create redis config from spark config
     */
   def fromSparkConf(conf: SparkConf): RedisConfig = {
@@ -360,7 +396,8 @@ class RedisConfig(val initialHost: RedisEndpoint) extends Serializable {
         user = initialHost.user,
         auth = initialHost.auth,
         dbNum = initialHost.dbNum,
-        ssl = initialHost.ssl
+        ssl = initialHost.ssl,
+        clientName = initialHost.clientName
       ))
 
     } else {
@@ -383,7 +420,8 @@ class RedisConfig(val initialHost: RedisEndpoint) extends Serializable {
           auth = initialHost.auth,
           dbNum = initialHost.dbNum,
           timeout = initialHost.timeout,
-          ssl = initialHost.ssl)
+          ssl = initialHost.ssl,
+          clientName = initialHost.clientName)
         RedisNode(endpoint, 0, 16383, i, range)
       }).toArray
     }
@@ -422,7 +460,8 @@ class RedisConfig(val initialHost: RedisEndpoint) extends Serializable {
             auth = initialHost.auth,
             dbNum = initialHost.dbNum,
             timeout = initialHost.timeout,
-            ssl = initialHost.ssl)
+            ssl = initialHost.ssl,
+            clientName = initialHost.clientName)
           RedisNode(endpoint, sPos, ePos, i, slotInfo.size - 2)
         })
       }
