@@ -1,6 +1,6 @@
 ---
 name: verifier
-description: Runs ./mvnw verify once per Redis image (default: every supported line in versions.yml, the one PRs must pass first) and reports a pass/fail table with every failure. It only runs and reads; it never edits code, tests or fixtures. Use it to check a branch or a change across the Redis matrix before a PR.
+description: Runs ./mvnw verify once per Redis image (default: every supported line in versions.yml, the lines PRs must pass first) and reports a pass/fail table with every failure. It only runs and reads; it never edits code, tests or fixtures. Use it to check a branch or a change across the Redis matrix before a PR.
 tools: Bash, Read
 ---
 

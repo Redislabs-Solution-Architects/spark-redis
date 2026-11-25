@@ -2,8 +2,8 @@
 #   jq --arg which pr   -f .github/matrix.jq versions.json   # what a pull request must pass
 #   jq --arg which full -f .github/matrix.jq versions.json   # everything else, after each merge
 #   jq --arg which all  -f .github/matrix.jq versions.json   # both: what release.yml tests before a release
-# The full matrix is every Spark line on every supported Redis line with the `jdk`, plus every Spark line on the
-# `redis` line with each `jdk_secondary`, minus the pull-request jobs, so each combination runs once.
+# The full matrix is every Spark line on every supported Redis line with the `jdk`, plus every Spark line on
+# every `redis` line with each `jdk_secondary`, minus the pull-request jobs, so each combination runs once.
 
 def combos($sparks; $redises; $jdks):
   [$sparks[] as $s | $redises[] as $r | $jdks[] as $j | {spark: $s, redis: $r, jdk: $j}];

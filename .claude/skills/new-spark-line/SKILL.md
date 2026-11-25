@@ -38,8 +38,8 @@ Do these in one PR, in this order:
    only when the shared source can't compile against this line, or when the line adds an interface we use
    (spec §1, "Anything newer is capability-gated"). Keep each overlay as small as possible.
 4. **`versions.yml`.** Add the line to `spark`. CI then tests it on every supported Redis line with `jdk`, and on
-   `jdk_secondary` with the required Redis line. Don't copy the list anywhere else: CI and the scripts read this file.
-5. **Build and test.** Run `./mvnw -B verify -pl spark-4.<n>` on JDK 17, with the required Redis line. The golden and
+   `jdk_secondary` with every required Redis line. Don't copy the list anywhere else: CI and the scripts read this file.
+5. **Build and test.** Run `./mvnw -B verify -pl spark-4.<n>` on JDK 17, with each required Redis line. The golden and
    legacy fixtures must pass unchanged. A failure is a finding: fix the code, never the test or a fixture.
 6. **Docs.** Add the line to the README's compatibility table and to the release notes of the next connector
    minor.

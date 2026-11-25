@@ -1,7 +1,7 @@
 # Test matrix (Phase 1 plan, step B2; decision D1). versions.yml decides what runs:
-# - pull requests: the `spark_reference` line on the `redis` line and the `jdk`, which a PR must pass;
+# - pull requests: the `spark_reference` line on every `redis` line and the `jdk`, which a PR must pass;
 # - after each merge to spike/phase-1: every `spark` line on every `redis` and `redis_secondary` line, and on the
-#   `jdk_secondary` JDK with the `redis` line, allowed to fail. To run it again without a merge, re-run the last
+#   `jdk_secondary` JDK with every `redis` line, allowed to fail. To run it again without a merge, re-run the last
 #   push run (gh run rerun <run-id>), which keeps its event and commit.
 # Each job builds and tests one Spark line's module (spark-<line>/). The tests start their own Redis in Docker through
 # Testcontainers (see RedisContainers.scala), so no Redis is installed on the runner. Guardrail checks run separately,

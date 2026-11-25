@@ -1,8 +1,8 @@
 # The versions CI tests against. This file is the single source of truth for the test matrix
 # (.github/workflows/ci.yml reads it). Update it when an upstream line ships or reaches end of life;
 # see doc/modernization/spec.md §1 for the policy. Every line in `spark`, `redis` and `redis_secondary` is supported.
-# For now CI tests only Redis 8.6 (owner decision, 2026-11-23): the other supported Redis lines (8.2 to 8.10, spec §1)
-# return to `redis_secondary` before 4.0.0-M1.
+# For now CI tests only the `redis` lines (owner decision, 2026-11-23): the other supported Redis lines (8.2 to 8.10,
+# spec §1) return to `redis_secondary` before 4.0.0-M1.
 
 # The Spark lines: one artifact, built by the module spark-<line>/, per line (see .claude/skills/new-spark-line).
 # After each merge, CI tests every line.
@@ -12,7 +12,7 @@ spark: ["4.1", "4.2", "4.3"]
 # window (roadmap, Phase 1 risk).
 spark_reference: "4.2"
 
-# The Redis line every pull request must pass, as a Docker image tag, on `spark_reference`. It also runs after each
+# The Redis lines every pull request must pass, as Docker image tags, on `spark_reference`. They also run after each
 # merge, on every Spark line.
 redis: ["8.6"]
 
@@ -28,7 +28,7 @@ redis_preview: []
 jdk: ["17"]
 
 # The other supported JDK. The connector supports JDK 17 and 21, the JDKs every Spark 4 line supports. CI tests it
-# after each merge on every Spark line with the `redis` line, never on pull requests. These jobs may fail without
+# after each merge on every Spark line with every `redis` line, never on pull requests. These jobs may fail without
 # failing the build.
 jdk_secondary: ["21"]
 
