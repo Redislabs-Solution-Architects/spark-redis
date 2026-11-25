@@ -83,6 +83,11 @@
 		     Spark 4.2 and 4.3 drop jdk.reflect.useDirectMethodHandle=false and add the sun-misc-unsafe-memory-access=allow
 		     option, which is for JDK 23 and later; neither matters on JDK 17 or 21, the JDKs the connector supports. -->
 		<spark.test.jvm.options>-XX:+IgnoreUnrecognizedVMOptions --add-modules=jdk.incubator.vector --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false -Dio.netty.tryReflectionSetAccessible=true -Dio.netty.allocator.type=pooled -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE --enable-native-access=ALL-UNNAMED</spark.test.jvm.options>
+		<!-- The test JVM reaches its Redis containers, and Testcontainers' Ryuk, on localhost over IPv4. Claude Code's
+		     sandbox refuses connections to ::1, and without this Java tries localhost as ::1 first, so every suite
+		     aborts with "Could not connect to Ryuk". The sandbox sets it in JAVA_TOOL_OPTIONS, but a command that
+		     replaces that variable drops it; this keeps it whatever the environment says. -->
+		<test.network.options>-Djava.net.preferIPv4Stack=true</test.network.options>
 		<!-- More options for the test JVM. The TLS suites trust only the CA they generate for their TLS container (see
 		     RedisContainers), so with -Dredis.containers=false pass a truststore for your own TLS server here, for
 		     example -Dtest.jvm.options="-Djavax.net.ssl.trustStore=/path/to/truststore.jks -Djavax.net.ssl.trustStorePassword=changeit" -->
@@ -335,7 +340,7 @@
 						<reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
 						<junitxml>.</junitxml>
 						<filereports>WDF TestSuite.txt</filereports>
-						<argLine>${jacocoArgLine} ${spark.test.jvm.options} -Xmx2g ${test.jvm.options}</argLine>
+						<argLine>${jacocoArgLine} ${spark.test.jvm.options} ${test.network.options} -Xmx2g ${test.jvm.options}</argLine>
 						<tagsToExclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToExclude>
 						<!-- The plugin does not pass Maven's -D properties to the forked test JVM, so forward them here. -->
 						<systemProperties>
@@ -444,7 +449,7 @@
 								<tagsToInclude>com.redislabs.provider.redis.util.BenchmarkTest</tagsToInclude>
 								<!-- This profile replaces the whole plugin configuration, so repeat what the tests need. -->
 								<workingDirectory>${redis.root}</workingDirectory>
-								<argLine>${spark.test.jvm.options} -Xmx2g ${test.jvm.options}</argLine>
+								<argLine>${spark.test.jvm.options} ${test.network.options} -Xmx2g ${test.jvm.options}</argLine>
 								<systemProperties>
 									<redis.image>${redis.image}</redis.image>
 									<redis.containers>${redis.containers}</redis.containers>
