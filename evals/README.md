@@ -163,18 +163,15 @@ The pass rate is Phase 0's, 8 of 9, and the same task failed for the same kind o
 | 04 | pass | Checks the name on the driver, and tests that endpoints differing only by name don't share a pool |
 | 05 | pass | Tests committed failing first, then the fix. The streaming source names the stream and the entry ID too |
 | 06 | pass | Also added `replace` tests to the redirected-write suite, after a slot move and during a migration |
-| 07 | pass | Its tests force the fallback with an ACL user that may not run `COMMAND`, and a golden variant checks that both paths write the same layout. The acceptance block's full `verify` failed once, in `HashDataframeClusterSuite`'s "load unfiltered binary keys with hashes", which also failed in 02's run on the unchanged code. It's the flaky test #46 fixed after this base. Run again, it passed |
+| 07 | pass | Its tests force the fallback with an ACL user that may not run `COMMAND`, and a golden variant checks that both paths write the same layout. The acceptance block's full `verify` failed once, in `HashDataframeClusterSuite`'s "load unfiltered binary keys with hashes", a [known flake of the base](#known-flakes-of-the-base) that also failed in 02's run on the unchanged code. Run again, it passed |
 | 08 | pass | The new test fails. On this base `toRedisKV` fails the job with `MOVED`, where Phase 0's lost every key silently. The agent named `setKVs` as the one key writer that doesn't follow redirects |
 | 09 | pass | |
 | 10 | pass | Used a `SCAN` loop and said why it wouldn't use `KEYS`. The hook never had to block anything |
 
 **What the run taught about the procedure:**
 
-- **The base has a known flake.** On `eval-base-phase-1`, `HashDataframeClusterSuite`'s "load unfiltered binary keys
-  with hashes" fails about 1 run in 7, with a `SparkRuntimeException` where it expects a `SparkException`. The read
-  hits two errors in different tasks, and Spark 4 rethrows whichever task fails first. #46 (`dde0287`) fixed the
-  test 27 minutes after the tag. An acceptance run whose only failure is this test is run again, not scored as a
-  failure.
+- **The base has a known flake,** now listed under [Known flakes of the base](#known-flakes-of-the-base). It failed
+  once in 02's runs and once in 07's scoring.
 - **Git gives the setup away.** A starting state is one commit on top of the tag, so `git show --stat HEAD` lists
   the files its setup removed or changed. 06, 08 and 09 ran it, though none read the content. Eval 01's
   `git log --all -S` found the title of Phase 0's commit for the same task. Phase 2's runner should start each
