@@ -8,16 +8,19 @@
 >
 > **And after #55 and #56 merged:** the benchmark job's failure is found and fixed, and every benchmark passes in CI
 > (open item 6).
+>
+> **And after the Phase 1 eval baseline ran** (#57): 8 of 9 tasks pass, so criterion 5 is met (open item 1).
 
 ## Verdict
 
-**Phase 1 can't exit yet: 4 of its 5 criteria are met.**
+**Phase 1 can exit when the owner signs off: all 5 criteria are met,** criterion 2 with a caveat, and criterion 5
+once #57 merges.
 
 - **Met:** the full matrix passes in one run after a merge, the golden and legacy fixtures pass unchanged (the legacy
-  ones on standalone only), snapshots publish with their SBOMs, and DStreams are gone.
-- **Not met:** the Guardrails criterion. `CLAUDE.md`, `REVIEW.md`, the verifier and the evals' instructions are
-  updated for Phase 1, but the Phase 1 eval baseline hasn't run, so no pass rate is recorded. It needs the
-  `eval-base-phase-1` tag first (open item 1).
+  ones on standalone only), snapshots publish with their SBOMs, DStreams are gone, and the Phase 1 eval baseline is
+  recorded: 8 of 9, as in Phase 0.
+- **Not measured:** the eval pass rate at the end of Phase 1, which the plan's list of measurements also asks for.
+  The owner decides whether Phase 1 exits without it (open item 1).
 
 The rest of the roadmap's Phase 1, as Amendment 1 narrowed it, is built:
 
@@ -36,7 +39,7 @@ snapshots of every per-Spark artifact are published.
 | 2 | The golden write and read fixtures and the legacy fixtures pass unchanged on every line, in standalone and cluster | **Met, with a caveat** | `git diff 987aba1 5e7a6a0 -- src/test/resources/golden src/test/resources/legacy` is empty: the 54 golden files and the 8 legacy files are the ones Phase 0 signed off. `WriteLayout` and `ReadResult` run in a standalone and a cluster suite each, in every job of the run above. **Caveat:** `LegacyFixturesSuite` runs on standalone only. The legacy blobs are values, so the topology doesn't change how they're read, but the criterion says both. The owner's call whether standalone is enough |
 | 3 | `publish-snapshot.yml` publishes snapshots of the three per-Spark artifacts, with the SBOM, and `release.yml`'s dry run passes (B4, narrowed) | **Met** | The snapshot run [45323531030](https://github.com/Redislabs-Solution-Architects/spark-redis/actions/runs/45323531030) from `c2f913e` (#50's merge) succeeded. The public package pages list build `4.0.0-M1-20261124.040210-1` of `com.redis:spark-redis-spark-4.1_2.13`, `-4.2_2.13` and `-4.3_2.13`, each with the jar, sources jar, javadoc jar, jar-with-dependencies, pom and `-cyclonedx.json` SBOM, plus the parent pom. `release.yml`'s dry runs passed on both of #50's commits ([45322697211](https://github.com/Redislabs-Solution-Architects/spark-redis/actions/runs/45322697211), [45323184486](https://github.com/Redislabs-Solution-Architects/spark-redis/actions/runs/45323184486)): 6 test jobs, then the release job. The first uploaded the 9.8 MB artifact `release-4.0.0-M1-dry-run`. After this review, the snapshot was republished from `5e7a6a0` (open item 2) |
 | 4 | Nothing in `src/` imports `org.apache.spark.streaming` | **Met** | `git grep org.apache.spark.streaming 5e7a6a0 -- src/` finds nothing. A2 (#45) removed DStreams |
-| 5 | `CLAUDE.md`, `REVIEW.md` and the evals are updated for Phase 1, and the eval pass rate is recorded | **Not met** | X1 (#43) updated `CLAUDE.md` (86 lines), `REVIEW.md`, the `verifier` agent and `evals/README.md`, and added the `new-spark-line` skill. Later PRs kept them current: #45, #47, #48, #49 and #51 for `CLAUDE.md`, #47 for `REVIEW.md`'s Phase 1 passes, and #48 and #51 for the verifier. **Missing:** `evals/README.md`'s results table has only Phase 0's baseline (8 of 9). The `eval-base-phase-1` tag it calls for doesn't exist, so the Phase 1 baseline hasn't run |
+| 5 | `CLAUDE.md`, `REVIEW.md` and the evals are updated for Phase 1, and the eval pass rate is recorded | **Met** (once #57 merges) | X1 (#43) updated `CLAUDE.md` (86 lines), `REVIEW.md`, the `verifier` agent and `evals/README.md`, and added the `new-spark-line` skill. Later PRs kept them current: #45, #47, #48, #49 and #51 for `CLAUDE.md`, #47 for `REVIEW.md`'s Phase 1 passes, and #48 and #51 for the verifier. **The baseline:** the 9 runnable tasks ran once from `eval-base-phase-1` (`13885f1`, A1's merge) on JDK 17, and 8 pass. #57 records them in `evals/README.md`, with the new setups that tasks 04–10 needed on that base. 02 failed, and 03 is n/a: the tag has no `quarantine.txt` |
 
 **Moved by roadmap Amendment 1**, so not reviewed here: the benchmark comparison (B3) and 4.0.0-M1 move to Phase 2,
 the RESP3-only and legacy-command criteria to Phase 2a and 2e, and `branch-3.x` with `spark-redis-migrate` (lane C)
@@ -79,24 +82,31 @@ The plan's list, from the roadmap's "How we measure it":
 | First-pass merge rate | **10 of 11** PRs (#43–#53) had no commits after opening | Only #50 got a second commit: the manual-dispatch correction and setup-java's new input names |
 | PRs merged before their CI finished | **7 of 11** in the fork; **3 of 4** upstream | Fork: #44, #45, #48, #49, #50, #52, #53. Upstream: #437, #438, #439. The target was none, and Phase 0 had nine. All of them later passed except one PR check: #45's failed after the merge, probably on the flaky test that #46 fixed (its log isn't readable here), and the run on #45's merge commit passed. #50 merged while the release dry run for its second commit was still running; it passed |
 | Repeat mistakes that needed a `CLAUDE.md` line | **0** | `CLAUDE.md` already says "Wait for CI to finish before merging", and the merges above still happened, because the owner merges by hand (open item 4). The agent repeated two shell mistakes, both caught before anything merged. It committed the sandbox's phantom deletions of the `.key` files in a format-only commit, twice. And zsh read `$var:x` as a modifier, twice. They're sandbox and shell habits, so they went into the agent's own notes rather than `CLAUDE.md` |
-| Concurrent sessions in flight | **1** | Every step ran in one session, one after another. The plan allowed three lanes at once |
-| Eval pass rate, start and end of Phase 1 | **Not measured** | Criterion 5. Phase 0's baseline was 8 of 9 |
+| Concurrent sessions in flight | **1** | Every step ran in one session, one after another. The plan allowed three lanes at once. Only the eval baseline ran three sessions at a time |
+| Eval pass rate, start and end of Phase 1 | **8 of 9** at the start. The end isn't measured | The start: from `eval-base-phase-1` (criterion 5). Phase 0's baseline was 8 of 9 too, and task 02 failed both times. The end, the same tasks with the guardrails at `5e7a6a0`, hasn't run (open item 1) |
 | Benchmarks against the re-measured baseline | **n/a** | B3 moved to Phase 2 (Amendment 1) |
 | 3.x fixes found during the port and sent upstream | **1**: upstream #439 | Starting from a replica, the master lost the configured timeout. Found during the port, merged upstream on 2026-11-24, and ported back with #52. #53's JDK 21 fix doesn't go upstream: Spark 3.5 supports JDK 8, 11 and 17 |
 | Quarantined tests | **0** | As in Phase 0 |
 
 ## Open items
 
-1. **Record the Phase 1 eval baseline (blocks criterion 5).** The owner tags A1's merge commit, `13885f1` (#44), as
-   `eval-base-phase-1`, as `evals/README.md` describes:
-
-   ```bash
-   git tag eval-base-phase-1 13885f1 && git push https://github.com/Redislabs-Solution-Architects/spark-redis.git eval-base-phase-1
-   ```
-
-   Then the 10 tasks run once from it on JDK 17 (X1), and the results go in `evals/README.md`.
-   - The plan also asks for the pass rate at the end of Phase 1: the same tasks with the guardrails at `5e7a6a0`.
-   - A task whose setup no longer applies on the Phase 1 base is fixed first, as the README says.
+1. **Done: the Phase 1 eval baseline, 8 of 9 (criterion 5).** The owner tagged A1's merge commit, `13885f1` (#44),
+   as `eval-base-phase-1`. Phase 0 had merged the features tasks 04–10 ask for, so #57 adds a setup for each that
+   removes it first, and records the results in `evals/README.md`. No agent needed an answer from the owner, and no
+   hook had to block anything.
+   - **02 failed, as in Phase 0, for the same kind of reason.** The agent added 8.8 to `versions.yml` correctly, but
+     also edited comments in `ci.yml`, the `Makefile` and the `verifier` agent that speak of "the Redis line PRs
+     must pass", in the singular. They still do at `5e7a6a0`, so B2's proof, that task 02 still passes, doesn't
+     hold yet.
+   - **Not run: the pass rate at the end of Phase 1,** the same tasks with the guardrails at `5e7a6a0`. Because of
+     those comments, 02 would most likely fail there too.
+   - **#46's flaky test is still on the eval base:** `HashDataframeClusterSuite`'s "load unfiltered binary keys
+     with hashes" failed once in eval 02's runs and once in eval 07's scoring, both times passing when run again.
+     #46 fixed it (`dde0287`) after `13885f1`. On `spike/phase-1` it passed 20 of 20 runs. #58 lists it in
+     `evals/README.md` as a known flake of the base, which doesn't count against a task.
+   - **The procedure has gaps** for Phase 2's runner to close: each starting state's git history shows what its
+     setup removed, two setup patches leave hints, and sessions started from one session share its notes. #57's
+     README lists them.
 2. **Done: the snapshot is republished.** The first one was from `c2f913e`, before #52 and #53. Run
    [45454956915](https://github.com/Redislabs-Solution-Architects/spark-redis/actions/runs/45454956915) published
    build `4.0.0-M1-20261124.180147-2` from `5e7a6a0`, so the package matches the code Phase 1 ends with.
