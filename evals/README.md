@@ -83,6 +83,7 @@ divided by tasks run. Also record, per run:
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2026-11-22 | `48aa7d1` (`eval-base-phase-0`) | Claude Opus 5.5, xhigh | pass | **fail** | n/a | pass | pass | pass | pass | pass | pass | pass | **8 / 9** | 0 | Baseline. See [the notes below](#baseline-2026-11-22) |
 | 2026-11-22 | `94decd7` (PR #18) | Claude Opus 5.5, xhigh | | pass | | | | | | | | | 1 / 1 | 0 | Only 02, to test PR #18's fix for 02's failure |
+| 2026-11-24 | `d701e64` (PR #65) | Claude Opus 5.5, xhigh | | **fail** | | | | | | | | | 0 / 1 | 1 | Only 02, from `eval-base-phase-1`, to test PR #65's fix for 02's failure in #57. See [the notes below](#02-re-run-on-the-phase-1-base-2026-11-24) |
 
 ### Baseline (2026-11-22)
 
@@ -115,3 +116,28 @@ interventions: 0 on every task.
   eval 07 opened one although its prompt called the branch throwaway. The owner may want CLAUDE.md to say that PRs
   are opened when asked.
 - **`yq`** is needed by task 02 and was missing on the scoring machine; `ruby -ryaml` stood in for it.
+
+### 02 re-run on the Phase 1 base (2026-11-24)
+
+In the Phase 1 baseline (#57), 02 failed because the agent also reworded comments that spoke of the required Redis
+line in the singular: in `ci.yml`, the `Makefile` and the `verifier` agent. PR #65 rewords them, and this run tests
+that fix.
+
+- **Setup.** The run started from `eval-start-phase-1/02-versions-redis-line`.
+  - **From `d701e64`:** `CLAUDE.md REVIEW.md .claude scripts .scalafmt.conf`, plus `versions.yml Makefile .github`,
+    because the fix is in those files too.
+  - **The session** was headless and top level (`claude -p --permission-mode auto --strict-mcp-config`). No other
+    session started it, so it saw no shared notes, and it had no MCP servers.
+  - **Input:** the task's prompt, and the Phase 0 background above.
+
+  The scorer ran the acceptance block on the first pass. Owner interventions: 0.
+- **Fail.** The agent left `ci.yml`, `matrix.jq`, the `Makefile` and the `verifier` agent alone. But it added dated
+  notes to two records:
+  - decision D1 in `plans/phase-1.md`, which says PRs run Redis 8.6;
+  - open item 8 in `plans/phase-0-exit-review.md`, which says the redirected-write fix isn't confirmed on 8.8. The
+    agent had run those suites 20 times on 8.8.
+
+  The other acceptance steps pass, and every review item holds. It also dropped "8.2 to 8.10" from
+  `versions.yml`'s header, and PR #65 now does the same.
+- **The comments no longer cause the failure: the records that name a Redis line do.** The owner decides whether
+  02 allows a note on D1, or whether the records stop naming lines.
