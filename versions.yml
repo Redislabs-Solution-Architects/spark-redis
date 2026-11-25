@@ -1,8 +1,8 @@
 # The versions CI tests against. This file is the single source of truth for the test matrix
 # (.github/workflows/ci.yml reads it). Update it when an upstream line ships or reaches end of life;
 # see doc/modernization/spec.md §1 for the policy. Every line in `spark`, `redis` and `redis_secondary` is supported.
-# For now CI tests only the `redis` lines (owner decision, 2026-11-23): the other supported Redis lines (8.2 to 8.10,
-# spec §1) return to `redis_secondary` before 4.0.0-M1.
+# For now CI tests only the `redis` lines (owner decision, 2026-11-23): the other supported Redis lines (spec §1)
+# return to `redis_secondary` before 4.0.0-M1.
 
 # The Spark lines: one artifact, built by the module spark-<line>/, per line (see .claude/skills/new-spark-line).
 # After each merge, CI tests every line.
