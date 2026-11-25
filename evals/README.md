@@ -77,6 +77,17 @@ divided by tasks run. Also record, per run:
 - **Hook blocks:** `wc -l < .claude/hook-blocks.log` in the eval worktree (both hooks append to it).
 - **Owner interventions:** how many times you had to answer something other than "Use your judgment."
 
+If an acceptance block's only failure is a test listed under [Known flakes of the base](#known-flakes-of-the-base),
+with the message shown there, the failure doesn't count against the task. Record it in the Notes column.
+
+### Known flakes of the base
+
+These tests can fail at the starting commit itself, whatever the agent did.
+
+| Base | Test | Message | Rate | Cause |
+|---|---|---|---|---|
+| `eval-base-phase-1` | `HashDataframeClusterSuite`, "load unfiltered binary keys with hashes" | `Expected exception org.apache.spark.SparkException to be thrown, but org.apache.spark.SparkRuntimeException was thrown` | About 1 read in 7 (13–20% of reads in a repeated-read probe) | At the base, the test reads the table with `Person.fullSchema`, whose `_id` column the binary model never fills. So two errors race: the hash key's `ClassCastException`, which Spark wraps in `SparkException`, and the binary rows' `EXPRESSION_ENCODING_FAILED`, which Spark 4 rethrows as it is. Whichever task fails first decides the exception. `dde0287` (merged with #48, 27 minutes after the tag) reads with `Person.schema`, and the test is stable on `spike/phase-1` |
+
 ## Results
 
 | Date | Guardrails commit | Model | 01 | 02 | 03 | 04 | 05 | 06 | 07 | 08 | 09 | 10 | Pass rate | Hook blocks | Notes |
