@@ -71,25 +71,33 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
   private val tableNameOpt: Option[String] = parameters.get(SqlOptionTableName)
   private val ttl = parameters.get(SqlOptionTTL).map(_.toInt).getOrElse(0)
 
+  /**
+    * `write.mode`: whether a hash-model row replaces the hash stored under its key. Parsed here, whatever the model,
+    * so a bad value fails before anything is written.
+    */
+  private val replaceRows: Boolean = parameters.getOrElse(SqlOptionWriteMode, SqlOptionWriteModeMerge) match {
+    case SqlOptionWriteModeMerge => false
+    case SqlOptionWriteModeReplace => true
+    case other: String =>
+      throw new IllegalArgumentException(s"Option '$SqlOptionWriteMode' must be '$SqlOptionWriteModeMerge' or " +
+        s"'$SqlOptionWriteModeReplace', got '$other'")
+  }
   /** What a Java-serialized row or schema read from Redis may contain. Parsed here, so a bad pattern fails early. */
   private val allowedClasses = parameters.get(SqlOptionDeserializationAllowedClasses)
     .map(value => ClassAllowlist.Default ++ ClassAllowlist.parse(value))
     .getOrElse(ClassAllowlist.Default)
-  private val writeMode = parseWriteMode(parameters)
-
-  /** `write.mode = replace` on the hash model. A binary-model row is one value, which a write always replaces. */
-  private val replaceHashes = writeMode == SqlOptionWriteModeReplace && persistenceModel != SqlOptionModelBinary
-
-  /** The hash model's persistence for `write.mode = replace`, if that's how this relation writes. */
-  private val replacingHashes: Option[HashRedisPersistence] =
-    if (replaceHashes) Some(new HashRedisPersistence(replace = true)) else None
-  private val persistence: RedisPersistence[Any] = replacingHashes.getOrElse {
-    // like RedisPersistence(model), with the classes a binary-model row may contain
+  private val persistence: RedisPersistence[Any] = {
+    // like RedisPersistence(model), with the classes a binary-model row may contain and the hash model's write mode
     if (persistenceModel == SqlOptionModelBinary) {
       new BinaryRedisPersistence(allowedClasses).asInstanceOf[RedisPersistence[Any]]
     } else {
-      RedisPersistence(persistenceModel)
+      new HashRedisPersistence(replaceRows)
     }
+  }
+  /** Whether a row's commands start by removing the stored hash, see [[HashRedisPersistence]]. */
+  private val replacesStoredRows = persistence match {
+    case hash: HashRedisPersistence => hash.replace
+    case _ => false
   }
 
   /**
@@ -184,27 +192,25 @@ class RedisSourceRelation(override val sqlContext: SQLContext,
     */
   private def saveRows(node: RedisNode, keys: Array[String], rowsWithKey: Map[String, Row],
                        binaryTtlWrite: Option[(BinaryRedisPersistence, WriteCapabilities)]): Unit =
-    (binaryTtlWrite, replacingHashes) match {
-      case (Some((binary, capabilities)), _) =>
+    binaryTtlWrite match {
+      case Some((binary, capabilities)) =>
         // MSETEX per slot where every primary has it, or SET ... EX per row
         val encodedRows = keys.toList.map(key => (node.endpoint, (key, binary.encodeRow(keyName, rowsWithKey(key)))))
         binary.saveWithTtl(encodedRows, ttl, capabilities)
-      case (None, Some(hash)) =>
-        // one MULTI/EXEC per row, so a reader sees the old row or the new one
-        val encodedRows = keys.toList.map(key => (node.endpoint, (key, hash.encodeRow(keyName, rowsWithKey(key)))))
-        writeTransactionsWithRedirects(encodedRows) { case (key, encodedRow) =>
-          hash.replaceCommands(key, encodedRow, ttl)
-        }
-      case (None, None) =>
+      case None =>
         val encodedRows = keys.toList.map { key =>
           (node.endpoint, (key, persistence.encodeRow(keyName, rowsWithKey(key))))
         }
         val commands: ((String, Any)) => Seq[WriteCommand] = { case (key, encodedRow) =>
           persistence.saveCommands(key, encodedRow, ttl)
         }
-        // with a ttl, one MULTI/EXEC per row, so its fields and its TTL are set in one step
-        if (ttl > 0) writeTransactionsWithRedirects(encodedRows)(commands)
-        else writeWithRedirects(encodedRows)(commands)
+        // One MULTI/EXEC per row with a ttl, so its fields and its TTL are set in one step, and with write.mode
+        // replace, so a reader sees the old row or the new one, never the key missing or a mix of the two.
+        if (ttl > 0 || replacesStoredRows) {
+          writeTransactionsWithRedirects(encodedRows)(commands)
+        } else {
+          writeWithRedirects(encodedRows)(commands)
+        }
     }
 
   // The DataFrame source still reads keys through the deprecated RDD API; Phase 2 replaces both.
@@ -436,19 +442,6 @@ object RedisSourceRelation {
   def uuid(): String = UUID.randomUUID().toString.replace("-", "")
 
   def tableDataKeyPattern(tableName: String): String = s"$tableName:*"
-
-  /**
-    * @return the `write.mode` option: `merge` (the default) or `replace`
-    * @throws IllegalArgumentException for any other value, so a write fails before it changes anything
-    */
-  def parseWriteMode(parameters: Map[String, String]): String = {
-    val mode = parameters.getOrElse(SqlOptionWriteMode, SqlOptionWriteModeMerge)
-    if (mode != SqlOptionWriteModeMerge && mode != SqlOptionWriteModeReplace) {
-      throw new IllegalArgumentException(s"Invalid value '$mode' for option '$SqlOptionWriteMode'. " +
-        s"Use '$SqlOptionWriteModeMerge' (the default) or '$SqlOptionWriteModeReplace'.")
-    }
-    mode
-  }
 
   def tableKey(keysPrefixPattern: String, redisKey: String): String = {
     if (keysPrefixPattern.endsWith("*")) {

@@ -174,7 +174,7 @@ Please note:
 * With `SaveMode.Append`, when a row's key already exists, the new row is merged into the existing Redis hash with `HSET`
   by default. Fields of the new row replace the existing fields, but fields that exist only in Redis are kept, for example a
   column that isn't in the new DataFrame or a value that is `null` in the new row (see [Null values](#null-values)). To
-  replace whole rows, set `write.mode` to `replace` (see [Write mode](#write-mode)), or use `SaveMode.Overwrite`.
+  replace whole rows, set `write.mode` to `replace`, see [Merging or replacing rows](#merging-or-replacing-rows).
 * `SaveMode.Overwrite` isn't atomic: the existing keys are deleted first and the new rows are written afterwards, so readers
   can see an empty or partially written table while the job runs. If the job fails after the delete, the table stays
   incomplete. To switch to new data without a gap, write it to a new table name and switch the readers to it.
@@ -182,17 +182,19 @@ Please note:
   long time on a large database. Use `SaveMode.Append` when you don't need these checks, and see
   [Tuning reads and writes](configuration.md#tuning-reads-and-writes).
 
-### Write mode
+### Merging or replacing rows
 
-When a row's key is already stored and `SaveMode.Append` is set, the `write.mode` option decides what happens to the
-stored hash:
+With the Hash model, the `write.mode` option sets what a write does to a row whose key already holds a hash:
 
-- `merge` (the default) writes the new row's fields over the stored ones. Fields that the new row doesn't have, or has
-  as `null`, keep their stored values.
-- `replace` makes the stored hash exactly the new row, so fields that the new row doesn't have, or has as `null`, are
-  removed. Each key is replaced in one `MULTI`/`EXEC` transaction (`UNLINK`, `HSET`, and `EXPIRE` when `ttl` is set),
-  so a reader sees the old row or the new one, never a mix. The key keeps no TTL from the row it replaces, and a row
-  whose values are all `null` leaves no key. If Redis refuses a transaction, the write fails.
+| `write.mode`      | Behavior                                                                                                                                                                           |
+|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `merge` (default) | sets the new row's fields with `HSET`. The stored fields that the new row doesn't have are kept: a column that isn't in the new DataFrame, or a value that is `null` in the new row |
+| `replace`         | makes the stored hash exactly the new row: the fields that are missing from it or `null` in it are removed. A row whose values, besides its key, are all `null` removes the key    |
+
+With `replace`, each row is written in one `MULTI`/`EXEC` transaction on its key: `UNLINK`, then `HSET`, then `EXPIRE` when
+the `ttl` option is set. A reader sees either the old row or the new one, never a mix of the two, and never the new row without
+its TTL. A row replaced without `ttl` has no TTL, even if the stored one had. Any other value of `write.mode` fails the write
+before anything is written.
 
 ```scala
 df.write
@@ -204,8 +206,7 @@ df.write
   .save()
 ```
 
-Any other `write.mode` value fails the write before anything is written. `write.mode` applies to the hash model. The
-binary model stores a row as one value, so a write always replaces it.
+The Binary model stores a row as one value, so a write always replaces the whole row, whatever `write.mode` is.
 
 ### Null values
 
@@ -259,8 +260,7 @@ CREATE TEMPORARY VIEW person (name STRING, age INT)
 ### Time to live
 
 If you want to expire your data after a certain period of time, you can specify its time to live in `seconds`. Redis will use 
-[Expire](https://redis.io/commands/expire) command to cleanup data. With `write.mode` `replace`, the TTL is set in the same
-transaction as the row (see [Write mode](#write-mode)).
+[Expire](https://redis.io/commands/expire) command to cleanup data.
 
 With the Binary persistence model each value is written together with its TTL. Where every primary has
 [MSETEX](https://redis.io/commands/msetex) (Redis 8.4 and later), each batch of rows is one `MSETEX`, or one per hash slot
@@ -571,7 +571,7 @@ sc.toRedisKV(kvRdd)
 | partitions.number      | number of partitions (applies only when reading DataFrame)                                                                                                  | `Int`                 | `3`     |
 | key.column             | when writing - specifies unique column used as a Redis key, by default a key is auto-generated <br/> when reading - specifies column name to store hash key | `String`              | -       |
 | ttl                    | data time to live in `seconds`. Data doesn't expire if `ttl` is less than `1`                                                                               | `Int`                 | `0`     |
-| write.mode             | what a hash-model write does to a hash already stored under the row's key: `merge` keeps fields the new row doesn't have, `replace` removes them, see [Write mode](#write-mode) | `enum [merge, replace]` | `merge` |
+| write.mode             | what a Hash model write does to a hash already stored under the row's key: `merge` keeps the fields the new row doesn't have, `replace` makes the stored hash exactly the new row, see [Merging or replacing rows](#merging-or-replacing-rows) | `enum [merge, replace]` | `merge` |
 | infer.schema           | infer schema from random row, all columns will have `String` type                                                                                           | `Boolean`             | `false` |
 | deserialization.allowed.classes | classes, besides Spark's own, that a Binary model row may contain, for example a UDT's class, see [Binary model and untrusted data](#binary-model-and-untrusted-data) | `String`              | -       |
 | max.pipeline.size      | maximum number of commands per pipeline (used to batch commands)                                                                                            | `Int`                 | 100     |

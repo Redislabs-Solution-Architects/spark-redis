@@ -168,7 +168,7 @@ Besides the commands that read and write your data, Spark-Redis uses the followi
 | `TYPE`                      | DataFrame reads with the `filter.keys.by.type` option                                                                                                               |
 | `CLIENT SETNAME`            | on every new connection, when `spark.redis.client.name` or the `client.name` option is set |
 | `ASKING`                    | before a write to a slot that is being migrated, after the server answered `ASK` |
-| `MULTI`, `UNLINK`, `EXEC`   | DataFrame writes with `write.mode = replace` |
+| `MULTI`, `EXEC`             | around each key's commands, when a write sets a value and its TTL in more than one command (a `ttl` with the Hash model, or an RDD write of hashes, lists, sets or sorted sets), and for each row of a Hash model write with `write.mode` `replace` |
 | `COMMAND INFO`, `HELLO`     | on the driver, once per write of the `binary` model with a `ttl`, to find out whether every primary has `MSETEX` and whether the server is a cluster. A refused command counts as no: the write then uses `SET ... EX` and groups the keys by hash slot |
 
 Proxies and managed services that block or don't implement these commands are not supported. Typical errors are
