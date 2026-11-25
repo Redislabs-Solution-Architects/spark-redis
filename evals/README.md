@@ -112,6 +112,7 @@ These tests can fail at the starting commit itself, whatever the agent did.
 | 2026-11-24 | `13885f1` (`eval-base-phase-1`) | Claude Opus 5.5, xhigh | pass | **fail** | n/a | pass | pass | pass | pass | pass | pass | pass | **8 / 9** | 0 | Phase 1 baseline, on JDK 17. See [the notes below](#phase-1-baseline-2026-11-24) |
 | 2026-11-24 | `d701e64` (PR #65) | Claude Opus 5.5, xhigh | | **fail** | | | | | | | | | 0 / 1 | 1 | Only 02, from `eval-base-phase-1`, to test PR #65's fix for 02's failure in #57. See [the notes below](#02-re-run-on-the-phase-1-base-2026-11-24) |
 | 2026-11-24 | `a495462` (the records rule) | Claude Opus 5.5, xhigh | | pass | | | | | | | | | 1 / 1 | 0 | Only 02, from `eval-base-phase-1`, to test `CLAUDE.md`'s new line on `doc/modernization/`. See [the notes below](#02-with-the-records-rule-2026-11-24) |
+| 2026-11-24 | `a495462` (end of Phase 1) | Claude Opus 5.5, xhigh | pass | pass | n/a | pass | pass | pass | pass | pass | pass | pass | **9 / 9** | 0 | End of Phase 1: every task from `eval-base-phase-1`, with the guardrails Phase 1 ends with. See [the notes below](#end-of-phase-1-2026-11-24) |
 
 ### Baseline (2026-11-22)
 
@@ -247,3 +248,64 @@ reported instead. Task 02's acceptance block and review items are unchanged.
   paragraph on the missing modules in the base's flake note. The owner installed `yq` during the run, so the new note
   was already wrong, and it was deleted afterwards. A later eval session could read anything left there, so Phase 2's
   runner should give each session an empty memory.
+
+### End of Phase 1 (2026-11-24)
+
+The exit review asked for the pass rate at the end of Phase 1: the same tasks as the
+[Phase 1 baseline](#phase-1-baseline-2026-11-24), from the same base, with the guardrails Phase 1 ends with. **All 9
+pass, up from 8 of 9 at the start.** 02 failed at the start; #65 and #66 fixed it. The other 8 still pass with the
+newer guardrails.
+
+- **Setup.** Each task started from its `eval-start-phase-1/<task>` tag, on branch `eval/<task>-end-phase-1`.
+  - **The guardrails** came from `8e4ba5f`, whose files are `a495462`'s: `CLAUDE.md REVIEW.md .claude scripts
+    .scalafmt.conf`, plus `versions.yml Makefile .github`. 02's re-runs took the same set. Here it also gives
+    `scripts/spark-lines.sh`, which `CLAUDE.md`'s build command calls, the `spark` keys it reads.
+  - **The sessions** were headless and top level (`claude -p --permission-mode auto --strict-mcp-config`), on JDK 17,
+    three at a time. Each got the Phase 1 baseline's background and the task's prompt.
+  - **One change from the baseline:** `git push`, `gh pr create` and `gh pr merge` were disallowed, because eval 07
+    opened a PR unasked in Phase 0. Only 02 and 08 asked anything, both whether to commit, which no task's answer
+    covers. Owner interventions: 0. Hook blocks: 0 on every task.
+- **Scoring.** Each acceptance block ran unchanged in its eval worktree after the session ended, with every review
+  item checked against the diff and the transcript. Two steps needed the agent's work committed or read in full:
+  - **08:** its agent didn't commit, and its block finds the new suite with `git diff --diff-filter=A`, which doesn't
+    see an untracked file. The baseline scored first-pass commits, so the scorer committed 08's first pass.
+  - **07:** its no-version-check grep reads `git diff`, which skips the agent's untracked `RedisCapabilities.scala`.
+    The scorer ran the grep over that file too, and it found no version checks.
+
+| # | Result | Time | Cost | Notes |
+|---|---|---|---|---|
+| 01 | pass | 3 min | $0.95 | Stopped and gave the capture command, and predicted the fixture: two lists, no TTL, `5, 4, 3` and `3, 2, 1`. The owner's capture step, run by the scorer in the eval worktree, matched the removed fixture byte for byte. The after-edit hook also reformatted the scenario above the new one (rule 7, as in Phase 0) |
+| 02 | pass | 18 min | $1.80 | Changed only `versions.yml`. Reported decision D1 as out of date, "owner's record, not edited" |
+| 04 | pass | 16 min | $4.57 | Its tests cover the setting, the option and the default, and "endpoints that differ only in their client name are different pool keys" |
+| 05 | pass | 26 min | $6.09 | Tests committed first, then the fix. A bad number throws `FieldNumberFormatException`, a `NumberFormatException`, with the original as its cause |
+| 06 | pass | 25 min | $7.18 | Each replaced row is `MULTI`, `UNLINK`, `HSET`, `EXPIRE` with a `ttl`, `EXEC`. The full `verify` had one failure, "load unfiltered binary keys with hashes", a [known flake of the base](#known-flakes-of-the-base) with its listed message: 615 passed. It moved a test helper into `MonitoredCommands` unchanged |
+| 07 | pass | 26 min | $8.21 | Asks each primary once per write with `COMMAND INFO`. Groups `MSETEX` keys by slot. Falls back to `SET … EX`, and its tests force the fallback with an ACL user that can't run `COMMAND`. Reported spec §2.14's table and the `redis-capabilities` skill as out of date, and left them alone |
+| 08 | pass | 7 min | $1.28 | The new test fails, so it's listed in `failing-first.txt` with #347. The report names the cause: `setKVs` sends pipelined writes and fails the task on `MOVED` instead of resending. The cluster suite that runs next passes, so the slot was put back |
+| 09 | pass | 13 min | $1.98 | Opens, appends and closes the file on each call, under a file lock, and quotes a name with a comma (RFC 4180). Ran its tests outside the sandbox (below) |
+| 10 | pass | 2 min | $0.68 | A `SCAN … MATCH` loop, and it said why it wouldn't use `KEYS`. The hook never fired |
+
+The 9 sessions came to $32.74 at API prices, and ran from 22:34 to 23:24.
+
+**What the run taught about the procedure:**
+
+- **The guardrails still don't fit this base.** As in [02's re-run](#02-with-the-records-rule-2026-11-24), the
+  `-pl spark-<line>` commands fail on a base without the per-Spark modules. 02 and 08 each tried `-pl` once, saw it
+  fail and reported it. The other 7 never used it. Every run without `-pl` tests Spark 4.1 only.
+- **Replacing `JAVA_TOOL_OPTIONS` breaks Testcontainers in the sandbox.** The sandbox sets
+  `-Djava.net.preferIPv4Stack=true`. Without it, Java tries `localhost` as `::1`, which the sandbox refuses, and
+  Testcontainers stops with "Could not connect to Ryuk". 09 replaced the variable, then ran its tests outside the
+  sandbox. The other 8 agents appended to it, as the repository's auto-memory says. The scorer's first script
+  replaced it too, so 8 acceptance blocks ran outside the sandbox. With the variable appended, 08's ran inside it.
+- **Sandboxed sessions share one `$TMPDIR`.** 06 wrote its Maven log to a generic name there, 08's session overwrote
+  it, and 06 nearly reported 08's failure as its own. Phase 2's runner should give each session its own temporary
+  directory.
+- **The sessions wrote to the shared auto-memory again,** so they didn't all start with the same memory:
+  - 02 wrote a note on the module mismatch. The owner deleted it at 22:54. 07, which had it in its index, wrote it
+    again at 23:13.
+  - 05 corrected the test-selection syntax in the Maven note, and the owner kept the correction.
+  - 06 wrote a note on the shared `$TMPDIR`, and 07 one on Redis applying no ACL to `HELLO`.
+  - At 22:41 the owner removed the paragraph that 02's re-run had added to the flake note. 01, 02, 04 and 05 started
+    before that.
+  - So 07 started with the module note in its index, 09 with 06's note, and 10 with 06's note and both of 07's.
+
+  Phase 2's runner should give each session an empty memory.
